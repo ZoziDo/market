@@ -188,7 +188,7 @@ local function goToAccount()
   end
   currentScreen = "account"
   modem.send(serverAddress, 0xffef, serialization.serialize({
-    top = "getAccount",
+    op = "getAccount",
     name = currentPlayer,
     token = currentToken
   }))
@@ -213,9 +213,6 @@ while true do
   if waitingForToken and (os.clock() - waitStartTime) >= 2 then
     waitingForToken = false
     print("⚠ Таймаут получения токена")
-    if not currentToken then
-      drawCenteredText(12, "⚠ Нет ответа сервера", 0xFF0000)
-    end
     currentScreen = "menu"
     drawMainMenu()
   end
@@ -243,12 +240,11 @@ while true do
     currentToken = nil
     print("Игрок встал на PIM: "..currentPlayer)
 
-    -- Авторизация
     currentScreen = "auth"
     drawAuthScreen()
     os.sleep(1)
 
-    -- Отправляем enter с именем
+    -- Отправляем enter с ИСПРАВЛЕННЫМ op
     local enterMsg = {op="enter", name=currentPlayer}
     print("Отправляю enter: " .. serialization.serialize(enterMsg))
     modem.send(serverAddress, 0xffef, serialization.serialize(enterMsg))
@@ -270,7 +266,7 @@ while true do
       local success, msg = pcall(serialization.unserialize, data)
       if success and msg then
         if msg.op == "welcome" then
-          print("Получен welcome от сервера: token="..tostring(msg.token).." balance="..tostring(msg.balance))
+          print("Получен welcome: token="..tostring(msg.token).." balance="..tostring(msg.balance))
           if msg.token then
             currentToken = msg.token
             playerBalance = msg.balance or 0.0
