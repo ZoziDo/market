@@ -46,7 +46,7 @@ local function drawBigTitle()
           "       ███████║ ██║  ██║ ╚██████╔╝ ██║          ",
   }
   for i, line in ipairs(lines) do
-    if #line < 50 then lines[i] = line .. string.rep(" ", 50 - #line) end
+    if #line < 20 then lines[i] = line .. string.rep(" ", 90 - #line) end
   end
   local startX = 10
   for i, line in ipairs(lines) do gpu.set(startX, 2 + i, line) end
