@@ -60,7 +60,6 @@ while true do
     local success, msg = pcall(serialization.unserialize, raw)
     if not success or not msg or type(msg) ~= "table" then goto continue end
 
-    -- Анти-спам
     local last = sessions["__modem_"..from] or 0
     if os.time() - last < 0.5 then
       log("WARN", "Спам от " .. from)
@@ -93,13 +92,29 @@ while true do
         regDate=player.regDate
       }))
 
+    elseif msg.op == "getAccount" then
+      -- Отправка данных аккаунта по запросу (требует токен)
+      if not validateSession(msg.name, msg.token) then
+        log("WARN", "Неверный токен для getAccount от " .. (msg.name or "?"))
+        goto continue
+      end
+      local player = players[msg.name]
+      if not player then goto continue end
+      modem.send(from, 0xffef, serialization.serialize({
+        op="accountData",
+        data = {
+          balance = player.balance,
+          transactions = player.transactions,
+          regDate = player.regDate
+        }
+      }))
+
     elseif msg.op == "buy" or msg.op == "sell" then
       local player = players[msg.name]
       if not player or not validateSession(msg.name, msg.token) then
         log("WARN", "Неверный токен от " .. (msg.name or "?"))
         goto continue
       end
-      -- Здесь будет обработка транзакций (пока заглушка)
       log("INFO", string.format("%s: %s сумма %s", msg.op, msg.name, tostring(msg.value)))
     end
   end
