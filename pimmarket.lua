@@ -372,37 +372,20 @@ while true do
       if y == 23 then
         if x >= 4 and x <= 13 then goToHelp() end
       end
-    elseif currentScreen == "help" then
-      -- Обработка нажатий на стрелки в тексте "← 1 →" и т.д.
-      -- Ищем строку с номером страницы, чтобы понять, куда нажали
-      local pageStr = "← " .. helpPage .. " →"
-      local pageY = nil
-      local page = helpPages[helpPage]
-      for i, item in ipairs(page) do
-        if item.parts then
-          for _, part in ipairs(item.parts) do
-            if part.text == pageStr then
-              pageY = 1 + i
-              break
-            end
-          end
-        elseif item.text == pageStr then
-          pageY = 1 + i
-          break
-        end
-      end
-      if pageY and y == pageY then
-        local pageX = math.floor((80 - unicode.len(pageStr)) / 2) + 1
-        -- Если нажали левую стрелку
+        elseif currentScreen == "help" then
+      -- Стрелки перелистывания (строка 21, всегда по центру)
+      local pageStr = "←   " .. helpPage .. "   →"
+      local pageX = math.floor((80 - unicode.len(pageStr)) / 2) + 1
+      if y == 21 then
         if x >= pageX and x < pageX + 4 and helpPage > 1 then
           helpPage = helpPage - 1
           drawHelpScreen()
-        -- Если нажали правую стрелку
         elseif x >= pageX + unicode.len(pageStr) - 4 and x < pageX + unicode.len(pageStr) and helpPage < HELP_PAGES then
           helpPage = helpPage + 1
           drawHelpScreen()
         end
       end
+      -- Кнопка "Назад" (строка 22)
       if isButtonClicked(backButton, x, y) then
         goBackToMenu()
       end
