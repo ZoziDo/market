@@ -1,11 +1,12 @@
--- pimmarket.lua (market_01) — исправлено
 local component = require("component")
 local event = require("event")
 local gpu = component.gpu
 local unicode = require("unicode")
-local serialization = require("serialization")  -- было пропущено
+local serialization = require("serialization")
 
 local modem = component.modem
+
+-- PIM
 local pimList = {}
 for addr in component.list("pim") do table.insert(pimList, addr) end
 local pim = component.proxy(pimList[1])
@@ -16,9 +17,10 @@ modem.open(0xfffe)
 local serverAddress = "535305a9-37c9-4645-b7c4-46204187ee7b"
 local currentPlayer = nil
 local playerBalance = 0.00
-local currentScreen = "welcome"
+local currentScreen = "welcome"   -- welcome / auth / menu / shop / utility / account
 local authStartTime = 0
 local AUTH_DELAY = 3
+local terminalRegistered = false
 
 -- ========== КРУПНЫЙ ОБЪЁМНЫЙ ШРИФТ 5x5 ==========
 local font = {}
@@ -211,9 +213,12 @@ local function goToUtility() currentScreen = "utility"; drawPlaceholder("Пол�
 local function goToAccount() currentScreen = "account"; drawPlaceholder("Исключить") end
 local function goBackToMenu() currentScreen = "menu"; drawMainMenu() end
 
--- Инициализация
+-- ======== Инициализация: регистрируем терминал на сервере ========
 drawWelcomeScreen()
+modem.send(serverAddress, 0xffef, serialization.serialize({op = "register"}))
+print("Терминал отправляет регистрацию...")
 
+-- ======== Главный цикл ========
 while true do
   local ev = {event.pull(0.5)}
   local e = ev[1]
@@ -223,7 +228,7 @@ while true do
     if os.clock() - authStartTime >= AUTH_DELAY then
       -- Отправляем enter на сервер
       modem.send(serverAddress, 0xffef, serialization.serialize({op = "enter"}))
-      -- Ждём ответа или переходим сразу (защита от потери пакета)
+      print("Отправлен enter для " .. (currentPlayer or "неизвестного"))
       currentScreen = "menu"
       drawMainMenu()
     end
@@ -243,26 +248,33 @@ while true do
     elseif currentScreen == "shop" or currentScreen == "utility" or currentScreen == "account" then
       if x >= 2 and x <= 13 and y >= 22 and y <= 24 then goBackToMenu() end
     end
-  elseif e == "pim_player_enter" or e == "player_on" or e == "pim" then
+  -- ВАЖНО: используем player_on / player_off, который генерирует PIM на вашем сервере
+  elseif e == "player_on" then
     currentPlayer = ev[2] and ev[2]:match("^%s*(.-)%s*$") or "Игрок"
     playerBalance = 0.00
+    print("Игрок встал на PIM: " .. currentPlayer)
     if currentScreen ~= "auth" then
       currentScreen = "auth"
       authStartTime = os.clock()
       drawAuthScreen()
     end
-  elseif e == "pim_player_leave" or e == "player_off" then
+  elseif e == "player_off" then
+    print("Игрок сошёл с PIM")
     currentPlayer = nil
     currentScreen = "welcome"
     drawWelcomeScreen()
   elseif e == "modem_message" then
-    -- Обработка ответа от сервера (например, баланс)
     local _, _, from, port, data = ev[2], ev[3], ev[4], ev[5], ev[6]
     if from == serverAddress then
       local success, msg = pcall(serialization.unserialize, data)
-      if success and msg and msg.op == "welcome" then
-        if msg.balance then playerBalance = tonumber(msg.balance) or playerBalance end
-        if currentScreen == "menu" then drawMainMenu() end
+      if success and msg then
+        if msg.op == "welcome" then
+          terminalRegistered = true
+          print("✅ Терминал зарегистрирован на сервере")
+          if msg.balance then playerBalance = tonumber(msg.balance) or playerBalance end
+          -- Если мы уже в меню, перерисуем баланс
+          if currentScreen == "menu" then drawMainMenu() end
+        end
       end
     end
   end
