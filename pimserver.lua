@@ -41,7 +41,6 @@ local function getRealTime()
         body = body .. chunk
       end
       conn:close()
-      -- Ответ: "2026-05-10 21:04:33"
       local match = body:match("(%d+%-\d+%-\d+ %d+:%d+:%d+)")
       if match then
         local year, month, day, time = match:match("(%d+)%-(%d+)%-(%d+) (.+)")
