@@ -23,18 +23,6 @@ local accountRequestTime = 0
 local ACCOUNT_TIMEOUT = 3
 local alreadyAuthorized = false
 
--- ========== ОТЛАДОЧНАЯ СТРОКА ==========
-local debugMessage = ""
-local function setDebug(text)
-  debugMessage = text
-  if currentScreen ~= "welcome" then
-    gpu.setBackground(0x000000)
-    gpu.setForeground(0xFFFF00)
-    gpu.fill(1, 24, 80, 1, " ")
-    gpu.set(1, 24, string.format("DEBUG: %-78s", debugMessage:sub(1,78)))
-  end
-end
-
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
 gpu.setBackground(0x000000)
@@ -86,14 +74,9 @@ local function drawBottomPanel()
   gpu.setForeground(0xcc3342) gpu.set(4,23,"[Помощь]")
   gpu.setForeground(0x00FF00) gpu.set(33,23,"[Конвертация + / $]")
   gpu.setForeground(0xcc3342) gpu.set(69,23,"[Отзывы]")
-  -- отладочная строка на 24
-  gpu.setBackground(0x000000)
-  gpu.setForeground(0xFFFF00)
-  gpu.fill(1, 24, 80, 1, " ")
-  gpu.set(1, 24, string.format("DEBUG: %-78s", debugMessage:sub(1,78)))
 end
 
--- Маленькая кнопка "Назад"
+-- Маленькая кнопка "Назад" с фоном и текстом
 local function drawSmallButton(y, text, bgColor, fgColor)
   local width = unicode.len(text) + 4
   local x = math.floor((80 - width) / 2) + 1
@@ -161,20 +144,17 @@ local function drawAccount(data)
   drawCenteredText(11, "Совершенно транзакций: " .. tostring(data.transactions or 0), 0x00FF00)
   drawCenteredText(13, "Регистрация: " .. (data.regDate or "Неизвестно"), 0x00FF00)
   drawSmallButton(22, "Назад", 0x333333, 0xFFFFFF)
-  drawBottomPanel()
 end
 
 local function drawAccountLoading()
   clear()
   drawCenteredText(12, "Загрузка...", 0x888888)
   drawSmallButton(22, "Назад", 0x333333, 0xFFFFFF)
-  drawBottomPanel()
 end
 
 -- Попытка автоматического обновления токена и повторного запроса аккаунта
 local function retryAccountAfterTokenRefresh()
   if not currentPlayer then return end
-  setDebug("Обновление токена...")
   -- Отправляем enter, чтобы получить свежий токен (игрок на PIM)
   modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
   -- Ждём welcome
@@ -190,7 +170,6 @@ local function retryAccountAfterTokenRefresh()
           currentToken = msg.token
           playerBalance = msg.balance or 0.0
           alreadyAuthorized = true
-          setDebug("Токен обновлён, пробуем снова")
           -- Повторяем запрос аккаунта
           currentScreen = "account_loading"
           accountRequestTime = os.clock()
@@ -198,11 +177,10 @@ local function retryAccountAfterTokenRefresh()
           modem.send(serverAddress, 0xffef, serialization.serialize({
             op = "getAccount", name = currentPlayer, token = currentToken
           }))
-          return  -- успех, выходим
+          return
         end
       end
     elseif ev[1] == "player_off" or ev[1] == "pim_player_leave" then
-      -- Если игрок ушёл, прекращаем
       currentPlayer = nil
       currentToken = nil
       alreadyAuthorized = false
@@ -212,7 +190,6 @@ local function retryAccountAfterTokenRefresh()
     end
   end
   -- Не удалось обновить токен
-  setDebug("Не удалось обновить токен")
   currentScreen = "menu"
   drawMainMenu()
 end
@@ -220,11 +197,8 @@ end
 local function goToAccount()
   if not currentToken then
     drawCenteredText(12, "Ошибка: нет авторизации", 0xFF0000)
-    setDebug("Ошибка: нет токена")
     return
   end
-  setDebug("Запрос аккаунта с токеном: "..currentToken)
-  print("Запрос аккаунта с токеном: "..currentToken)
   currentScreen = "account_loading"
   accountRequestTime = os.clock()
   drawAccountLoading()
@@ -233,15 +207,14 @@ local function goToAccount()
   }))
 end
 
-local function goToShop() currentScreen="shop" clear() drawCenteredText(8,"Магазин (в разработке)",0x00FF00) drawBottomPanel() end
-local function goToUtility() currentScreen="utility" clear() drawCenteredText(8,"Полезности (в разработке)",0x00FF00) drawBottomPanel() end
+local function goToShop() currentScreen="shop" clear() drawCenteredText(8,"Магазин (в разработке)",0x00FF00) end
+local function goToUtility() currentScreen="utility" clear() drawCenteredText(8,"Полезности (в разработке)",0x00FF00) end
 local function goBackToMenu() currentScreen="menu" drawMainMenu() end
 
 -- ======== ИНИЦИАЛИЗАЦИЯ ========
 drawWelcomeScreen()
 modem.send(serverAddress,0xffef,serialization.serialize({op="register"}))
 print("Терминал отправляет регистрацию...")
-setDebug("Ожидание игрока")
 
 -- ======== ГЛАВНЫЙ ЦИКЛ ========
 while true do
@@ -250,8 +223,6 @@ while true do
 
   if currentScreen == "auth" then
     if os.clock() - authStartTime >= AUTH_TIMEOUT then
-      print("⚠ Таймаут авторизации")
-      setDebug("Таймаут авторизации")
       currentScreen = "menu"
       drawMainMenu()
     end
@@ -259,8 +230,6 @@ while true do
 
   if currentScreen == "account_loading" then
     if os.clock() - accountRequestTime >= ACCOUNT_TIMEOUT then
-      print("⚠ Таймаут загрузки аккаунта")
-      setDebug("Таймаут загрузки аккаунта")
       -- Пробуем автоматически обновить токен
       retryAccountAfterTokenRefresh()
     end
@@ -288,42 +257,26 @@ while true do
     local playerName = ev[2] or "Игрок"
     currentPlayer = playerName:match("^%s*(.-)%s*$") or playerName
 
-    print("=== СОБЫТИЕ ИГРОК НА PIM ===")
-    print("Имя: " .. currentPlayer)
-    print("Токен: " .. tostring(currentToken))
-    print("alreadyAuthorized: " .. tostring(alreadyAuthorized))
-    setDebug("Игрок на PIM: "..currentPlayer.." | Токен: "..tostring(currentToken):sub(1,10))
-
     if alreadyAuthorized then
-      print("alreadyAuthorized = true -> вход игнорирован")
-      setDebug("Уже авторизован")
       if currentScreen == "auth" or currentScreen == "account_loading" then
         currentScreen = "menu"
         drawMainMenu()
       end
     elseif currentToken then
-      print("Токен есть, но флаг сброшен -> восстанавливаем")
       alreadyAuthorized = true
-      setDebug("Флаг авторизации восстановлен")
       if currentScreen == "auth" or currentScreen == "account_loading" then
         currentScreen = "menu"
         drawMainMenu()
       end
     else
-      print("Первый вход -> отправляем enter")
       playerBalance = 0.0
       currentScreen = "auth"
       authStartTime = os.clock()
       drawAuthScreen()
       modem.send(serverAddress,0xffef,serialization.serialize({op="enter", name=currentPlayer}))
-      print("Отправлен enter для "..currentPlayer)
-      setDebug("Отправлен enter: "..currentPlayer)
     end
-    print("=== КОНЕЦ ОБРАБОТКИ === ")
 
   elseif e=="player_off" or e=="pim_player_leave" then
-    print("Игрок сошёл с PIM -> сбрасываем всё")
-    setDebug("Игрок ушёл")
     currentPlayer = nil
     currentToken = nil
     alreadyAuthorized = false
@@ -332,32 +285,24 @@ while true do
   elseif e=="modem_message" then
     local sender = ev[3]
     local data = ev[6]
-    print("Получено сообщение от " .. sender)
     if sender == serverAddress then
       local success, msg = pcall(serialization.unserialize, data)
       if success and msg then
-        print("Сообщение расшифровано: op=" .. tostring(msg.op) .. " token=" .. tostring(msg.token))
         if msg.op == "welcome" and msg.token then
           currentToken = msg.token
           playerBalance = msg.balance or 0.0
           playerTransactions = msg.transactions or 0
           playerRegDate = msg.regDate or ""
           alreadyAuthorized = true
-          print("✅ Авторизация успешна, токен: "..currentToken)
-          setDebug("Авторизован! Токен: "..currentToken:sub(1,10))
           if currentScreen == "auth" or currentScreen == "account_loading" then
             currentScreen = "menu"
             drawMainMenu()
           end
         elseif msg.op == "accountData" then
           if msg.error then
-            print("Ошибка аккаунта: " .. msg.message)
-            setDebug("Ошибка: " .. msg.message)
             -- Автоматически обновляем токен
             retryAccountAfterTokenRefresh()
           else
-            print("Получен ответ аккаунта")
-            setDebug("Аккаунт загружен")
             if currentScreen == "account_loading" then
               currentScreen = "account"
               drawAccount(msg.data)
