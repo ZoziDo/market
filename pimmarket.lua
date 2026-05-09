@@ -108,10 +108,10 @@ end
 -- Страницы помощи с цветовой разметкой (таблицы)
 local helpPages = {
   { -- страница 1
-    {text = "         Информация об магазине", color = 0xff7300},
-    {text = "  Добро пожаловать в магазин/обменник", color = 0xffffff},
-    {text = "        warg'а Legend", color = 0xffffff},
-    {text = "  Обязательно к прочтению", color = 0xff0000},
+    {text = "         Информация об магазине", color = 0xff7300, centered = true},
+    {text = "  Добро пожаловать в магазин/обменник", color = 0xffffff, centered = true},
+    {text = "        warg'а Legend", color = 0xffffff, centered = true},
+    {text = "  Обязательно к прочтению", color = 0xff0000, centered = true},
     {text = ""},
     {text = "1. Что такое $ – Это торговая валюта", color = 0xff7300},
     {text = "   за ресурсы которыми можно пополнить", color = 0xffffff},
@@ -128,7 +128,7 @@ local helpPages = {
     {text = "   Омическими деньгами", color = 0x00ff88},
   },
   { -- страница 2
-    {text = "         Информация об магазине", color = 0xff7300},
+    {text = "         Информация об магазине", color = 0xff7300, centered = true},
     {text = ""},
     {text = "3. Магазин имеет 3 вида оплаты", color = 0xff7300},
     {text = "   $ - Только ресурсы", color = 0x00ff88},
@@ -145,7 +145,7 @@ local helpPages = {
     {text = "   \"Наборы/Квесты\"", color = 0xffffff},
   },
   { -- страница 3
-    {text = "         Информация об магазине", color = 0xff7300},
+    {text = "         Информация об магазине", color = 0xff7300, centered = true},
     {text = ""},
     {text = "5. Правила:", color = 0xff0000},
     {text = "   Запрещено использовать", color = 0xffffff},
@@ -168,8 +168,12 @@ local function drawHelpScreen()
   for i, item in ipairs(page) do
     local text = item.text or ""
     local color = item.color or 0xFFFFFF
-    gpu.setForeground(color)
-    gpu.set(3, 1 + i, text)   -- левый отступ 3 символа
+    if item.centered then
+      drawCenteredText(1 + i, text, color)
+    else
+      gpu.setForeground(color)
+      gpu.set(3, 1 + i, text)   -- левый отступ 3 символа
+    end
   end
   -- Номер страницы
   local pageStr = "← " .. helpPage .. " →"
