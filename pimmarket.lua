@@ -17,14 +17,12 @@ local currentPlayer, currentToken, playerBalance = nil, nil, 0.0
 local playerTransactions = 0
 local playerRegDate = ""
 local currentScreen = "welcome"
-local waitingForToken = false
-local waitStartTime = 0
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
 gpu.setBackground(0x000000)
 
--- ========== КРУПНЫЙ ШРИФТ ==========
+-- ========== КРУПНЫЙ ШРИФТ (без изменений) ==========
 local font = {}
 local function addLetter(char, rows) font[char] = rows end
 addLetter("A",{" ███ ","█   █","█████","█   █","█   █"})
@@ -158,22 +156,18 @@ local function drawMainMenu()
   else drawWelcomeScreen() end
 end
 
--- ========== ЭКРАН АККАУНТА ==========
+-- Экран аккаунта
 local function drawAccount(data)
   clear()
   drawCenteredText(2, "Аккаунт: " .. currentPlayer, 0xFFD700)
-
   gpu.setForeground(0xFF00FF)
   gpu.set(5,5,"Баланс:")
   gpu.set(5,6,"Совершено транзакций:")
   gpu.set(5,7,"Регистрация:")
-
   gpu.setForeground(0xFFFFFF)
   gpu.set(30,5,string.format("%.2f Ресурсы $ | %.2f Эмов", data.balance, data.balance))
   gpu.set(30,6, tostring(data.transactions or 0))
   gpu.set(30,7, data.regDate or "Неизвестно")
-
-  -- Кнопка "Назад"
   gpu.setBackground(0x333333)
   gpu.fill(2,22,12,3," ")
   gpu.setForeground(0xFFFFFF)
@@ -188,9 +182,7 @@ local function goToAccount()
   end
   currentScreen = "account"
   modem.send(serverAddress, 0xffef, serialization.serialize({
-    op = "getAccount",
-    name = currentPlayer,
-    token = currentToken
+    op = "getAccount", name = currentPlayer, token = currentToken
   }))
   drawCenteredText(12, "Загрузка...", 0x888888)
 end
@@ -198,6 +190,27 @@ end
 local function goToShop() currentScreen="shop" clear() drawCenteredText(8,"Магазин (в разработке)",0x00FF00) end
 local function goToUtility() currentScreen="utility" clear() drawCenteredText(8,"Полезности (в разработке)",0x00FF00) end
 local function goBackToMenu() currentScreen="menu" drawMainMenu() end
+
+-- ======== БЛОКИРУЮЩЕЕ ОЖИДАНИЕ WELCOME ========
+local function waitForWelcome(timeout)
+  local start = os.clock()
+  while (os.clock() - start) < timeout do
+    local e = {event.pull(timeout - (os.clock() - start))}
+    if e[1] == "modem_message" then
+      local _,_,from,_,_,data = e[2],e[3],e[4],e[5],e[6]
+      if from == serverAddress then
+        local success, msg = pcall(serialization.unserialize, data)
+        if success and msg and msg.op == "welcome" and msg.token then
+          return msg
+        end
+      end
+    elseif e[1] == "player_off" or e[1] == "pim_player_leave" then
+      -- Если игрок ушёл во время ожидания, прерываемся
+      return nil
+    end
+  end
+  return nil
+end
 
 -- ======== ИНИЦИАЛИЗАЦИЯ ========
 drawWelcomeScreen()
@@ -208,14 +221,6 @@ print("Терминал отправляет регистрацию...")
 while true do
   local ev = {event.pull(0.5)}
   local e = ev[1]
-
-  -- Проверка таймаута ожидания токена
-  if waitingForToken and (os.clock() - waitStartTime) >= 2 then
-    waitingForToken = false
-    print("⚠ Таймаут получения токена")
-    currentScreen = "menu"
-    drawMainMenu()
-  end
 
   if e == "touch" then
     local x,y = ev[3],ev[4]
@@ -244,20 +249,28 @@ while true do
     drawAuthScreen()
     os.sleep(1)
 
-    -- Отправляем enter с ИСПРАВЛЕННЫМ op
-    local enterMsg = {op="enter", name=currentPlayer}
-    print("Отправляю enter: " .. serialization.serialize(enterMsg))
-    modem.send(serverAddress, 0xffef, serialization.serialize(enterMsg))
+    -- Отправка enter
+    modem.send(serverAddress,0xffef,serialization.serialize({op="enter", name=currentPlayer}))
     print("Отправлен enter для "..currentPlayer)
 
-    waitingForToken = true
-    waitStartTime = os.clock()
+    -- Ждём welcome до 3 секунд
+    local welcomeMsg = waitForWelcome(3)
+    if welcomeMsg then
+      currentToken = welcomeMsg.token
+      playerBalance = welcomeMsg.balance or 0.0
+      playerTransactions = welcomeMsg.transactions or 0
+      playerRegDate = welcomeMsg.regDate or ""
+      print("✅ Авторизация успешна, токен: "..currentToken)
+    else
+      print("⚠ Не удалось получить ответ от сервера")
+    end
 
+    currentScreen = "menu"
+    drawMainMenu()
   elseif e=="player_off" or e=="pim_player_leave" then
     print("Игрок сошёл с PIM")
     currentPlayer = nil
     currentToken = nil
-    waitingForToken = false
     currentScreen = "welcome"
     drawWelcomeScreen()
   elseif e=="modem_message" then
@@ -265,20 +278,7 @@ while true do
     if from == serverAddress then
       local success, msg = pcall(serialization.unserialize, data)
       if success and msg then
-        if msg.op == "welcome" then
-          print("Получен welcome: token="..tostring(msg.token).." balance="..tostring(msg.balance))
-          if msg.token then
-            currentToken = msg.token
-            playerBalance = msg.balance or 0.0
-            playerTransactions = msg.transactions or 0
-            playerRegDate = msg.regDate or ""
-          end
-          if waitingForToken then
-            waitingForToken = false
-            currentScreen = "menu"
-            drawMainMenu()
-          end
-        elseif msg.op == "accountData" then
+        if msg.op == "accountData" then
           if currentScreen == "account" then
             drawAccount(msg.data)
           end
