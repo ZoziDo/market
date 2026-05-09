@@ -172,21 +172,31 @@ local helpPages = {
 
 local function drawHelpScreen()
   clear()
+  
+  -- Заголовок
+  drawCenteredText(2, "Информация об магазине", 0xff7300)
+
   local page = helpPages[helpPage]
-  for i, item in ipairs(page) do
-    local text = item.text or ""
-    local color = item.color or 0xFFFFFF
-    if item.centered then
-      drawCenteredText(1 + i, text, color)
-    else
-      gpu.setForeground(color)
-      gpu.set(3, 1 + i, text)   -- левый отступ 3 символа
+  local y = 4
+
+  for _, item in ipairs(page) do
+    if item.text then
+      gpu.setForeground(item.color or 0xFFFFFF)
+      
+      if item.centered then
+        drawCenteredText(y, item.text, item.color)
+      else
+        gpu.set(4, y, item.text)   -- левый отступ
+      end
+      y = y + 1
     end
   end
-  -- Номер страницы
-  local pageStr = "← " .. helpPage .. " →"
-  drawCenteredText(20, pageStr, 0xFFFFFF)
-  -- Кнопка "Назад"
+
+  -- Навигация страниц
+  local pageStr = "←   " .. helpPage .. "   →"
+  drawCenteredText(21, pageStr, 0x00CCFF)
+
+  -- Кнопка "Назад" (не трогаем, оставляем как было)
   drawFlexButton(backButton)
 end
 
