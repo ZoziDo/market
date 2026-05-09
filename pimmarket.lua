@@ -17,6 +17,8 @@ local currentPlayer, currentToken, playerBalance = nil, nil, 0.0
 local playerTransactions = 0
 local playerRegDate = ""
 local currentScreen = "welcome"
+local waitingForToken = false
+local waitStartTime = 0
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
@@ -207,6 +209,17 @@ while true do
   local ev = {event.pull(0.5)}
   local e = ev[1]
 
+  -- Проверка таймаута ожидания токена
+  if waitingForToken and (os.clock() - waitStartTime) >= 2 then
+    waitingForToken = false
+    print("⚠ Таймаут получения токена")
+    if not currentToken then
+      drawCenteredText(12, "⚠ Нет ответа сервера", 0xFF0000)
+    end
+    currentScreen = "menu"
+    drawMainMenu()
+  end
+
   if e == "touch" then
     local x,y = ev[3],ev[4]
     if currentScreen == "menu" then
@@ -227,44 +240,28 @@ while true do
     local playerName = ev[2] or "Игрок"
     currentPlayer = playerName:match("^%s*(.-)%s*$") or playerName
     playerBalance = 0.0
+    currentToken = nil
     print("Игрок встал на PIM: "..currentPlayer)
+
+    -- Авторизация
     currentScreen = "auth"
     drawAuthScreen()
     os.sleep(1)
 
-    -- Отправляем enter
-    modem.send(serverAddress,0xffef,serialization.serialize({op="enter",name=currentPlayer}))
+    -- Отправляем enter с именем
+    local enterMsg = {op="enter", name=currentPlayer}
+    print("Отправляю enter: " .. serialization.serialize(enterMsg))
+    modem.send(serverAddress, 0xffef, serialization.serialize(enterMsg))
     print("Отправлен enter для "..currentPlayer)
 
-    -- Ждём welcome с токеном до 2 секунд
-    local timer = os.clock()
-    while not currentToken and (os.clock() - timer) < 2 do
-      local e2 = {event.pull(0.2)}
-      if e2[1] == "modem_message" then
-        local _,_,from,_,_,data = e2[2],e2[3],e2[4],e2[5],e2[6]
-        if from == serverAddress then
-          local success, msg = pcall(serialization.unserialize, data)
-          if success and msg and msg.op == "welcome" and msg.token then
-            currentToken = msg.token
-            playerBalance = msg.balance or 0.0
-            playerTransactions = msg.transactions or 0
-            playerRegDate = msg.regDate or ""
-            print("Токен получен: "..currentToken.." Баланс: "..playerBalance)
-          end
-        end
-      end
-    end
+    waitingForToken = true
+    waitStartTime = os.clock()
 
-    if not currentToken then
-      drawCenteredText(12, "⚠ Нет ответа сервера", 0xFF0000)
-    end
-
-    currentScreen = "menu"
-    drawMainMenu()
   elseif e=="player_off" or e=="pim_player_leave" then
     print("Игрок сошёл с PIM")
     currentPlayer = nil
     currentToken = nil
+    waitingForToken = false
     currentScreen = "welcome"
     drawWelcomeScreen()
   elseif e=="modem_message" then
@@ -273,13 +270,17 @@ while true do
       local success, msg = pcall(serialization.unserialize, data)
       if success and msg then
         if msg.op == "welcome" then
-          -- на случай, если пришёл после ожидания
-          if not currentToken and msg.token then
+          print("Получен welcome от сервера: token="..tostring(msg.token).." balance="..tostring(msg.balance))
+          if msg.token then
             currentToken = msg.token
             playerBalance = msg.balance or 0.0
             playerTransactions = msg.transactions or 0
             playerRegDate = msg.regDate or ""
-            if currentScreen=="menu" then drawMainMenu() end
+          end
+          if waitingForToken then
+            waitingForToken = false
+            currentScreen = "menu"
+            drawMainMenu()
           end
         elseif msg.op == "accountData" then
           if currentScreen == "account" then
