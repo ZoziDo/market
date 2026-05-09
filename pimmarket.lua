@@ -105,100 +105,121 @@ local function isButtonClicked(btn, x, y)
          x >= btn.x and x < btn.x + btn.xs
 end
 
+-- Страницы помощи (точная копия с картинок)
+local helpPages = {
+  { -- страница 1
+    {text = "Информация об магазине", color = 0xffaa00, centered = true},
+    {text = "Добро пожаловать в магазин/обменник wgr'a Legend", color = 0xffffff, centered = true},
+    {text = "Обязательно к прочтению", color = 0xff0000, centered = true},
+    {text = ""},
+    {parts = {
+      {text = "1. Что такое $", color = 0xffaa00},
+      {text = " - Это торговля валюта", color = 0xffffff}
+    }},
+    {text = "за ресурсы которыми можно пополнить данный магазин!", color = 0xffffff},
+    {parts = {
+      {text = "Что такое ◊", color = 0xffaa00},
+      {text = " - Это эмеральны которыми можно", color = 0xffffff}
+    }},
+    {text = "пополнить магазин в виде омических \"денег\"", color = 0xffffff},
+    {text = ""},
+    {parts = {
+      {text = "2. Как пополнять свой баланс для покупок -", color = 0xffffff}
+    }},
+    {parts = {
+      {text = "в разделе ", color = 0xffffff},
+      {text = "\"Пополнить\"", color = 0x00aaff},
+      {text = " Вы можете пополнить", color = 0xffffff}
+    }},
+    {parts = {
+      {text = "свой баланс ", color = 0xffffff},
+      {text = "$", color = 0x00ff00},
+      {text = " - Ресурсами скупаемыми", color = 0xffffff}
+    }},
+    {parts = {
+      {text = "магазином и так-же ", color = 0xffffff},
+      {text = "◊", color = 0x00ff00},
+      {text = " - Очистимся дельтами", color = 0xffffff}
+    }},
+    {text = ""},
+    {text = "← 1 →", color = 0xffffff, centered = true},
+    {text = "Падал", color = 0xffffff, centered = false},
+  },
+  { -- страница 2
+    {text = "Информация об магазине", color = 0xffaa00, centered = true},
+    {text = ""},
+    {parts = {
+      {text = "3. Магазин имеет 3 вида оплаты", color = 0xffaa00}
+    }},
+    {parts = {
+      {text = "$ - Только ресурсы", color = 0x00ff00}
+    }},
+    {parts = {
+      {text = "♦ - Только эмеральны", color = 0x00aaff}
+    }},
+    {parts = {
+      {text = "$ и ♦ - Смежная оплата за обе валюты", color = 0xffaa00}
+    }},
+    {text = ""},
+    {parts = {
+      {text = "4. Как совершить покупку - в разделе", color = 0xffaa00}
+    }},
+    {parts = {
+      {text = "\"Покупка\" Выбираете интересующий товар,", color = 0xffffff}
+    }},
+    {parts = {
+      {text = "указываете кол-во и нажимаете на \"купить\"", color = 0xffffff}
+    }},
+    {parts = {
+      {text = "товар будет выдан автоматически. Таким же", color = 0xffffff}
+    }},
+    {parts = {
+      {text = "образом совершается покупка Наборов и", color = 0xffffff}
+    }},
+    {parts = {
+      {text = "Квестов в разделе \"Наборы/Квесты\"", color = 0xffffff}
+    }},
+    {text = ""},
+    {text = "← 2 →", color = 0xffffff, centered = true},
+    {text = "Падал", color = 0xffffff, centered = false},
+  },
+  { -- страница 3 (пусть будет пока из старого, если нужно добавить новую - скажите)
+    {text = "Информация об магазине", color = 0xffaa00, centered = true},
+    {text = ""},
+    {text = "5. Правила:", color = 0xff0000},
+    {text = "   Запрещено использовать", color = 0xffffff},
+    {text = "   уязвимости, баги и любые возможные", color = 0xffffff},
+    {text = "   способы обогащения не задуманные", color = 0xffffff},
+    {text = "   создателями данного магазина", color = 0xffffff},
+    {text = "   кроме купле/продажи, о любых сбоях", color = 0xffffff},
+    {text = "   в работе, багах или возможных", color = 0xffffff},
+    {text = "   улучшениях рекомендуется сообщить", color = 0xffffff},
+    {text = "   или предложить Владельцам в", color = 0xffffff},
+    {text = "   Discord fkpupsik/alex25764", color = 0x00aaff},
+    {text = ""},
+    {text = "Приятных покупок", color = 0x00ff88},
+  }
+}
+
 local function drawHelpScreen()
   clear()
-
-  if helpPage == 1 then
-    -- Страница 1 (как в примере Grok)
-    drawCenteredText(2, "Информация об магазине", 0xff7300)
-
-    gpu.setForeground(0xffffff)
-    gpu.set(4, 4, "Добро пожаловать в магазин/обменник warg'а Legend")
-    
-    gpu.setForeground(0xff0000)
-    gpu.set(4, 5, "Обязательно к прочтению")
-
-    gpu.setForeground(0xff7300)
-    gpu.set(4, 7, "1. Что такое $ – Это торговая валюта")
-    
-    gpu.setForeground(0xffffff)
-    gpu.set(4, 8, "за ресурсы которыми можно пополнить данный магазин")
-    
-    gpu.setForeground(0xff7300)
-    gpu.set(4, 9, "Что такое ♦ – Это эмеральды")
-    
-    gpu.setForeground(0xffffff)
-    gpu.set(4, 10, 'которыми можно пополнить магазин в виде физических "денег"')
-
-    gpu.setForeground(0xff7300)
-    gpu.set(4, 12, '2. Как пополнять свой баланс для покупок - в разделе')
-    
-    gpu.setForeground(0x00aaff)
-    gpu.set(4, 13, '"Пополнить"')
-    
-    gpu.setForeground(0xffffff)
-    gpu.set(4, 14, "Вы можете пополнить свой баланс")
-    
-    gpu.setForeground(0x00ff88)
-    gpu.set(4, 15, "$ – Ресурсами скупаемыми магазином")
-    
-    gpu.setForeground(0xffffff)
-    gpu.set(4, 16, "и так-же ♦ – Физическими деньгами")
-
-  elseif helpPage == 2 then
-    -- Страница 2
-    drawCenteredText(2, "Информация об магазине", 0xff7300)
-
-    gpu.setForeground(0xff7300)
-    gpu.set(4, 5, "3. Магазин имеет 3 вида оплаты")
-    
-    gpu.setForeground(0x00ff88)
-    gpu.set(4, 6, "$ - Только ресурсы")
-    
-    gpu.setForeground(0x00aaff)
-    gpu.set(4, 7, "♦ - Только эмеральны")
-    
-    gpu.setForeground(0xffaa00)
-    gpu.set(4, 8, "$ и ♦ - Смежная оплата за обе валюты")
-
-    gpu.setForeground(0xff7300)
-    gpu.set(4, 10, "4. Как совершить покупку - в разделе")
-    
-    gpu.setForeground(0xffffff)
-    gpu.set(4, 11, '"Покупка" Выбираете интересующий товар,')
-    gpu.set(4, 12, "указываете кол-во и нажимаете на 'купить'")
-    gpu.set(4, 13, "товар будет выдан автоматически. Таким же")
-    gpu.set(4, 14, "образом совершается покупка Наборов и")
-    gpu.set(4, 15, 'Квестов в разделе "Наборы/Квесты"')
-
-  elseif helpPage == 3 then
-    -- Страница 3
-    drawCenteredText(2, "Информация об магазине", 0xff7300)
-
-    gpu.setForeground(0xff0000)
-    gpu.set(4, 5, "5. Правила:")
-
-    gpu.setForeground(0xffffff)
-    gpu.set(4, 6, "Запрещено использовать уязвимости,")
-    gpu.set(4, 7, "баги и любые возможные способы")
-    gpu.set(4, 8, "обогащения не задуманные создателями")
-    gpu.set(4, 9, "данного магазина кроме купле/продажи,")
-    gpu.set(4, 10, "о любых сбоях в работе, багах или")
-    gpu.set(4, 11, "возможных улучшениях рекомендуется")
-    gpu.set(4, 12, "сообщить или предложить Владельцам в")
-    
-    gpu.setForeground(0x00aaff)
-    gpu.set(4, 13, "Discord fkpupsik/alex25764")
-
-    gpu.setForeground(0x00ff88)
-    gpu.set(4, 15, "Приятных покупок")
+  local page = helpPages[helpPage]
+  for i, item in ipairs(page) do
+    if item.parts then
+      local x = 3
+      for _, part in ipairs(item.parts) do
+        gpu.setForeground(part.color)
+        gpu.set(x, 1 + i, part.text)
+        x = x + unicode.len(part.text)
+      end
+    elseif item.centered then
+      drawCenteredText(1 + i, item.text, item.color or 0xFFFFFF)
+    elseif item.text then
+      gpu.setForeground(item.color or 0xFFFFFF)
+      gpu.set(3, 1 + i, item.text)
+    end
   end
-
-  -- Навигация (стрелки)
-  local pageStr = "←   " .. helpPage .. "   →"
-  drawCenteredText(21, pageStr, 0x00CCFF)
-
-  -- Кнопка Назад
+  -- Кнопка "Назад" (страницы листаются стрелками в тексте, их нажатия обрабатываются отдельно)
   drawFlexButton(backButton)
 end
 
@@ -378,20 +399,37 @@ while true do
       if y == 23 then
         if x >= 4 and x <= 13 then goToHelp() end
       end
-     elseif currentScreen == "help" then
-      -- Перелистывание страниц: стрелки в строке 21
-      local pageStr = "←   " .. helpPage .. "   →"
-      local pageX = math.floor((80 - unicode.len(pageStr)) / 2) + 1
-      if y == 21 then
+    elseif currentScreen == "help" then
+      -- Обработка нажатий на стрелки в тексте "← 1 →" и т.д.
+      -- Ищем строку с номером страницы, чтобы понять, куда нажали
+      local pageStr = "← " .. helpPage .. " →"
+      local pageY = nil
+      local page = helpPages[helpPage]
+      for i, item in ipairs(page) do
+        if item.parts then
+          for _, part in ipairs(item.parts) do
+            if part.text == pageStr then
+              pageY = 1 + i
+              break
+            end
+          end
+        elseif item.text == pageStr then
+          pageY = 1 + i
+          break
+        end
+      end
+      if pageY and y == pageY then
+        local pageX = math.floor((80 - unicode.len(pageStr)) / 2) + 1
+        -- Если нажали левую стрелку
         if x >= pageX and x < pageX + 4 and helpPage > 1 then
           helpPage = helpPage - 1
           drawHelpScreen()
+        -- Если нажали правую стрелку
         elseif x >= pageX + unicode.len(pageStr) - 4 and x < pageX + unicode.len(pageStr) and helpPage < HELP_PAGES then
           helpPage = helpPage + 1
           drawHelpScreen()
         end
       end
-      -- Кнопка "Назад"
       if isButtonClicked(backButton, x, y) then
         goBackToMenu()
       end
