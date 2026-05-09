@@ -29,36 +29,35 @@ end
 -- ========== ПОЛУЧЕНИЕ РЕАЛЬНОГО ВРЕМЕНИ ==========
 local function getRealTime()
   if component.isAvailable("internet") then
-    -- Пробуем получить время с веб-сервиса
     local ok, result = pcall(function()
       local internet = require("internet")
-      internet.setTimeout(5)  -- таймаут 5 секунд
-      local handle = internet.request("http://just-the-time.appspot.com/")
+      local conn = internet.open("just-the-time.appspot.com", 80)
+      conn:write("GET / HTTP/1.1\r\nHost: just-the-time.appspot.com\r\nConnection: close\r\n\r\n")
+      conn:flush()
       local body = ""
-      for chunk in handle do
+      while true do
+        local chunk = conn:read(1024)
+        if not chunk then break end
         body = body .. chunk
       end
+      conn:close()
       -- Ответ: "2026-05-10 21:04:33"
-      if body and #body >= 19 then
-        -- Переводим в формат "дд.мм.гггг чч:мм:сс"
-        local year, month, day, time = body:match("(%d+)%-(%d+)%-(%d+) (.+)")
+      local match = body:match("(%d+%-\d+%-\d+ %d+:%d+:%d+)")
+      if match then
+        local year, month, day, time = match:match("(%d+)%-(%d+)%-(%d+) (.+)")
         if year and month and day and time then
           return string.format("%s.%s.%s %s", day, month, year, time)
         end
       end
-      return nil
     end)
-    if ok and result then
-      return result
-    end
+    if ok and result then return result end
   end
-  -- Если интернет не отработал, используем время сервера
   return os.date("%d.%m.%Y %H:%M:%S")
 end
 
 -- ========== ПЕРЕМЕННЫЕ ==========
 local owner = nil
-local sessions = {}   -- [name] = {token, lastAction}
+local sessions = {}
 local SESSION_TIMEOUT = 1800
 
 local function log(level, msg)
@@ -67,13 +66,14 @@ end
 
 local function getOrCreatePlayer(name)
   if not players[name] then
+    local realDate = getRealTime()
     players[name] = {
       balance = 0.0,
       transactions = 0,
-      regDate = getRealTime()  -- реальная дата регистрации
+      regDate = realDate
     }
     saveDB()
-    log("INFO", "Создан игрок " .. name .. " с датой: " .. players[name].regDate)
+    log("INFO", "Создан игрок " .. name .. " с датой: " .. realDate)
   end
   return players[name]
 end
