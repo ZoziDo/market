@@ -25,6 +25,13 @@ local alreadyAuthorized = false
 local helpPage = 1
 local HELP_PAGES = 3
 
+-- Переменные магазина покупок
+local shopItems = {}          -- все предметы из ME
+local shopPage = 1
+local shopPageSize = 6
+local shopSearch = ""
+local shopTotalPages = 1
+
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
 gpu.setBackground(0x000000)
@@ -33,6 +40,7 @@ gpu.setBackground(0x000000)
 local function drawBigTitle()
   gpu.setForeground(0xff7300)
 
+  -- DARKON (или NEXAR, смотря что у нас)
   local darkonLines = {
     "  ██████╗ ██████╗  █████╗ ██████╗ ██╗  ██╗ ██████╗ ███╗   ██╗",
     "  ██╔══██╗██╔══██╗██╔══██╗██╔══██╗██║ ██╔╝██╔═══██╗████╗  ██║",
@@ -40,12 +48,14 @@ local function drawBigTitle()
     "  ██║  ██║██╔══██╗██╔══██║██║  ██║██╔═██╗ ██║   ██║██║╚██╗██║",
     "  ██████╔╝██║  ██║██║  ██║██████╔╝██║  ██╗╚██████╔╝██║ ╚████║",
   }
-  local darkonOffset = 47
+
+  local darkonOffset = 47        -- поправил под центр, можно менять
   local darkonX = math.floor((80 - #darkonLines[1]) / 2) + darkonOffset
   for i, line in ipairs(darkonLines) do
     gpu.set(darkonX, 4 + i, line)
   end
 
+  -- SHOP
   local shopLines = {
     "  ███████╗ ██╗  ██╗  ██████╗  ██████╗ ",
     "  ██╔════╝ ██║  ██║ ██╔═══██╗ ██╔══██╗",
@@ -53,7 +63,8 @@ local function drawBigTitle()
     "  ╚════██║ ██╔══██║ ██║   ██║ ██╔═══╝ ",
     "  ███████║ ██║  ██║ ╚██████╔╝ ██║     "
   }
-  local shopOffset = 28
+
+  local shopOffset = 28          -- 0 = по центру
   local shopX = math.floor((80 - #shopLines[1]) / 2) + shopOffset
   for i, line in ipairs(shopLines) do
     gpu.set(shopX, 10 + i, line)
@@ -120,23 +131,108 @@ local shopMenuButtons = {
   bundle = {x=31,xs=20,y=15,ys=3,text="Наборы/Квесты",tx=4,ty=1,bg=0x444444,fg=0x3375cc}
 }
 
-local function drawShopMenu()
-  clear()
-  drawCenteredText(4, "МАГАЗИН", 0xff7300)
-  for _,btn in pairs(shopMenuButtons) do
-    drawButton(btn)
+-- ========== ЗАГРУЗКА ПРЕДМЕТОВ ИЗ ME ==========
+local function loadShopItems()
+  shopItems = {}
+  if component.isAvailable("me_interface") then
+    local me = component.proxy(component.list("me_interface")())  -- получаем первый ME-интерфейс
+    local items = me.getItemsInNetwork()
+    -- Таблица цен (пока пример, потом можно загружать из файла)
+    local prices = {
+      ["AppliedEnergistics2:item.ItemMultiMaterial:1"] = 226.9,
+      ["AppliedEnergistics2:item.ItemMultiMaterial:2"] = 165.53,
+      -- Добавь остальные ID по необходимости
+    }
+    for _, item in ipairs(items) do
+      if item.size > 0 then
+        local id = item.name .. ":" .. (item.damage or 0)
+        local price = prices[id] or 9.99  -- цена по умолчанию
+        table.insert(shopItems, {
+          name = item.label or item.name,
+          qty = item.size,
+          id = id,
+          price = price
+        })
+      end
+    end
+    -- Сортируем по имени
+    table.sort(shopItems, function(a,b) return a.name < b.name end)
+  else
+    -- Если ME-интерфейс не найден, показываем пустой список
   end
+end
+
+-- ========== ЭКРАН ПОКУПКИ ==========
+local function drawBuyScreen()
+  clear()
+  -- Баланс
+  drawCenteredText(1, "Баланс: " .. string.format("%.2f", playerBalance) .. " Ресов $ | " .. string.format("%.2f", playerBalance) .. " Эмов *", 0x00FF00)
+  drawCenteredText(2, "Магазин продаёт", 0xFFD700)
+
+  -- Заголовки колонок
+  gpu.setForeground(0xFFFFFF)
+  gpu.set(3, 3, "Название")
+  gpu.set(42, 3, "Кол-во")
+  gpu.set(55, 3, "Цена")
+  gpu.setForeground(0x444444)
+  gpu.set(3, 4, string.rep("─", 74))
+
+  -- Фильтрация по поиску
+  local filtered = {}
+  for _, item in ipairs(shopItems) do
+    if shopSearch == "" or string.find(string.lower(item.name), string.lower(shopSearch), 1, true) then
+      table.insert(filtered, item)
+    end
+  end
+  shopTotalPages = math.max(1, math.ceil(#filtered / shopPageSize))
+  if shopPage > shopTotalPages then shopPage = shopTotalPages end
+
+  local start = (shopPage - 1) * shopPageSize + 1
+  local finish = math.min(start + shopPageSize - 1, #filtered)
+
+  for i = start, finish do
+    local item = filtered[i]
+    local y = 5 + (i - start)
+    gpu.setForeground(0xFFFFFF)
+    -- Обрезаем имя под колонку (38 символов)
+    local shortName = item.name:sub(1, 38)
+    gpu.set(3, y, shortName)
+    gpu.set(42, y, tostring(item.qty))
+    gpu.set(55, y, string.format("%.2f", item.price))
+  end
+
+  -- Нижняя панель управления
+  gpu.setForeground(0x00CCFF)
+  gpu.set(3, 17, "Категория")
+  gpu.set(15, 17, "Поиск...")
+  gpu.set(30, 17, "В наличии")
+  gpu.set(45, 17, "Назад")
+  gpu.set(55, 17, "Далее")
+
+  -- Индикатор страницы
+  drawCenteredText(18, shopPage .. " / " .. shopTotalPages, 0x888888)
+
+  -- Кнопка возврата в меню магазина
   drawFlexButton(backButton)
 end
 
--- Страницы помощи (прямая отрисовка)
+-- ========== ОСТАЛЬНЫЕ ЭКРАНЫ (полностью) ==========
+local function drawShopMenu()
+  clear()
+  drawCenteredText(4, "МАГАЗИН", 0xff7300)
+  for _,btn in pairs(shopMenuButtons) do drawButton(btn) end
+  drawFlexButton(backButton)
+end
+
+-- Страницы помощи (без изменений)
 local function drawHelpScreen()
   clear()
-  
+
   if helpPage == 1 then
     drawCenteredText(2, "Информация об магазине", 0xff7300)
     drawCenteredText(4, "Добро пожаловать в магазин/обменник warg'а Legend", 0xffffff)
     drawCenteredText(5, "Обязательно к прочтению", 0xff0000)
+
     gpu.setForeground(0xff7300)
     gpu.set(4, 7, "1. Что такое $ – Это торговая валюта")
     gpu.setForeground(0xffffff)
@@ -155,6 +251,7 @@ local function drawHelpScreen()
     gpu.set(4, 15, "$ – Ресурсами скупаемыми магазином")
     gpu.setForeground(0xffffff)
     gpu.set(4, 16, "и так-же ♦ – Физическими деньгами")
+
   elseif helpPage == 2 then
     drawCenteredText(2, "Информация об магазине", 0xff7300)
     gpu.setForeground(0xff7300)
@@ -173,6 +270,7 @@ local function drawHelpScreen()
     gpu.set(4, 13, "товар будет выдан автоматически. Таким же")
     gpu.set(4, 14, "образом совершается покупка Наборов и")
     gpu.set(4, 15, 'Квестов в разделе "Наборы/Квесты"')
+
   elseif helpPage == 3 then
     drawCenteredText(2, "Информация об магазине", 0xff7300)
     gpu.setForeground(0xff0000)
@@ -190,8 +288,10 @@ local function drawHelpScreen()
     drawCenteredText(15, "Приятных покупок", 0x00ff88)
   end
 
+  -- Навигация
   local pageStr = "⟵ " .. helpPage .. " ⟶"
   drawCenteredText(20, pageStr, 0x00CCFF)
+  -- Кнопка Назад
   drawFlexButton(backButton)
 end
 
@@ -236,9 +336,11 @@ local function drawMainMenu()
   else drawWelcomeScreen() end
 end
 
+-- Экран аккаунта
 local function drawAccount(data)
   clear()
   drawCenteredText(6, currentPlayer .. ":", 0xFFD700)
+
   local balance = data.balance or 0
   local balancePart1 = string.format("Баланс: %.2f Ресов $ | ", balance)
   local balancePart2 = string.format("%.2f Эмов *", balance)
@@ -272,7 +374,7 @@ local function drawAccountLoading()
   drawFlexButton(backButton)
 end
 
--- Попытка обновления токена
+-- Попытка автоматического обновления токена
 local function retryAccountAfterTokenRefresh()
   if not currentPlayer then return end
   modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
@@ -323,6 +425,7 @@ local function goToAccount()
   }))
 end
 
+-- Обработчики переходов
 local function goToShop()
   currentScreen = "shop"
   drawShopMenu()
@@ -334,6 +437,14 @@ local function goToHelp()
   drawHelpScreen()
 end
 local function goBackToMenu() currentScreen="menu" drawMainMenu() end
+
+local function goToBuy()
+  currentScreen = "shop_buy"
+  shopPage = 1
+  shopSearch = ""
+  loadShopItems()  -- загружаем предметы при входе
+  drawBuyScreen()
+end
 
 -- ======== ИНИЦИАЛИЗАЦИЯ ========
 drawWelcomeScreen()
@@ -373,7 +484,7 @@ while true do
         if x >= 4 and x <= 13 then goToHelp() end
       end
     elseif currentScreen == "help" then
-      local pageStr = "←   " .. helpPage .. "   →"
+      local pageStr = "⟵ " .. helpPage .. " ⟶"
       local pageX = math.floor((80 - unicode.len(pageStr)) / 2) + 1
       if y == 20 then
         if x >= pageX and x < pageX + 4 and helpPage > 1 then
@@ -394,11 +505,7 @@ while true do
     elseif currentScreen == "shop" then
       for name, btn in pairs(shopMenuButtons) do
         if x>=btn.x and x<btn.x+btn.xs and y>=btn.y and y<btn.y+btn.ys then
-          if name == "buy" then
-            currentScreen = "shop_buy"
-            clear()
-            drawCenteredText(10, "Покупка (в разработке)", 0xffffff)
-            drawFlexButton(backButton)
+          if name == "buy" then goToBuy()
           elseif name == "sell" then
             currentScreen = "shop_sell"
             clear()
@@ -413,10 +520,19 @@ while true do
           break
         end
       end
+      if isButtonClicked(backButton, x, y) then goBackToMenu() end
+    elseif currentScreen == "shop_buy" then
       if isButtonClicked(backButton, x, y) then
-        goBackToMenu()
+        currentScreen = "shop"
+        drawShopMenu()
+      elseif y == 17 then
+        if x >= 45 and x < 51 then  -- "Назад" страница
+          if shopPage > 1 then shopPage = shopPage - 1 drawBuyScreen() end
+        elseif x >= 55 and x < 63 then  -- "Далее"
+          if shopPage < shopTotalPages then shopPage = shopPage + 1 drawBuyScreen() end
+        end
       end
-    elseif currentScreen == "shop_buy" or currentScreen == "shop_sell" or currentScreen == "shop_bundle" then
+    elseif currentScreen == "shop_sell" or currentScreen == "shop_bundle" then
       if isButtonClicked(backButton, x, y) then
         currentScreen = "shop"
         drawShopMenu()
