@@ -21,13 +21,12 @@ local authStartTime = 0
 local AUTH_TIMEOUT = 3
 local accountRequestTime = 0
 local ACCOUNT_TIMEOUT = 3
-local playerAuthorized = false
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
 gpu.setBackground(0x000000)
 
--- ========== КРУПНЫЙ ШРИФТ NEXAR SHOP (выровнен идеально) ==========
+-- ========== КРУПНЫЙ ШРИФТ NEXAR SHOP (твой вариант) ==========
 local function drawBigTitle()
   gpu.setForeground(0xff7300)
   local lines = {
@@ -36,13 +35,13 @@ local function drawBigTitle()
     "  ██╔██╗ ██║ █████╗   █████╔╝  ███████║ ██████╔╝",
     "  ██║╚██╗██║ ██╔══╝   ██╔═██╗  ██╔══██║ ██╔══██╗",
     "  ██║ ╚████║ ███████╗ ██║  ██╗ ██║  ██║ ██║  ██║",
-    "                                                ", -- пустая строка
+    "                                                ",
     "       ███████╗ ██╗  ██╗  ██████╗  ██████╗      ",
     "       ██╔════╝ ██║  ██║ ██╔═══██╗ ██╔══██╗     ",
     "       ███████╗ ███████║ ██║   ██║ ██████╔╝     ",
     "       ╚════██║ ██╔══██║ ██║   ██║ ██╔═══╝      ",
     "       ███████║ ██║  ██║ ╚██████╔╝ ██║          ",
-   }
+  }
   for i, line in ipairs(lines) do
     if #line < 50 then
       lines[i] = line .. string.rep(" ", 50 - #line)
@@ -82,7 +81,7 @@ end
 
 -- Маленькая кнопка с фоном (для "Назад")
 local function drawSmallButton(y, text, bgColor, fgColor)
-  local width = unicode.len(text) + 4  -- немного отступа
+  local width = unicode.len(text) + 4
   local x = math.floor((80 - width) / 2) + 1
   gpu.setBackground(bgColor or 0x333333)
   gpu.fill(x, y, width, 3, " ")
@@ -90,6 +89,13 @@ local function drawSmallButton(y, text, bgColor, fgColor)
   local textX = x + math.floor((width - unicode.len(text)) / 2)
   gpu.set(textX, y + 1, text)
   gpu.setBackground(0x000000)
+end
+
+local function isSmallButtonClicked(x, y, yStart, text)
+  if y < yStart or y > yStart + 2 then return false end
+  local width = unicode.len(text) + 4
+  local btnX = math.floor((80 - width) / 2) + 1
+  return x >= btnX and x < btnX + width
 end
 
 local function drawWelcomeScreen()
@@ -133,7 +139,7 @@ local function drawMainMenu()
   else drawWelcomeScreen() end
 end
 
--- Экран аккаунта (текст по центру, кнопка «Назад» с фоном)
+-- Экран аккаунта
 local function drawAccount(data)
   clear()
   drawCenteredText(7, currentPlayer .. ":", 0xFFFFFF)
@@ -141,8 +147,6 @@ local function drawAccount(data)
   drawCenteredText(9, balanceText, 0x00FF00)
   drawCenteredText(11, "Совершенно транзакций: " .. tostring(data.transactions or 0), 0x00FF00)
   drawCenteredText(13, "Регистрация: " .. (data.regDate or "Неизвестно"), 0x00FF00)
-
-  -- Кнопка "Назад" с фоном
   drawSmallButton(22, "Назад", 0x333333, 0xFFFFFF)
 end
 
@@ -151,14 +155,6 @@ local function drawAccountLoading()
   clear()
   drawCenteredText(12, "Загрузка...", 0x888888)
   drawSmallButton(22, "Назад", 0x333333, 0xFFFFFF)
-end
-
--- Зона нажатия для маленькой кнопки
-local function isSmallButtonClicked(x, y, yStart, text)
-  if y < yStart or y > yStart + 2 then return false end
-  local width = unicode.len(text) + 4
-  local btnX = math.floor((80 - width) / 2) + 1
-  return x >= btnX and x < btnX + width
 end
 
 local function goToAccount()
@@ -227,14 +223,14 @@ while true do
     local playerName = ev[2] or "Игрок"
     currentPlayer = playerName:match("^%s*(.-)%s*$") or playerName
 
-    if playerAuthorized and currentPlayer == currentPlayer then
-      print("Игрок уже авторизован, повторный вход без сброса")
+    -- НЕ ОТПРАВЛЯЕМ enter, если уже есть токен (игрок просто перешёл в другое меню и вернулся)
+    if currentToken then
+      print("Игрок уже имеет токен, пропускаем enter")
       currentScreen = "menu"
       drawMainMenu()
     else
-      currentToken = nil
+      -- Первый вход
       playerBalance = 0.0
-      playerAuthorized = false
       print("Игрок встал на PIM: "..currentPlayer)
 
       currentScreen = "auth"
@@ -249,7 +245,6 @@ while true do
     print("Игрок сошёл с PIM")
     currentPlayer = nil
     currentToken = nil
-    playerAuthorized = false
     currentScreen = "welcome"
     drawWelcomeScreen()
   elseif e=="modem_message" then
@@ -265,7 +260,6 @@ while true do
           playerBalance = msg.balance or 0.0
           playerTransactions = msg.transactions or 0
           playerRegDate = msg.regDate or ""
-          playerAuthorized = true
           print("✅ Авторизация успешна, токен: "..currentToken)
           if currentScreen == "auth" or currentScreen == "account_loading" then
             currentScreen = "menu"
