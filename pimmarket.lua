@@ -21,7 +21,20 @@ local authStartTime = 0
 local AUTH_TIMEOUT = 3
 local accountRequestTime = 0
 local ACCOUNT_TIMEOUT = 3
-local alreadyAuthorized = false  -- ключевой флаг, что авторизация пройдена
+local alreadyAuthorized = false
+
+-- ========== ОТЛАДОЧНАЯ СТРОКА ==========
+local debugMessage = ""
+local function setDebug(text)
+  debugMessage = text
+  -- Обновляем область отладки немедленно, если есть смысл
+  if currentScreen ~= "welcome" then
+    gpu.setBackground(0x000000)
+    gpu.setForeground(0xFFFF00)
+    gpu.fill(1, 24, 80, 1, " ")
+    gpu.set(1, 24, string.format("DEBUG: %-78s", debugMessage:sub(1,78)))
+  end
+end
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
@@ -74,6 +87,11 @@ local function drawBottomPanel()
   gpu.setForeground(0xcc3342) gpu.set(4,23,"[Помощь]")
   gpu.setForeground(0x00FF00) gpu.set(33,23,"[Конвертация + / $]")
   gpu.setForeground(0xcc3342) gpu.set(69,23,"[Отзывы]")
+  -- отладочная строка на 24, рисуем её всегда
+  gpu.setBackground(0x000000)
+  gpu.setForeground(0xFFFF00)
+  gpu.fill(1, 24, 80, 1, " ")
+  gpu.set(1, 24, string.format("DEBUG: %-78s", debugMessage:sub(1,78)))
 end
 
 -- Маленькая кнопка "Назад"
@@ -144,19 +162,23 @@ local function drawAccount(data)
   drawCenteredText(11, "Совершенно транзакций: " .. tostring(data.transactions or 0), 0x00FF00)
   drawCenteredText(13, "Регистрация: " .. (data.regDate or "Неизвестно"), 0x00FF00)
   drawSmallButton(22, "Назад", 0x333333, 0xFFFFFF)
+  drawBottomPanel()  -- чтобы обновить отладочную строку
 end
 
 local function drawAccountLoading()
   clear()
   drawCenteredText(12, "Загрузка...", 0x888888)
   drawSmallButton(22, "Назад", 0x333333, 0xFFFFFF)
+  drawBottomPanel()
 end
 
 local function goToAccount()
   if not currentToken then
     drawCenteredText(12, "Ошибка: нет авторизации", 0xFF0000)
+    setDebug("Ошибка: нет токена")
     return
   end
+  setDebug("Запрос аккаунта с токеном: "..currentToken)
   print("Запрос аккаунта с токеном: "..currentToken)
   currentScreen = "account_loading"
   accountRequestTime = os.clock()
@@ -166,14 +188,15 @@ local function goToAccount()
   }))
 end
 
-local function goToShop() currentScreen="shop" clear() drawCenteredText(8,"Магазин (в разработке)",0x00FF00) end
-local function goToUtility() currentScreen="utility" clear() drawCenteredText(8,"Полезности (в разработке)",0x00FF00) end
+local function goToShop() currentScreen="shop" clear() drawCenteredText(8,"Магазин (в разработке)",0x00FF00) drawBottomPanel() end
+local function goToUtility() currentScreen="utility" clear() drawCenteredText(8,"Полезности (в разработке)",0x00FF00) drawBottomPanel() end
 local function goBackToMenu() currentScreen="menu" drawMainMenu() end
 
 -- ======== ИНИЦИАЛИЗАЦИЯ ========
 drawWelcomeScreen()
 modem.send(serverAddress,0xffef,serialization.serialize({op="register"}))
 print("Терминал отправляет регистрацию...")
+setDebug("Ожидание игрока")
 
 -- ======== ГЛАВНЫЙ ЦИКЛ ========
 while true do
@@ -183,6 +206,7 @@ while true do
   if currentScreen == "auth" then
     if os.clock() - authStartTime >= AUTH_TIMEOUT then
       print("⚠ Таймаут авторизации")
+      setDebug("Таймаут авторизации")
       currentScreen = "menu"
       drawMainMenu()
     end
@@ -191,6 +215,7 @@ while true do
   if currentScreen == "account_loading" then
     if os.clock() - accountRequestTime >= ACCOUNT_TIMEOUT then
       print("⚠ Таймаут загрузки аккаунта")
+      setDebug("Таймаут загрузки аккаунта")
       currentScreen = "menu"
       drawMainMenu()
     end
@@ -222,24 +247,24 @@ while true do
     print("Имя: " .. currentPlayer)
     print("Токен: " .. tostring(currentToken))
     print("alreadyAuthorized: " .. tostring(alreadyAuthorized))
+    setDebug("Игрок на PIM: "..currentPlayer.." | Токен: "..tostring(currentToken):sub(1,10))
 
-    -- Если игрок уже полностью авторизован, ничего не делаем
     if alreadyAuthorized then
       print("alreadyAuthorized = true -> игнорируем повторный вход")
+      setDebug("Уже авторизован, вход игнорирован")
       if currentScreen == "auth" or currentScreen == "account_loading" then
         currentScreen = "menu"
         drawMainMenu()
       end
     elseif currentToken then
-      -- Токен есть, но флага alreadyAuthorized нет (например, после сбоя)
       print("Токен есть, но флаг сброшен -> восстанавливаем alreadyAuthorized")
       alreadyAuthorized = true
+      setDebug("Восстановлен флаг alreadyAuthorized")
       if currentScreen == "auth" or currentScreen == "account_loading" then
         currentScreen = "menu"
         drawMainMenu()
       end
     else
-      -- Первый вход
       print("Первый вход -> отправляем enter")
       playerBalance = 0.0
       currentScreen = "auth"
@@ -247,11 +272,13 @@ while true do
       drawAuthScreen()
       modem.send(serverAddress,0xffef,serialization.serialize({op="enter", name=currentPlayer}))
       print("Отправлен enter для "..currentPlayer)
+      setDebug("Отправлен enter: "..currentPlayer)
     end
     print("=== КОНЕЦ ОБРАБОТКИ === ")
 
   elseif e=="player_off" or e=="pim_player_leave" then
     print("Игрок сошёл с PIM -> сбрасываем всё")
+    setDebug("Игрок ушёл")
     currentPlayer = nil
     currentToken = nil
     alreadyAuthorized = false
@@ -270,14 +297,16 @@ while true do
           playerBalance = msg.balance or 0.0
           playerTransactions = msg.transactions or 0
           playerRegDate = msg.regDate or ""
-          alreadyAuthorized = true   -- устанавливаем флаг, что авторизация успешна
+          alreadyAuthorized = true
           print("✅ Авторизация успешна, токен: "..currentToken)
+          setDebug("Авторизован! Токен: "..currentToken:sub(1,10))
           if currentScreen == "auth" or currentScreen == "account_loading" then
             currentScreen = "menu"
             drawMainMenu()
           end
         elseif msg.op == "accountData" then
           print("Получен ответ аккаунта")
+          setDebug("Аккаунт загружен")
           if currentScreen == "account_loading" then
             currentScreen = "account"
             drawAccount(msg.data)
