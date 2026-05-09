@@ -76,9 +76,9 @@ local function drawBottomPanel()
   gpu.setForeground(0xcc3342) gpu.set(69,23,"[Отзывы]")
 end
 
--- Маленькая кнопка "Назад" с фоном и текстом
+-- Узкая кнопка "Назад" с оранжевым текстом (ширина = текст + 2)
 local function drawSmallButton(y, text, bgColor, fgColor)
-  local width = unicode.len(text) + 4
+  local width = unicode.len(text) + 2   -- минимальный отступ
   local x = math.floor((80 - width) / 2) + 1
   gpu.setBackground(bgColor or 0x333333)
   gpu.fill(x, y, width, 3, " ")
@@ -90,7 +90,7 @@ end
 
 local function isSmallButtonClicked(x, y, yStart, text)
   if y < yStart or y > yStart + 2 then return false end
-  local width = unicode.len(text) + 4
+  local width = unicode.len(text) + 2
   local btnX = math.floor((80 - width) / 2) + 1
   return x >= btnX and x < btnX + width
 end
@@ -143,21 +143,19 @@ local function drawAccount(data)
   drawCenteredText(9, balanceText, 0x00FF00)
   drawCenteredText(11, "Совершенно транзакций: " .. tostring(data.transactions or 0), 0x00FF00)
   drawCenteredText(13, "Регистрация: " .. (data.regDate or "Неизвестно"), 0x00FF00)
-  drawSmallButton(22, "Назад", 0x333333, 0xFFFFFF)
+  drawSmallButton(22, "Назад", 0x333333, 0xff7300)
 end
 
 local function drawAccountLoading()
   clear()
   drawCenteredText(12, "Загрузка...", 0x888888)
-  drawSmallButton(22, "Назад", 0x333333, 0xFFFFFF)
+  drawSmallButton(22, "Назад", 0x333333, 0xff7300)
 end
 
 -- Попытка автоматического обновления токена и повторного запроса аккаунта
 local function retryAccountAfterTokenRefresh()
   if not currentPlayer then return end
-  -- Отправляем enter, чтобы получить свежий токен (игрок на PIM)
   modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
-  -- Ждём welcome
   local start = os.clock()
   while os.clock() - start < 3 do
     local ev = {event.pull(0.3)}
@@ -170,7 +168,6 @@ local function retryAccountAfterTokenRefresh()
           currentToken = msg.token
           playerBalance = msg.balance or 0.0
           alreadyAuthorized = true
-          -- Повторяем запрос аккаунта
           currentScreen = "account_loading"
           accountRequestTime = os.clock()
           drawAccountLoading()
@@ -189,7 +186,6 @@ local function retryAccountAfterTokenRefresh()
       return
     end
   end
-  -- Не удалось обновить токен
   currentScreen = "menu"
   drawMainMenu()
 end
@@ -230,7 +226,6 @@ while true do
 
   if currentScreen == "account_loading" then
     if os.clock() - accountRequestTime >= ACCOUNT_TIMEOUT then
-      -- Пробуем автоматически обновить токен
       retryAccountAfterTokenRefresh()
     end
   end
@@ -300,7 +295,6 @@ while true do
           end
         elseif msg.op == "accountData" then
           if msg.error then
-            -- Автоматически обновляем токен
             retryAccountAfterTokenRefresh()
           else
             if currentScreen == "account_loading" then
