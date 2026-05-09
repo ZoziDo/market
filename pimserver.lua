@@ -30,6 +30,9 @@ end
 local owner = nil
 local sessions = {}   -- [name] = {token, lastAction}
 
+-- Увеличенный таймаут сессии: 30 минут (1800 секунд)
+local SESSION_TIMEOUT = 1800
+
 local function log(level, msg)
   print(string.format("[%s] [%s] %s", os.date("%Y-%m-%d %H:%M:%S"), level, msg))
 end
@@ -44,7 +47,7 @@ end
 
 local function validateSession(name, token)
   local s = sessions[name]
-  local valid = s and s.token == token and os.time() - (s.lastAction or 0) < 300
+  local valid = s and s.token == token and os.time() - (s.lastAction or 0) < SESSION_TIMEOUT
   log("DEBUG", string.format("Проверка сессии: name=%s token=%s, server_token=%s, time_diff=%s, result=%s",
     name, token, s and s.token or "nil", s and os.time() - s.lastAction or "нет", tostring(valid)))
   return valid
@@ -89,7 +92,7 @@ while true do
 
       local existingSession = sessions[playerName]
       local token
-      if existingSession and os.time() - (existingSession.lastAction or 0) < 300 then
+      if existingSession and os.time() - (existingSession.lastAction or 0) < SESSION_TIMEOUT then
         token = existingSession.token
         existingSession.lastAction = os.time()
         log("INFO", "👤 " .. playerName .. " продлил сессию. Токен: " .. token)
@@ -109,6 +112,12 @@ while true do
       log("DEBUG", string.format("getAccount запрос: name=%s token=%s", msg.name, msg.token))
       if not validateSession(msg.name, msg.token) then
         log("WARN", "Неверный токен для getAccount от " .. (msg.name or "?"))
+        -- Отправляем ответ с ошибкой, чтобы клиент понял
+        modem.send(from, 0xffef, serialization.serialize({
+          op="accountData",
+          error = true,
+          message = "Токен устарел, требуется повторный вход"
+        }))
         goto continue
       end
       local player = players[msg.name]
