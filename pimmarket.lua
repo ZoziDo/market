@@ -21,29 +21,39 @@ local authStartTime = 0
 local AUTH_TIMEOUT = 3
 local accountRequestTime = 0
 local ACCOUNT_TIMEOUT = 3
-local playerAuthorized = false   -- флаг, что игрок уже авторизован и токен получен
+local playerAuthorized = false
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
 gpu.setBackground(0x000000)
 
--- ========== КРУПНЫЙ ШРИФТ NEXAR SHOP (центрирован, SHOP под NEXAR) ==========
+-- ========== КРУПНЫЙ ШРИФТ NEXAR SHOP (выровнен идеально) ==========
 local function drawBigTitle()
-  gpu.setForeground(0xff00c8)
-
-  -- NEXAR (50 символов ширина)
-  gpu.set(14, 3, "  ███╗   ██╗ ███████╗ ██╗  ██╗  █████╗  ██████╗ ")
-  gpu.set(14, 4, "  ████╗  ██║ ██╔════╝ ██║ ██╔╝ ██╔══██╗ ██╔══██╗")
-  gpu.set(14, 5, "  ██╔██╗ ██║ █████╗   █████╔╝  ███████║ ██████╔╝")
-  gpu.set(14, 6, "  ██║╚██╗██║ ██╔══╝   ██╔═██╗  ██╔══██║ ██╔══██╗")
-  gpu.set(14, 7, "  ██║ ╚████║ ███████╗ ██║  ██╗ ██║  ██║ ██║  ██║")
-
-  -- SHOP (47 символов ширина, под NEXAR с тем же X=14)
-  gpu.set(14, 9,  "  ███████╗ ██╗  ██╗  ██████╗  ██████╗ ")
-  gpu.set(14, 10, "  ██╔════╝ ██║  ██║ ██╔═══██╗ ██╔══██╗")
-  gpu.set(14, 11, "  ███████╗ ███████║ ██║   ██║ ██████╔╝")
-  gpu.set(14, 12, "  ╚════██║ ██╔══██║ ██║   ██║ ██╔═══╝ ")
-  gpu.set(14, 13, "  ███████║ ██║  ██║ ╚██████╔╝ ██║     ")
+  gpu.setForeground(0x00FF00)
+  local lines = {
+    "  ███╗   ██╗ ███████╗ ██╗  ██╗  █████╗  ██████╗ ",
+    "  ████╗  ██║ ██╔════╝ ██║ ██╔╝ ██╔══██╗ ██╔══██╗",
+    "  ██╔██╗ ██║ █████╗   █████╔╝  ███████║ ██████╔╝",
+    "  ██║╚██╗██║ ██╔══╝   ██╔═██╗  ██╔══██║ ██╔══██╗",
+    "  ██║ ╚████║ ███████╗ ██║  ██╗ ██║  ██║ ██║  ██║",
+    "                                               ", -- пустая строка
+    "  ███████╗ ██╗  ██╗  ██████╗  ██████╗           ",
+    "  ██╔════╝ ██║  ██║ ██╔═══██╗ ██╔══██╗          ",
+    "  ███████╗ ███████║ ██║   ██║ ██████╔╝          ",
+    "  ╚════██║ ██╔══██║ ██║   ██║ ██╔═══╝           ",
+    "  ███████║ ██║  ██║ ╚██████╔╝ ██║               ",
+  }
+  -- Дополняем каждую строку пробелами до 50 символов
+  for i, line in ipairs(lines) do
+    if #line < 50 then
+      lines[i] = line .. string.rep(" ", 50 - #line)
+    end
+  end
+  local startX = math.floor((80 - 50) / 2) + 1  -- 16? 80-50=30/2=15, +1 = 16. Подгоню.
+  startX = 15  -- фиксируем для красоты
+  for i, line in ipairs(lines) do
+    gpu.set(startX, 2 + i, line)   -- начинаем с 3 строки (2+1=3)
+  end
 end
 
 -- ========== ФУНКЦИИ ЭКРАНА ==========
@@ -76,10 +86,10 @@ local function drawWelcomeScreen()
   gpu.setBackground(0x202020) gpu.fill(1,1,80,25," ")
   drawBigTitle()
   gpu.setForeground(0x00FF00)
-  drawCenteredText(16, "↓   Встаньте на PIM   ↓", 0x00FF00)
-  drawCenteredText(17, "━━━━━━━━━━━━━━━━━━━━", 0x00FF00)
+  drawCenteredText(17, "↓   Встаньте на PIM   ↓", 0x00FF00)
+  drawCenteredText(18, "━━━━━━━━━━━━━━━━━━━━", 0x00FF00)
   gpu.setForeground(0x414243)
-  drawCenteredText(20, "По любым вопросам пишите в Telegram: f0rb4ik", 0x414243)
+  drawCenteredText(21, "По любым вопросам пишите в Telegram: f0rb4ik", 0x414243)
   gpu.setBackground(0x000000)
 end
 
@@ -87,9 +97,9 @@ local function drawAuthScreen()
   gpu.setBackground(0x202020) gpu.fill(1,1,80,25," ")
   drawBigTitle()
   gpu.setForeground(0xFFFFFF)
-  drawCenteredText(16, "Авторизация....", 0xFFFFFF)
+  drawCenteredText(17, "Авторизация....", 0xFFFFFF)
   gpu.setForeground(0x414243)
-  drawCenteredText(20, "По любым вопросам пишите в Telegram: f0rb4ik", 0x414243)
+  drawCenteredText(21, "По любым вопросам пишите в Telegram: f0rb4ik", 0x414243)
   gpu.setBackground(0x000000)
 end
 
@@ -113,11 +123,11 @@ local function drawMainMenu()
   else drawWelcomeScreen() end
 end
 
--- Экран аккаунта (текст по центру, кнопка «Назад» маленькая)
+-- Экран аккаунта
 local function drawAccount(data)
   clear()
   drawCenteredText(7, currentPlayer .. ":", 0xFFFFFF)
-  local balanceText = string.format("Баланс: %.2f Ресоб $ | %.2f Змоб ֍", data.balance, data.balance)
+  local balanceText = string.format("Баланс: %.2f Ресоб $ | %.2f Змоб *", data.balance, data.balance)
   drawCenteredText(9, balanceText, 0x00FF00)
   drawCenteredText(11, "Совершенно транзакций: " .. tostring(data.transactions or 0), 0x00FF00)
   drawCenteredText(13, "Регистрация: " .. (data.regDate or "Неизвестно"), 0x00FF00)
@@ -143,7 +153,7 @@ local function goToAccount()
     drawCenteredText(12, "Ошибка: нет авторизации", 0xFF0000)
     return
   end
-  print("Запрос аккаунта...")
+  print("Запрос аккаунта с токеном: "..currentToken)
   currentScreen = "account_loading"
   accountRequestTime = os.clock()
   drawAccountLoading()
@@ -206,13 +216,12 @@ while true do
     local playerName = ev[2] or "Игрок"
     currentPlayer = playerName:match("^%s*(.-)%s*$") or playerName
 
-    -- Если игрок уже авторизован и это тот же самый, не отправляем повторный enter
     if playerAuthorized and currentPlayer == currentPlayer then
-      print("Игрок уже авторизован, пропускаю enter")
+      print("Игрок уже авторизован, повторный вход без сброса")
       currentScreen = "menu"
       drawMainMenu()
     else
-      -- Сбрасываем старый токен и отправляем enter заново
+      -- Сбрасываем старый токен
       currentToken = nil
       playerBalance = 0.0
       playerAuthorized = false
@@ -242,13 +251,18 @@ while true do
       if success and msg then
         print("Сообщение расшифровано: op=" .. tostring(msg.op) .. " token=" .. tostring(msg.token))
         if msg.op == "welcome" and msg.token then
+          -- Всегда обновляем токен при получении welcome
           currentToken = msg.token
           playerBalance = msg.balance or 0.0
           playerTransactions = msg.transactions or 0
           playerRegDate = msg.regDate or ""
-          playerAuthorized = true   -- игрок успешно авторизован
+          playerAuthorized = true
           print("✅ Авторизация успешна, токен: "..currentToken)
-          if currentScreen == "auth" then
+          -- Прерываем загрузку аккаунта, если она была
+          if currentScreen == "account_loading" then
+            print("Прерываю загрузку аккаунта из-за нового welcome")
+          end
+          if currentScreen == "auth" or currentScreen == "account_loading" then
             currentScreen = "menu"
             drawMainMenu()
           end
