@@ -188,7 +188,7 @@ local function drawHelpScreen()
   end
 
   -- Навигация
-  local pageStr = "←   " .. helpPage .. "   →"
+  local pageStr = "⟵   " .. helpPage .. "   ⟶"
   drawCenteredText(20, pageStr, 0x00CCFF)
 
   -- Кнопка Назад
