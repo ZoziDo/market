@@ -148,7 +148,7 @@ local function drawAccount(data)
   
   -- Маленькая узкая кнопка "Назад"
   local btnText = "Назад"
-  local btnWidth = unicode.len(btnText) + 4   -- узкая кнопка
+  local btnWidth = unicode.len(btnText) + 1   -- узкая кнопка
   local btnX = math.floor((80 - btnWidth) / 2)
   
   gpu.setBackground(0x333333)
