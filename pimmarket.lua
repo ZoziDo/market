@@ -92,8 +92,8 @@ end
 -- Кнопка "Назад"
 local backButton = {
   text = "Назад",
-  x = nil, y = 22,
-  xs = unicode.len("Назад") + 2,
+  x = nil, y = 23,
+  xs = unicode.len("Назад") + 6,
   ys = 1,
   bg = 0x333333,
   fg = 0xff7300
