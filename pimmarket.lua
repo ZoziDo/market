@@ -34,6 +34,8 @@ local shopTotalPages = 1
 local searchActive = false
 local searchInput = ""
 local showOnlyAvailable = false
+local lastScrollTime = 0
+local SCROLL_COOLDOWN = 0.08
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
@@ -105,7 +107,7 @@ end
 -- Кнопка "Назад" главная
 local backButton = {
   text = "Назад",
-  x = nil, y = 24,   -- переместили на строку ниже
+  x = nil, y = 24,
   xs = unicode.len("Назад") + 6,
   ys = 1,
   bg = 0x333333,
@@ -120,8 +122,8 @@ end
 
 -- Кнопки панели покупки (строка 21)
 local searchButton = {text = "Поиск...", x=3, y=21, xs=20, ys=1, bg=0x333333, fg=0x00aaff}
-local stockButton   = {text = "● В наличии", x=28, y=21, xs=14, ys=1, bg=0x333333, fg=0x00aaff}
-local prevButton    = {text = "Назад", x=50, y=21, xs=7, ys=1, bg=0x333333, fg=0xffaa00}
+local stockButton   = {text = "● В наличии", x=33, y=21, xs=14, ys=1, bg=0x333333, fg=0x00aaff}
+local prevButton    = {text = "Назад", x=55, y=21, xs=7, ys=1, bg=0x333333, fg=0xffaa00}
 local nextButton    = {text = "Далее", x=70, y=21, xs=7, ys=1, bg=0x333333, fg=0xffaa00}
 
 -- Кнопки меню "Магазин"
@@ -232,9 +234,12 @@ local function drawBuyItems()
   end
   gpu.setBackground(0x000000)
 
-  -- Индикатор страницы по центру (строка 22)
+  -- Индикатор страницы МЕЖДУ кнопками "Назад" и "Далее"
   local pageStr = shopPage .. "/" .. shopTotalPages
-  drawCenteredText(22, pageStr, 0xffffff)
+  local middleX = math.floor((62 + 70) / 2)   -- центр промежутка (66)
+  local pageX = middleX - math.floor(unicode.len(pageStr) / 2)
+  gpu.setForeground(0xffffff)
+  gpu.set(pageX, 22, pageStr)
 
   -- Обновим кнопки (текст поиска, цвет "В наличии")
   if searchActive then
@@ -344,10 +349,10 @@ local function drawWelcomeScreen()
   gpu.setBackground(0x202020) gpu.fill(1,1,80,25," ")
   drawBigTitle()
   gpu.setForeground(0x00FF00)
-  drawCenteredText(17, "↓   Встаньте на PIM   ↓", 0x00FF00)
-  drawCenteredText(18, "━━━━━━━━━━━━━━━━━━━━", 0x00FF00)
+  drawCenteredText(18, "↓   Встаньте на PIM   ↓", 0x00FF00)
+  drawCenteredText(19, "━━━━━━━━━━━━━━━━━━━━", 0x00FF00)
   gpu.setForeground(0x414243)
-  drawCenteredText(21, "По любым вопросам пишите в Telegram: f0rb4ik", 0x414243)
+  drawCenteredText(22, "По любым вопросам пишите в Telegram: f0rb4ik", 0x414243)
   gpu.setBackground(0x000000)
 end
 
@@ -558,7 +563,7 @@ while true do
       elseif isButtonClicked(searchButton, x, y) then
         searchActive = true
         searchInput = shopSearch
-        drawBuyItems()   -- обновим только кнопки и предметы
+        drawBuyItems()
       elseif isButtonClicked(stockButton, x, y) then
         showOnlyAvailable = not showOnlyAvailable
         shopPage = 1
@@ -568,7 +573,6 @@ while true do
       elseif isButtonClicked(nextButton, x, y) then
         if shopPage < shopTotalPages then shopPage = shopPage + 1 drawBuyItems() end
       elseif searchActive then
-        -- клик мимо кнопок поиска завершает ввод
         shopSearch = searchInput
         searchActive = false
         drawBuyItems()
@@ -582,13 +586,17 @@ while true do
       if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
     end
   elseif e == "scroll" and currentScreen == "shop_buy" then
-    local direction = ev[3]   -- 1 вверх, -1 вниз
-    if direction > 0 then
-      shopPage = math.max(1, shopPage - 1)
-    else
-      shopPage = math.min(shopTotalPages, shopPage + 1)
+    local now = os.clock()
+    if now - lastScrollTime >= SCROLL_COOLDOWN then
+      lastScrollTime = now
+      local direction = ev[3]
+      if direction > 0 then
+        shopPage = math.max(1, shopPage - 1)
+      else
+        shopPage = math.min(shopTotalPages, shopPage + 1)
+      end
+      drawBuyItems()
     end
-    drawBuyItems()   -- обновляем только список
   elseif e == "key_down" and currentScreen == "shop_buy" and searchActive then
     local ch = ev[3]
     if ch == 13 then
