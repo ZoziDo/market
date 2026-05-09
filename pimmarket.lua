@@ -25,7 +25,7 @@ local alreadyAuthorized = false
 local helpPage = 1
 local HELP_PAGES = 3
 
--- Переменные магазина покупок
+-- Переменные магазина
 local shopItems = {}
 local shopPage = 1
 local shopPageSize = 12
@@ -33,6 +33,7 @@ local shopSearch = ""
 local shopTotalPages = 1
 local searchActive = false
 local searchInput = ""
+local showOnlyAvailable = false   -- фильтр "в наличии"
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
@@ -117,11 +118,11 @@ local function isButtonClicked(btn, x, y)
          x >= btn.x and x < btn.x + btn.xs
 end
 
--- Маленькие кнопки для панели поиска / навигации
-local searchButton = {text = "Поиск...", x=15, y=20, xs=10, ys=1, bg=0x333333, fg=0x00aaff}
-local stockButton   = {text = "В наличии", x=27, y=20, xs=12, ys=1, bg=0x333333, fg=0x00aaff}
-local prevButton    = {text = "Назад", x=43, y=20, xs=7, ys=1, bg=0x333333, fg=0xffaa00}
-local nextButton    = {text = "Далее", x=55, y=20, xs=7, ys=1, bg=0x333333, fg=0xffaa00}
+-- Кнопки панели покупки
+local searchButton = {text = "Поиск...", x=3, y=21, xs=20, ys=1, bg=0x333333, fg=0x00aaff}
+local stockButton   = {text = "● В наличии", x=30, y=21, xs=14, ys=1, bg=0x333333, fg=0x00aaff}
+local prevButton    = {text = "Назад", x=46, y=21, xs=7, ys=1, bg=0x333333, fg=0xffaa00}
+local nextButton    = {text = "Далее", x=60, y=21, xs=7, ys=1, bg=0x333333, fg=0xffaa00}
 
 -- Кнопки меню "Магазин"
 local shopMenuButtons = {
@@ -160,7 +161,9 @@ local function drawBuyScreen()
   gpu.setForeground(0xff7300)
   gpu.set(3 + unicode.len(balanceText), 1, string.format("%.2f Эмов *", playerBalance))
 
-  -- "Магазин продаёт" (строка 3, после пустой строки 2)
+  -- Отступ (строка 2 пустая)
+
+  -- "Магазин продаёт" (строка 3)
   gpu.setForeground(0xff7300)
   gpu.set(3, 3, "Магазин продаёт")
 
@@ -177,10 +180,12 @@ local function drawBuyScreen()
   gpu.setForeground(0x444444)
   gpu.set(3, 5, string.rep("─", 74))
 
-  -- Фильтрация по поиску
+  -- Фильтрация (с учётом "В наличии")
   local filtered = {}
   for _, item in ipairs(shopItems) do
-    if shopSearch == "" or string.find(string.lower(item.name), string.lower(shopSearch), 1, true) then
+    local matchesSearch = (shopSearch == "" or string.find(string.lower(item.name), string.lower(shopSearch), 1, true))
+    local matchesAvailability = (not showOnlyAvailable) or (item.qty > 0)
+    if matchesSearch and matchesAvailability then
       table.insert(filtered, item)
     end
   end
@@ -200,31 +205,53 @@ local function drawBuyScreen()
     end
     gpu.fill(2, y, 76, 1, " ")
     gpu.setForeground(0x00ff88)
-    gpu.set(3, y, item.name:sub(1, 37))   -- обрезаем до 37 символов, чтобы не залезать на кол-во
+    gpu.set(3, y, item.name:sub(1, 37))
     gpu.setForeground(0xffffff)
     gpu.set(42, y, tostring(item.qty))
     gpu.set(65, y, string.format("%.2f", item.price))
     gpu.setBackground(0x000000)
   end
 
-  -- Нижняя панель
-  -- разделитель (строка 18)
+  -- Разделитель после списка (строка 18)
   gpu.setForeground(0x444444)
   gpu.set(3, 18, string.rep("─", 74))
 
-  -- "Категория" по центру (строка 19)
+  -- "Категория" (строка 19)
   drawCenteredText(19, "Категория", 0x888888)
 
-  -- Кнопки (строка 20)
+  -- Отступ (строка 20) – пустая
+
+  -- Обновляем кнопки
   if searchActive then
     searchButton.text = searchInput .. "_"
   else
     searchButton.text = "Поиск..."
   end
+
+  -- Индикатор "В наличии"
+  if showOnlyAvailable then
+    stockButton.text = "● В наличии"   -- зелёный кружок
+    stockButton.fg = 0x00ff00
+  else
+    stockButton.text = "● В наличии"   -- красный кружок
+    stockButton.fg = 0xff0000
+  end
+
+  -- Кнопки навигации (строка 21)
   drawFlexButton(searchButton)
   drawFlexButton(stockButton)
   drawFlexButton(prevButton)
   drawFlexButton(nextButton)
+
+  -- Индикатор страницы между "Назад" и "Далее"
+  local pageStr = shopPage .. "/" .. shopTotalPages
+  gpu.setForeground(0xffffff)
+  local pageX = math.floor((prevButton.x + prevButton.xs + nextButton.x) / 2) - math.floor(unicode.len(pageStr) / 2)
+  gpu.set(pageX, 22, pageStr)   -- строка 22
+
+  -- Разделитель перед главной кнопкой "Назад" (строка 22? уже занята, сделаем 23-ю строку разделителем, а кнопку на 24? Нет, оставим как есть: кнопка на 23, разделитель на 22)
+  gpu.setForeground(0x444444)
+  gpu.set(3, 22, string.rep("─", 74))
 
   -- Основная кнопка "Назад" (строка 23)
   drawFlexButton(backButton)
@@ -373,7 +400,7 @@ local function drawAccountLoading()
   drawFlexButton(backButton)
 end
 
--- Попытка автоматического обновления токена
+-- Попытка обновления токена
 local function retryAccountAfterTokenRefresh()
   if not currentPlayer then return end
   modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
@@ -443,6 +470,7 @@ local function goToBuy()
   shopSearch = ""
   searchActive = false
   searchInput = ""
+  showOnlyAvailable = false
   loadShopItems()
   drawBuyScreen()
 end
@@ -531,16 +559,15 @@ while true do
         searchInput = shopSearch
         drawBuyScreen()
       elseif isButtonClicked(stockButton, x, y) then
-        shopSearch = ""
+        showOnlyAvailable = not showOnlyAvailable
         shopPage = 1
-        searchActive = false
         drawBuyScreen()
       elseif isButtonClicked(prevButton, x, y) then
         if shopPage > 1 then shopPage = shopPage - 1 drawBuyScreen() end
       elseif isButtonClicked(nextButton, x, y) then
         if shopPage < shopTotalPages then shopPage = shopPage + 1 drawBuyScreen() end
       elseif searchActive then
-        -- Клик мимо кнопки поиска завершает ввод
+        -- клик мимо кнопки поиска завершает ввод
         shopSearch = searchInput
         searchActive = false
         drawBuyScreen()
@@ -553,14 +580,22 @@ while true do
     elseif currentScreen == "utility" then
       if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
     end
+  elseif e == "scroll" and currentScreen == "shop_buy" then
+    local direction = ev[3]   -- 1 вверх, -1 вниз
+    if direction > 0 then
+      shopPage = math.max(1, shopPage - 1)
+    else
+      shopPage = math.min(shopTotalPages, shopPage + 1)
+    end
+    drawBuyScreen()
   elseif e == "key_down" and currentScreen == "shop_buy" and searchActive then
     local ch = ev[3]
-    if ch == 13 then -- Enter — завершение поиска
+    if ch == 13 then
       shopSearch = searchInput
       searchActive = false
       shopPage = 1
       drawBuyScreen()
-    elseif ch == 8 then -- Backspace
+    elseif ch == 8 then
       searchInput = string.sub(searchInput, 1, -2)
       shopSearch = searchInput
       shopPage = 1
