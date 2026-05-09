@@ -78,7 +78,7 @@ local function drawBottomPanel()
   gpu.setForeground(0xcc3342) gpu.set(69,23,"[Отзывы]")
 end
 
--- Гибкая кнопка (для "Назад" в аккаунте)
+-- Гибкая кнопка (для "Назад" в аккаунте и помощи)
 local function drawFlexButton(btn)
   gpu.setBackground(btn.bg)
   gpu.fill(btn.x, btn.y, btn.xs, btn.ys, " ")
@@ -89,33 +89,23 @@ local function drawFlexButton(btn)
   gpu.setBackground(0x000000)
 end
 
--- Кнопка "Назад" для аккаунта (ширина = текст + 2)
+-- Кнопка "Назад" для всех разделов (аккаунт, помощь)
 local backButton = {
   text = "Назад",
   x = nil, y = 22,
-  xs = unicode.len("Назад") + 2,
-  ys = 1,
+  xs = unicode.len("Назад") + 2,   -- ширина: текст + 2 пробела
+  ys = 1,                           -- высота 1 строка
   bg = 0x333333,
   fg = 0xff7300
 }
 backButton.x = math.floor((80 - backButton.xs) / 2) + 1
-
--- Кнопка "Назад" для помощи (ширина = 6)
-local helpBackButton = {
-  text = "Назад",
-  x = 80 - 8, y = 22,   -- правый нижний угол
-  xs = 6,
-  ys = 1,
-  bg = 0x333333,
-  fg = 0xff7300
-}
 
 local function isButtonClicked(btn, x, y)
   return y >= btn.y and y < btn.y + btn.ys and
          x >= btn.x and x < btn.x + btn.xs
 end
 
--- Страницы помощи (текст точно как на скриншотах)
+-- Страницы помощи (текст точно как на скриншотах, с левым отступом)
 local helpPages = {
   [[         Информация об магазине
   Добро пожаловать в магазин/обменник
@@ -135,6 +125,7 @@ local helpPages = {
 $ – Ресурсами скупаемыми
 магазином и так-же ♦ –
 Омическими деньгами]],
+
   [[         Информация об магазине
 
 3. Магазин имеет 3 вида оплаты
@@ -150,6 +141,7 @@ $ и $ - Смежная оплата за обе валюты
 образом совершается покупка
 Наборов и Квестов в разделе
 "Наборы/Квесты"]],
+
   [[         Информация об магазине
 
 5. Правила: Запрещено использовать
@@ -168,18 +160,21 @@ Discord fkpupsik/alex25764
 local function drawHelpScreen()
   clear()
   gpu.setForeground(0xFFFFFF)
+  -- Рисуем текст помощи с левым выравниванием
   local lines = {}
   for line in helpPages[helpPage]:gmatch("[^\n]+") do
     table.insert(lines, line)
   end
   for i, line in ipairs(lines) do
-    drawCenteredText(2 + i, line, 0xFFFFFF)
+    gpu.set(3, 1 + i, line)   -- отступ 2 пробела, строки начинаются с 2
   end
-  -- Номер страницы по центру
+
+  -- Номер страницы по центру над кнопкой (y=21? перенесём на y=20 для свободного места)
   local pageStr = "← " .. helpPage .. " →"
-  drawCenteredText(22, pageStr, 0xFFFFFF)
-  -- Кнопка "Назад" в правом нижнем углу
-  drawFlexButton(helpBackButton)
+  drawCenteredText(20, pageStr, 0xFFFFFF)
+
+  -- Кнопка "Назад" по центру внизу (та же, что в аккаунте)
+  drawFlexButton(backButton)
 end
 
 local function drawWelcomeScreen()
@@ -355,29 +350,24 @@ while true do
           break
         end
       end
-      -- Обработка нажатий на нижнюю панель
+      -- Нижняя панель
       if y == 23 then
-        if x >= 4 and x <= 13 then        -- [Помощь] (примерно 4..13)
-          goToHelp()
-        elseif x >= 33 and x <= 53 then   -- [Конвертация + / $]
-          -- заглушка
-        elseif x >= 69 and x <= 78 then   -- [Отзывы]
-          -- заглушка
-        end
+        if x >= 4 and x <= 13 then goToHelp() end
+        -- Конвертация, отзывы пока заглушки
       end
     elseif currentScreen == "help" then
-      -- Листание страниц (стрелки и номер)
-      if y == 22 then
+      -- Перелистывание страниц
+      if y == 20 then
         local pageStr = "← " .. helpPage .. " →"
         local pageX = math.floor((80 - unicode.len(pageStr)) / 2) + 1
-        if x >= pageX and x < pageX + 4 then          -- левая стрелка
+        if x >= pageX and x < pageX + 4 then
           if helpPage > 1 then helpPage = helpPage - 1 drawHelpScreen() end
-        elseif x >= pageX + unicode.len(pageStr) - 4 and x < pageX + unicode.len(pageStr) then  -- правая стрелка
+        elseif x >= pageX + unicode.len(pageStr) - 4 and x < pageX + unicode.len(pageStr) then
           if helpPage < HELP_PAGES then helpPage = helpPage + 1 drawHelpScreen() end
         end
       end
       -- Кнопка "Назад"
-      if isButtonClicked(helpBackButton, x, y) then
+      if isButtonClicked(backButton, x, y) then
         goBackToMenu()
       end
     elseif currentScreen == "account" or currentScreen == "account_loading" then
