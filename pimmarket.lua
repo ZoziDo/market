@@ -105,53 +105,58 @@ local function isButtonClicked(btn, x, y)
          x >= btn.x and x < btn.x + btn.xs
 end
 
--- Страницы помощи (текст точно как на скриншотах, с левым отступом)
--- Страницы помощи с цветовой разметкой
+-- Страницы помощи с цветовой разметкой (таблицы)
 local helpPages = {
-  -- Страница 1
-  {
-    {text = "Информация об магазине", color = 0xff7300},
-    {text = "Добро пожаловать в магазин/обменник warg'а Legend", color = 0xffffff},
-    {text = "Обязательно к прочтению", color = 0xff0000},
+  { -- страница 1
+    {text = "         Информация об магазине", color = 0xff7300},
+    {text = "  Добро пожаловать в магазин/обменник", color = 0xffffff},
+    {text = "        warg'а Legend", color = 0xffffff},
+    {text = "  Обязательно к прочтению", color = 0xff0000},
     {text = ""},
     {text = "1. Что такое $ – Это торговая валюта", color = 0xff7300},
-    {text = "   за ресурсы которыми можно пополнить данный магазин", color = 0xffffff},
+    {text = "   за ресурсы которыми можно пополнить", color = 0xffffff},
+    {text = "   данный магазин", color = 0xffffff},
     {text = "   Что такое ♦ – Это эмеральды", color = 0xff7300},
-    {text = "   которыми можно пополнить магазин в виде физических \"денег\"", color = 0xffffff},
+    {text = "   которыми можно пополнить магазин", color = 0xffffff},
+    {text = "   в виде омических \"денег\"", color = 0xffffff},
     {text = ""},
-    {text = "2. Как пополнять свой баланс для покупок", color = 0xff7300},
-    {text = "   в разделе \"Пополнить\"", color = 0x00aaff},
+    {text = "2. Как пополнять свой баланс для", color = 0xff7300},
+    {text = "   покупок - в разделе \"Пополнить\"", color = 0x00aaff},
     {text = "   Вы можете пополнить свой баланс", color = 0xffffff},
-    {text = "   $ – Ресурсами скупаемыми магазином", color = 0x00ff88},
-    {text = "   и так-же ♦ – Физическими деньгами", color = 0x00ff88},
+    {text = "   $ – Ресурсами скупаемыми", color = 0x00ff88},
+    {text = "   магазином и так-же ♦ –", color = 0x00ff88},
+    {text = "   Омическими деньгами", color = 0x00ff88},
   },
-  -- Страница 2
-  {
-    {text = "Информация об магазине", color = 0xff7300},
+  { -- страница 2
+    {text = "         Информация об магазине", color = 0xff7300},
     {text = ""},
     {text = "3. Магазин имеет 3 вида оплаты", color = 0xff7300},
     {text = "   $ - Только ресурсы", color = 0x00ff88},
-    {text = "   ♦ - Только эмеральды", color = 0x00aaff},
+    {text = "   ♦ - Только эмеральны", color = 0x00aaff},
     {text = "   $ и ♦ - Смежная оплата за обе валюты", color = 0xffaa00},
     {text = ""},
-    {text = "4. Как совершить покупку", color = 0xff7300},
-    {text = "   в разделе \"Покупка\" Выбираете интересующий товар,", color = 0xffffff},
-    {text = "   указываете кол-во и нажимаете на \"купить\"", color = 0xffffff},
-    {text = "   товар будет выдан автоматически.", color = 0xffffff},
-    {text = "   Таким же образом совершается покупка", color = 0xffffff},
-    {text = "   Наборов и Квестов в разделе \"Наборы/Квесты\"", color = 0xffffff},
+    {text = "4. Как совершить покупку - в разделе", color = 0xff7300},
+    {text = "   \"Покупка\" выбираете интересующий", color = 0xffffff},
+    {text = "   товар, указываете кол-во и", color = 0xffffff},
+    {text = "   нажимаете на \"купить\" товар будет", color = 0xffffff},
+    {text = "   выдан автоматически. Таким же", color = 0xffffff},
+    {text = "   образом совершается покупка", color = 0xffffff},
+    {text = "   Наборов и Квестов в разделе", color = 0xffffff},
+    {text = "   \"Наборы/Квесты\"", color = 0xffffff},
   },
-  -- Страница 3
-  {
-    {text = "Информация об магазине", color = 0xff7300},
+  { -- страница 3
+    {text = "         Информация об магазине", color = 0xff7300},
     {text = ""},
     {text = "5. Правила:", color = 0xff0000},
-    {text = "   Запрещено использовать уязвимости, баги и любые", color = 0xffffff},
-    {text = "   возможные способы обогащения не задуманные", color = 0xffffff},
-    {text = "   создателями данного магазина кроме купле/продажи,", color = 0xffffff},
-    {text = "   о любых сбоях в работе, багах или возможных", color = 0xffffff},
-    {text = "   улучшениях рекомендуется сообщить или предложить", color = 0xffffff},
-    {text = "   Владельцам в Discord fkpupsik/alex25764", color = 0x00aaff},
+    {text = "   Запрещено использовать", color = 0xffffff},
+    {text = "   уязвимости, баги и любые возможные", color = 0xffffff},
+    {text = "   способы обогащения не задуманные", color = 0xffffff},
+    {text = "   создателями данного магазина", color = 0xffffff},
+    {text = "   кроме купле/продажи, о любых сбоях", color = 0xffffff},
+    {text = "   в работе, багах или возможных", color = 0xffffff},
+    {text = "   улучшениях рекомендуется сообщить", color = 0xffffff},
+    {text = "   или предложить Владельцам в", color = 0xffffff},
+    {text = "   Discord fkpupsik/alex25764", color = 0x00aaff},
     {text = ""},
     {text = "Приятных покупок", color = 0x00ff88},
   }
@@ -159,21 +164,17 @@ local helpPages = {
 
 local function drawHelpScreen()
   clear()
-  gpu.setForeground(0xFFFFFF)
-  -- Рисуем текст помощи с левым выравниванием
-  local lines = {}
-  for line in helpPages[helpPage]:gmatch("[^\n]+") do
-    table.insert(lines, line)
+  local page = helpPages[helpPage]
+  for i, item in ipairs(page) do
+    local text = item.text or ""
+    local color = item.color or 0xFFFFFF
+    gpu.setForeground(color)
+    gpu.set(3, 1 + i, text)   -- левый отступ 3 символа
   end
-  for i, line in ipairs(lines) do
-    gpu.set(3, 1 + i, line)   -- отступ 2 пробела, строки начинаются с 2
-  end
-
-  -- Номер страницы по центру над кнопкой (y=21? перенесём на y=20 для свободного места)
+  -- Номер страницы
   local pageStr = "← " .. helpPage .. " →"
   drawCenteredText(20, pageStr, 0xFFFFFF)
-
-  -- Кнопка "Назад" по центру внизу (та же, что в аккаунте)
+  -- Кнопка "Назад"
   drawFlexButton(backButton)
 end
 
