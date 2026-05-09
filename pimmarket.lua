@@ -182,10 +182,9 @@ local function drawHelpScreen()
     gpu.set(4, 12, "сообщить или предложить Владельцам в")
     
     gpu.setForeground(0x00aaff)
-    gpu.set(4, 13, "Discord fkpupsik/alex25764")
+    gpu.set(4, 13, "Telegram: f0rb4ik")
     
-    gpu.setForeground(0x00ff88)
-    gpu.set(4, 15, "Приятных покупок")
+    drawCenteredText(2, "Приятных покупок", 0x00ff88)
   end
 
   -- Навигация
