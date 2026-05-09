@@ -139,24 +139,24 @@ end
 local function drawAccount(data)
   clear()
   
-  drawCenteredText(7, currentPlayer .. ":", 0xFFD700)
+  drawCenteredText(6, currentPlayer .. ":", 0xFFD700)
   
-  local balanceText = string.format("Баланс: %.2f Ресов $ | %.2f Эмов *", data.balance or 0, data.balance or 0)
-  drawCenteredText(9, balanceText, 0x00FF00)
+  local balanceText = "Баланс: " .. string.format("%.2f", data.balance or 0) .. " Ресов $ | " .. string.format("%.2f", data.balance or 0) .. " Эмов *"
+  drawCenteredText(8, balanceText, 0x00FF00)
   
-  drawCenteredText(11, "Совершенно транзакций: " .. tostring(data.transactions or 0), 0x00FF00)
-  drawCenteredText(13, "Регистрация: " .. (data.regDate or "Неизвестно"), 0x00FF00)
+  drawCenteredText(10, "Совершенно транзакций: " .. tostring(data.transactions or 0), 0x00FF00)
+  drawCenteredText(12, "Регистрация: " .. (data.regDate or "Неизвестно"), 0x00FF00)
 
-  -- === МАЛЕНЬКАЯ УЗКАЯ КНОПКА "Назад" ===
+  -- === ОЧЕНЬ МАЛЕНЬКАЯ КНОПКА "Назад" ===
   local btnText = "Назад"
-  local btnWidth = unicode.len(btnText) + 4   -- очень узкая
+  local btnWidth = unicode.len(btnText) + 4   -- минимальная ширина
   local btnX = math.floor((80 - btnWidth) / 2)
   
-  gpu.setBackground(0x222222)                 -- тёмный фон
-  gpu.fill(btnX, 21, btnWidth, 2, " ")        -- высота 2 строки (низкая)
+  gpu.setBackground(0x222222)           -- тёмный фон
+  gpu.fill(btnX, 20, btnWidth, 2, " ")  -- высота всего 2 строки (низкая)
   
-  gpu.setForeground(0xFFAA00)                 -- оранжевый текст
-  gpu.set(btnX + 2, 22, btnText)
+  gpu.setForeground(0xFFAA00)           -- оранжевый текст
+  gpu.set(btnX + 2, 21, btnText)
   
   gpu.setBackground(0x000000)
 end
