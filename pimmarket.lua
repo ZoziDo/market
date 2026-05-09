@@ -105,19 +105,14 @@ local function isButtonClicked(btn, x, y)
          x >= btn.x and x < btn.x + btn.xs
 end
 
-local function drawHelpScreen()
-  clear()
-
-  if helpPage == 1 then
-    -- Страница 1 (как в примере Grok)
+if helpPage == 1 then
+    -- Страница 1
     drawCenteredText(2, "Информация об магазине", 0xff7300)
-
-    gpu.setForeground(0xffffff)
-    gpu.set(4, 4, "Добро пожаловать в магазин/обменник warg'а Legend")
     
-    gpu.setForeground(0xff0000)
-    gpu.set(4, 5, "Обязательно к прочтению")
-
+    -- Центрированные строки
+    drawCenteredText(4, "Добро пожаловать в магазин/обменник warg'а Legend", 0xffffff)
+    drawCenteredText(5, "Обязательно к прочтению", 0xff0000)
+    
     gpu.setForeground(0xff7300)
     gpu.set(4, 7, "1. Что такое $ – Это торговая валюта")
     
@@ -129,7 +124,7 @@ local function drawHelpScreen()
     
     gpu.setForeground(0xffffff)
     gpu.set(4, 10, 'которыми можно пополнить магазин в виде физических "денег"')
-
+    
     gpu.setForeground(0xff7300)
     gpu.set(4, 12, '2. Как пополнять свой баланс для покупок - в разделе')
     
@@ -194,11 +189,12 @@ local function drawHelpScreen()
     gpu.set(4, 15, "Приятных покупок")
   end
 
-  -- Навигация (стрелки)
+  -- Навигация
   local pageStr = "←   " .. helpPage .. "   →"
   drawCenteredText(21, pageStr, 0x00CCFF)
 
-  -- Кнопка Назад
+
+  -- Один пустой отступ перед кнопкой "Назад"
   drawFlexButton(backButton)
 end
 
