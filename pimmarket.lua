@@ -105,11 +105,12 @@ local function isButtonClicked(btn, x, y)
          x >= btn.x and x < btn.x + btn.xs
 end
 
-if helpPage == 1 then
-    -- Страница 1
+local function drawHelpScreen()
+  clear()
+  
+  if helpPage == 1 then
     drawCenteredText(2, "Информация об магазине", 0xff7300)
     
-    -- Центрированные строки
     drawCenteredText(4, "Добро пожаловать в магазин/обменник warg'а Legend", 0xffffff)
     drawCenteredText(5, "Обязательно к прочтению", 0xff0000)
     
@@ -141,9 +142,8 @@ if helpPage == 1 then
     gpu.set(4, 16, "и так-же ♦ – Физическими деньгами")
 
   elseif helpPage == 2 then
-    -- Страница 2
     drawCenteredText(2, "Информация об магазине", 0xff7300)
-
+    
     gpu.setForeground(0xff7300)
     gpu.set(4, 5, "3. Магазин имеет 3 вида оплаты")
     
@@ -155,7 +155,7 @@ if helpPage == 1 then
     
     gpu.setForeground(0xffaa00)
     gpu.set(4, 8, "$ и ♦ - Смежная оплата за обе валюты")
-
+    
     gpu.setForeground(0xff7300)
     gpu.set(4, 10, "4. Как совершить покупку - в разделе")
     
@@ -167,12 +167,10 @@ if helpPage == 1 then
     gpu.set(4, 15, 'Квестов в разделе "Наборы/Квесты"')
 
   elseif helpPage == 3 then
-    -- Страница 3
     drawCenteredText(2, "Информация об магазине", 0xff7300)
-
+    
     gpu.setForeground(0xff0000)
     gpu.set(4, 5, "5. Правила:")
-
     gpu.setForeground(0xffffff)
     gpu.set(4, 6, "Запрещено использовать уязвимости,")
     gpu.set(4, 7, "баги и любые возможные способы")
@@ -184,7 +182,7 @@ if helpPage == 1 then
     
     gpu.setForeground(0x00aaff)
     gpu.set(4, 13, "Discord fkpupsik/alex25764")
-
+    
     gpu.setForeground(0x00ff88)
     gpu.set(4, 15, "Приятных покупок")
   end
@@ -193,8 +191,8 @@ if helpPage == 1 then
   local pageStr = "←   " .. helpPage .. "   →"
   drawCenteredText(21, pageStr, 0x00CCFF)
 
-
-  -- Один пустой отступ перед кнопкой "Назад"
+  
+  -- Кнопка Назад
   drawFlexButton(backButton)
 end
 
