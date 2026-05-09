@@ -105,7 +105,7 @@ local function isButtonClicked(btn, x, y)
          x >= btn.x and x < btn.x + btn.xs
 end
 
--- Страницы помощи (точная копия с картинок)
+-- Страницы помощи (прямая отрисовка)
 local function drawHelpScreen()
   clear()
   
@@ -340,7 +340,7 @@ drawWelcomeScreen()
 modem.send(serverAddress,0xffef,serialization.serialize({op="register"}))
 print("Терминал отправляет регистрацию...")
 
--- ======== ГЛАВНЫЙ ЦИКЛ ========
+-- ======== ГЛАВНЫЙ ЦИКЛ (исправлен) ========
 while true do
   local ev = {event.pull(0.5)}
   local e = ev[1]
@@ -372,8 +372,8 @@ while true do
       if y == 23 then
         if x >= 4 and x <= 13 then goToHelp() end
       end
-        elseif currentScreen == "help" then
-      -- Стрелки перелистывания (строка 21, всегда по центру)
+    elseif currentScreen == "help" then
+      -- Стрелки перелистывания (строка 21)
       local pageStr = "←   " .. helpPage .. "   →"
       local pageX = math.floor((80 - unicode.len(pageStr)) / 2) + 1
       if y == 21 then
@@ -385,7 +385,7 @@ while true do
           drawHelpScreen()
         end
       end
-      -- Кнопка "Назад" (строка 22)
+      -- Кнопка "Назад"
       if isButtonClicked(backButton, x, y) then
         goBackToMenu()
       end
