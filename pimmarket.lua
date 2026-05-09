@@ -184,7 +184,7 @@ local function drawHelpScreen()
     gpu.setForeground(0x00aaff)
     gpu.set(4, 13, "Telegram: f0rb4ik")
     
-    drawCenteredText(2, "Приятных покупок", 0x00ff88)
+    drawCenteredText(15, "Приятных покупок", 0x00ff88)
   end
 
   -- Навигация
