@@ -122,7 +122,7 @@ end
 local searchButton = {text = "Поиск...", x=3, y=21, xs=20, ys=1, bg=0x333333, fg=0x00aaff}
 local stockButton   = {text = "● В наличии", x=28, y=21, xs=14, ys=1, bg=0x333333, fg=0x00aaff}
 local prevButton    = {text = "Назад", x=50, y=21, xs=7, ys=1, bg=0x333333, fg=0xffaa00}
-local nextButton    = {text = "Далее", x=66, y=21, xs=7, ys=1, bg=0x333333, fg=0xffaa00}
+local nextButton    = {text = "Далее", x=70, y=21, xs=7, ys=1, bg=0x333333, fg=0xffaa00}
 
 -- Кнопки меню "Магазин"
 local shopMenuButtons = {
