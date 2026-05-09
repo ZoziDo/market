@@ -135,49 +135,51 @@ local shopMenuButtons = {
 local function loadShopItems()
   shopItems = {}
   if component.isAvailable("me_interface") then
-    local me = component.proxy(component.list("me_interface")())  -- получаем первый ME-интерфейс
-    local items = me.getItemsInNetwork()
-    -- Таблица цен (пока пример, потом можно загружать из файла)
-    local prices = {
-      ["AppliedEnergistics2:item.ItemMultiMaterial:1"] = 226.9,
-      ["AppliedEnergistics2:item.ItemMultiMaterial:2"] = 165.53,
-      -- Добавь остальные ID по необходимости
-    }
-    for _, item in ipairs(items) do
-      if item.size > 0 then
-        local id = item.name .. ":" .. (item.damage or 0)
-        local price = prices[id] or 9.99  -- цена по умолчанию
+    local me = component.me_interface
+    local rawItems = me.getItemsInNetwork()
+    for _, item in ipairs(rawItems) do
+      if item and item.size and item.size > 0 then
         table.insert(shopItems, {
-          name = item.label or item.name,
+          name = item.label or item.name or "???",
           qty = item.size,
-          id = id,
-          price = price
+          -- цена по умолчанию, если нет в таблице цен
+          price = 0.0
         })
       end
     end
-    -- Сортируем по имени
+    -- сортировка по имени
     table.sort(shopItems, function(a,b) return a.name < b.name end)
-  else
-    -- Если ME-интерфейс не найден, показываем пустой список
   end
 end
 
--- ========== ЭКРАН ПОКУПКИ ==========
+-- ========== ЭКРАН ПОКУПКИ (тот самый, по скриншоту) ==========
 local function drawBuyScreen()
   clear()
-  -- Баланс
-  drawCenteredText(1, "Баланс: " .. string.format("%.2f", playerBalance) .. " Ресов $ | " .. string.format("%.2f", playerBalance) .. " Эмов *", 0x00FF00)
-  drawCenteredText(2, "Магазин продаёт", 0xFFD700)
+  
+  -- 1) Верхняя строка баланса
+  gpu.setForeground(0x00ff88)   -- зелёный (Ресов $)
+  gpu.set(2, 1, "Баланс: ")
+  gpu.set(10, 1, string.format("%.2f Ресов $  |  ", playerBalance))
+  gpu.setForeground(0xff7300)   -- оранжевый (Эмов *)
+  gpu.set(32, 1, string.format("%.2f Эмов *", playerBalance))
 
-  -- Заголовки колонок
-  gpu.setForeground(0xFFFFFF)
+  -- 2) Заголовок "Магазин продаёт"
+  drawCenteredText(2, "Магазин продаёт", 0xff7300)   -- оранжевый
+  
+  -- 3) Панель заголовков таблицы (на строке 3)
+  gpu.setBackground(0x222222)
+  gpu.fill(2, 3, 76, 1, " ")
+  gpu.setForeground(0xffaa00)   -- золотой
   gpu.set(3, 3, "Название")
   gpu.set(42, 3, "Кол-во")
   gpu.set(55, 3, "Цена")
+  gpu.setBackground(0x000000)
+
+  -- 4) Разделительная линия
   gpu.setForeground(0x444444)
   gpu.set(3, 4, string.rep("─", 74))
 
-  -- Фильтрация по поиску
+  -- 5) Таблица предметов (строки 5..11)
   local filtered = {}
   for _, item in ipairs(shopItems) do
     if shopSearch == "" or string.find(string.lower(item.name), string.lower(shopSearch), 1, true) then
@@ -186,33 +188,49 @@ local function drawBuyScreen()
   end
   shopTotalPages = math.max(1, math.ceil(#filtered / shopPageSize))
   if shopPage > shopTotalPages then shopPage = shopTotalPages end
-
   local start = (shopPage - 1) * shopPageSize + 1
   local finish = math.min(start + shopPageSize - 1, #filtered)
 
   for i = start, finish do
     local item = filtered[i]
-    local y = 5 + (i - start)
-    gpu.setForeground(0xFFFFFF)
-    -- Обрезаем имя под колонку (38 символов)
-    local shortName = item.name:sub(1, 38)
-    gpu.set(3, y, shortName)
+    local y = 4 + (i - start)  -- 5,6,7,8,9,10,11
+    -- Фон строки (тёмный/светлый для чётности)
+    if (i - start) % 2 == 0 then
+      gpu.setBackground(0x111111)
+    else
+      gpu.setBackground(0x1a1a1a)
+    end
+    gpu.fill(2, y, 76, 1, " ")
+    -- Название предмета
+    gpu.setForeground(0x00ff88)   -- зелёный
+    gpu.set(3, y, item.name:sub(1, 38))
+    -- Количество
+    gpu.setForeground(0xffffff)
     gpu.set(42, y, tostring(item.qty))
+    -- Цена
     gpu.set(55, y, string.format("%.2f", item.price))
+    gpu.setBackground(0x000000)
   end
 
-  -- Нижняя панель управления
-  gpu.setForeground(0x00CCFF)
-  gpu.set(3, 17, "Категория")
-  gpu.set(15, 17, "Поиск...")
-  gpu.set(30, 17, "В наличии")
-  gpu.set(45, 17, "Назад")
-  gpu.set(55, 17, "Далее")
+  -- 6) Нижняя панель (строка 17)
+  gpu.setForeground(0x444444)
+  gpu.set(3, 17, string.rep("─", 74))
 
-  -- Индикатор страницы
-  drawCenteredText(18, shopPage .. " / " .. shopTotalPages, 0x888888)
+  -- Кнопки/надписи
+  gpu.setForeground(0x00aaff)   -- голубой
+  gpu.set(3, 18, "Категория")
+  gpu.setForeground(0x888888)
+  gpu.set(15, 18, "Поиск...")
+  gpu.setForeground(0x00aaff)
+  gpu.set(30, 18, "В наличии")
+  gpu.setForeground(0xffaa00)
+  gpu.set(45, 18, "Назад")
+  gpu.set(55, 18, "Далее")
 
-  -- Кнопка возврата в меню магазина
+  -- Индикатор страниц
+  drawCenteredText(19, shopPage .. " / " .. shopTotalPages, 0x888888)
+
+  -- 7) Кнопка возврата в меню магазина
   drawFlexButton(backButton)
 end
 
@@ -525,17 +543,18 @@ while true do
       if isButtonClicked(backButton, x, y) then
         currentScreen = "shop"
         drawShopMenu()
-      elseif y == 17 then
-        if x >= 45 and x < 51 then  -- "Назад" страница
+      elseif y == 18 then   -- строка нижних кнопок
+        if x >= 45 and x < 51 then           -- "Назад" (страница)
           if shopPage > 1 then shopPage = shopPage - 1 drawBuyScreen() end
-        elseif x >= 55 and x < 63 then  -- "Далее"
+        elseif x >= 55 and x < 63 then       -- "Далее"
           if shopPage < shopTotalPages then shopPage = shopPage + 1 drawBuyScreen() end
+        elseif x >= 30 and x < 39 then       -- "В наличии" (сброс поиска/фильтра)
+          shopSearch = ""
+          shopPage = 1
+          drawBuyScreen()
+        elseif x >= 15 and x < 23 then       -- "Поиск..." (активировать ввод текста)
+          -- здесь можно включить режим поиска, пока заглушка
         end
-      end
-    elseif currentScreen == "shop_sell" or currentScreen == "shop_bundle" then
-      if isButtonClicked(backButton, x, y) then
-        currentScreen = "shop"
-        drawShopMenu()
       end
     elseif currentScreen == "utility" then
       if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
