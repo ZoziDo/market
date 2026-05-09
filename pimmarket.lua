@@ -128,7 +128,7 @@ local function drawMainMenu()
     local pink2 = "Ваш баланс: " local white2 = string.format("%.2f",playerBalance).." Эмов"
     local full2 = pink2..white2
     local x2 = math.floor((80 - unicode.len(full2))/2)+1
-    gpu.setForeground(0xFF00FF) gpu.set(x2,6,pink2)
+    gpu.setForeground(0xFF00FF) gpu.set(x2,5,pink2)
     gpu.setForeground(0xFFFFFF) gpu.set(x2+unicode.len(pink2),6,white2)
 
     for _,btn in pairs(menuButtons) do drawButton(btn) end
