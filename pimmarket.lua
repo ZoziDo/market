@@ -3,8 +3,8 @@ local event = require("event")
 local gpu = component.gpu
 local unicode = require("unicode")
 local serialization = require("serialization")
-
 local modem = component.modem
+
 local pimList = {}
 for addr in component.list("pim") do table.insert(pimList, addr) end
 local pim = component.proxy(pimList[1])
@@ -24,65 +24,30 @@ local AUTH_TIMEOUT = 3
 gpu.setResolution(80, 25)
 gpu.setBackground(0x000000)
 
--- ========== КРУПНЫЙ ШРИФТ ==========
-local font = {}
-local function addLetter(char, rows) font[char] = rows end
-addLetter("A",{" ███ ","█   █","█████","█   █","█   █"})
-addLetter("B",{"████ ","█   █","████ ","█   █","████ "})
-addLetter("C",{" ████","█    ","█    ","█    "," ████"})
-addLetter("D",{"████ ","█   █","█   █","█   █","████ "})
-addLetter("E",{"█████","█    ","████ ","█    ","█████"})
-addLetter("F",{"█████","█    ","████ ","█    ","█    "})
-addLetter("G",{" ████","█    ","█ ███","█   █"," ████"})
-addLetter("H",{"█   █","█   █","█████","█   █","█   █"})
-addLetter("I",{"█████","  █  ","  █  ","  █  ","█████"})
-addLetter("J",{"   ██","    █","    █","█   █"," ███ "})
-addLetter("K",{"█   █","█  █ ","███  ","█  █ ","█   █"})
-addLetter("L",{"█    ","█    ","█    ","█    ","█████"})
-addLetter("M",{"█   █","██ ██","█ █ █","█   █","█   █"})
-addLetter("N",{"█   █","██  █","█ █ █","█  ██","█   █"})
-addLetter("O",{" ███ ","█   █","█   █","█   █"," ███ "})
-addLetter("P",{"████ ","█   █","████ ","█    ","█    "})
-addLetter("Q",{" ███ ","█   █","█   █","█  ██"," ████"})
-addLetter("R",{"████ ","█   █","████ ","█  █ ","█   █"})
-addLetter("S",{" ████","█    "," ███ ","    █","████ "})
-addLetter("T",{"█████","  █  ","  █  ","  █  ","  █  "})
-addLetter("U",{"█   █","█   █","█   █","█   █"," ███ "})
-addLetter("V",{"█   █","█   █","█   █"," ███ ","  █  "})
-addLetter("W",{"█   █","█   █","█ █ █","██ ██","█   █"})
-addLetter("X",{"█   █"," █ █ ","  █  "," █ █ ","█   █"})
-addLetter("Y",{"█   █"," █ █ ","  █  ","  █  ","  █  "})
-addLetter("Z",{"█████","   █ ","  █  "," █   ","█████"})
-addLetter(" ",{"     ","     ","     ","     ","     "})
-
-local function drawBigText(y, text, color, shadowColor)
-  local width = 0
-  for ch in text:gmatch(".") do if font[ch] then width = width + 5 + 1 end end
-  width = width - 1
-  local startX = math.floor((80 - width) / 2) + 1
-  for row = 1, 5 do
-    local curX = startX
-    for ch in text:gmatch(".") do
-      if font[ch] then
-        gpu.setForeground(shadowColor)
-        gpu.set(curX + 1, y + row, font[ch][row])
-        curX = curX + 5 + 1
-      end
-    end
-  end
-  for row = 1, 5 do
-    local curX = startX
-    for ch in text:gmatch(".") do
-      if font[ch] then
-        gpu.setForeground(color)
-        gpu.set(curX, y + row - 1, font[ch][row])
-        curX = curX + 5 + 1
-      end
-    end
-  end
+-- ========== КРУПНЫЙ ШРИФТ NEXAR SHOP ==========
+local function drawBigTitle()
+  gpu.setForeground(0x00B7FF)
+  
+  -- NEXAR
+  gpu.set(15, 3, "  ███╗   ██╗ ███████╗ ██╗  ██╗  █████╗  ██████╗ ")
+  gpu.set(15, 4, "  ████╗  ██║ ██╔════╝ ██║ ██╔╝ ██╔══██╗ ██╔══██╗")
+  gpu.set(15, 5, "  ██╔██╗ ██║ █████╗   █████╔╝  ███████║ ██████╔╝")
+  gpu.set(15, 6, "  ██║╚██╗██║ ██╔══╝   ██╔═██╗  ██╔══██║ ██╔══██╗")
+  gpu.set(15, 7, "  ██║ ╚████║ ███████╗ ██║  ██╗ ██║  ██║ ██║  ██║")
+  
+  -- SHOP
+  gpu.set(32, 9, "  ███████╗ ██╗  ██╗  ██████╗  ██████╗ ")
+  gpu.set(32,10, "  ██╔════╝ ██║  ██║ ██╔═══██╗ ██╔══██╗")
+  gpu.set(32,11, "  ███████╗ ███████║ ██║   ██║ ██████╔╝")
+  gpu.set(32,12, "  ╚════██║ ██╔══██║ ██║   ██║ ██╔═══╝ ")
+  gpu.set(32,13, "  ███████║ ██║  ██║ ╚██████╔╝ ██║     ")
 end
 
-local function clear() gpu.setBackground(0x000000) gpu.fill(1,1,80,25," ") end
+local function clear() 
+  gpu.setBackground(0x000000) 
+  gpu.fill(1,1,80,25," ") 
+end
+
 local function drawCenteredText(y, text, color)
   gpu.setForeground(color or 0xFFFFFF)
   local x = math.floor((80 - unicode.len(text)) / 2) + 1
@@ -95,9 +60,12 @@ local menuButtons = {
   util = {x=31,xs=20,y=12,ys=3,text="Полезности",tx=5,ty=1,bg=0x444444,fg=0x3375cc},
   account = {x=31,xs=20,y=16,ys=3,text="Аккаунт",tx=6,ty=1,bg=0x444444,fg=0x3375cc}
 }
+
 local function drawButton(btn)
-  gpu.setBackground(btn.bg) gpu.fill(btn.x,btn.y,btn.xs,btn.ys," ")
-  gpu.setForeground(btn.fg) gpu.set(btn.x+btn.tx, btn.y+btn.ty, btn.text)
+  gpu.setBackground(btn.bg) 
+  gpu.fill(btn.x,btn.y,btn.xs,btn.ys," ")
+  gpu.setForeground(btn.fg) 
+  gpu.set(btn.x+btn.tx, btn.y+btn.ty, btn.text)
   gpu.setBackground(0x000000)
 end
 
@@ -108,90 +76,39 @@ local function drawBottomPanel()
 end
 
 local function drawWelcomeScreen()
-  gpu.setBackground(0x202020) gpu.fill(1,1,80,25," ")
-  local prefix = "Приветствуем в " local shop = "NEXAR SHOP"
-  local full = prefix..shop
-  local startX = math.floor((80 - unicode.len(full))/2)+1
-  gpu.setForeground(0xFFFFFF) gpu.set(startX,2,prefix)
-  gpu.setForeground(0x00FF00) gpu.set(startX+unicode.len(prefix),2,shop)
-  drawBigText(4,"NEXAR SHOP",0x00FF00,0x006600)
-  gpu.setForeground(0x00FF00)
-  drawCenteredText(11,"↓   Встаньте на PIM   ↓",0x00FF00)
-  drawCenteredText(12,"━━━━━━━━━━━━━━━━━━━━",0x00FF00)
+  clear()
+  drawBigTitle()
+  drawCenteredText(15, "↓ Встаньте на PIM ↓", 0x00FF00)
+  drawCenteredText(16, "━━━━━━━━━━━━━━━━━━━━", 0x00FF00)
   gpu.setForeground(0x414243)
-  drawCenteredText(15,"По любым вопросам пишите в Telegram: f0rb4ik",0x414243)
-  gpu.setBackground(0x000000)
-end
-
-local function drawAuthScreen()
-  gpu.setBackground(0x202020) gpu.fill(1,1,80,25," ")
-  local prefix = "Приветствуем в " local shop = "NEXAR SHOP"
-  local full = prefix..shop
-  local startX = math.floor((80 - unicode.len(full))/2)+1
-  gpu.setForeground(0xFFFFFF) gpu.set(startX,2,prefix)
-  gpu.setForeground(0x00FF00) gpu.set(startX+unicode.len(prefix),2,shop)
-  drawBigText(4,"NEXAR SHOP",0x00FF00,0x006600)
-  gpu.setForeground(0xFFFFFF)
-  drawCenteredText(12,"Авторизация....",0xFFFFFF)
-  gpu.setForeground(0x414243)
-  drawCenteredText(15,"По любым вопросам пишите в Telegram: f0rb4ik",0x414243)
-  gpu.setBackground(0x000000)
+  drawCenteredText(19, "По любым вопросам пишите в Telegram: f0rb4ik", 0x414243)
 end
 
 local function drawMainMenu()
   clear()
+  drawBigTitle()
+  
   if currentPlayer then
-    local pink1 = "Добро пожаловать, " local white1 = currentPlayer.."!"
+    local pink1 = "Добро пожаловать, " 
+    local white1 = currentPlayer.."!"
     local full1 = pink1..white1
     local x1 = math.floor((80 - unicode.len(full1))/2)+1
-    gpu.setForeground(0xFF00FF) gpu.set(x1,4,pink1)
-    gpu.setForeground(0xFFFFFF) gpu.set(x1+unicode.len(pink1),4,white1)
-
-    local pink2 = "Ваш баланс: " local white2 = string.format("%.2f",playerBalance).." Эмов"
+    gpu.setForeground(0xFF00FF) gpu.set(x1,16,pink1)
+    gpu.setForeground(0xFFFFFF) gpu.set(x1+unicode.len(pink1),16,white1)
+    
+    local pink2 = "Ваш баланс: " 
+    local white2 = string.format("%.2f",playerBalance).." Эмов"
     local full2 = pink2..white2
     local x2 = math.floor((80 - unicode.len(full2))/2)+1
-    gpu.setForeground(0xFF00FF) gpu.set(x2,6,pink2)
-    gpu.setForeground(0xFFFFFF) gpu.set(x2+unicode.len(pink2),6,white2)
-
+    gpu.setForeground(0xFF00FF) gpu.set(x2,18,pink2)
+    gpu.setForeground(0xFFFFFF) gpu.set(x2+unicode.len(pink2),18,white2)
+    
     for _,btn in pairs(menuButtons) do drawButton(btn) end
     drawBottomPanel()
-  else drawWelcomeScreen() end
-end
-
--- Экран аккаунта
-local function drawAccount(data)
-  clear()
-  drawCenteredText(2, "Аккаунт: " .. currentPlayer, 0xFFD700)
-  gpu.setForeground(0xFF00FF)
-  gpu.set(5,5,"Баланс:")
-  gpu.set(5,6,"Совершено транзакций:")
-  gpu.set(5,7,"Регистрация:")
-  gpu.setForeground(0xFFFFFF)
-  gpu.set(30,5,string.format("%.2f Ресурсы $ | %.2f Эмов", data.balance, data.balance))
-  gpu.set(30,6, tostring(data.transactions or 0))
-  gpu.set(30,7, data.regDate or "Неизвестно")
-  gpu.setBackground(0x333333)
-  gpu.fill(2,22,12,3," ")
-  gpu.setForeground(0xFFFFFF)
-  gpu.set(4,23,"Назад")
-  gpu.setBackground(0x000000)
-end
-
-local function goToAccount()
-  if not currentToken then
-    drawCenteredText(12, "Ошибка: нет авторизации", 0xFF0000)
-    return
+  else 
+    drawWelcomeScreen() 
   end
-  currentScreen = "account"
-  modem.send(serverAddress, 0xffef, serialization.serialize({
-    op = "getAccount", name = currentPlayer, token = currentToken
-  }))
-  drawCenteredText(12, "Загрузка...", 0x888888)
 end
-
-local function goToShop() currentScreen="shop" clear() drawCenteredText(8,"Магазин (в разработке)",0x00FF00) end
-local function goToUtility() currentScreen="utility" clear() drawCenteredText(8,"Полезности (в разработке)",0x00FF00) end
-local function goBackToMenu() currentScreen="menu" drawMainMenu() end
 
 -- ======== ИНИЦИАЛИЗАЦИЯ ========
 drawWelcomeScreen()
@@ -203,30 +120,23 @@ while true do
   local ev = {event.pull(0.5)}
   local e = ev[1]
 
-  -- Проверка таймаута авторизации
-  if currentScreen == "auth" then
-    if os.clock() - authStartTime >= AUTH_TIMEOUT then
-      print("⚠ Таймаут авторизации")
-      currentScreen = "menu"
-      drawMainMenu()
-    end
-  end
-
   if e == "touch" then
     local x,y = ev[3],ev[4]
     if currentScreen == "menu" then
       for name,btn in pairs(menuButtons) do
         if x>=btn.x and x<btn.x+btn.xs and y>=btn.y and y<btn.y+btn.ys then
-          if name=="shop" then goToShop()
-          elseif name=="util" then goToUtility()
-          elseif name=="account" then goToAccount() end
+          if name=="shop" then 
+            drawCenteredText(12, "→ Магазин ←", 0x00FF00)
+          elseif name=="util" then 
+            drawCenteredText(12, "→ Полезности ←", 0x00FF00)
+          elseif name=="account" then 
+            drawCenteredText(12, "→ Аккаунт ←", 0x00FF00)
+          end
+          os.sleep(1)
+          drawMainMenu()
           break
         end
       end
-    elseif currentScreen == "account" then
-      if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
-    elseif currentScreen=="shop" or currentScreen=="utility" then
-      if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
     end
   elseif e=="player_on" or e=="pim" or e=="pim_player_enter" then
     local playerName = ev[2] or "Игрок"
@@ -234,15 +144,9 @@ while true do
     playerBalance = 0.0
     currentToken = nil
     print("Игрок встал на PIM: "..currentPlayer)
-
-    currentScreen = "auth"
-    authStartTime = os.clock()
-    drawAuthScreen()
-
-    -- Отправка enter
+    currentScreen = "menu"
+    drawMainMenu()
     modem.send(serverAddress,0xffef,serialization.serialize({op="enter", name=currentPlayer}))
-    print("Отправлен enter для "..currentPlayer)
-
   elseif e=="player_off" or e=="pim_player_leave" then
     print("Игрок сошёл с PIM")
     currentPlayer = nil
@@ -250,28 +154,17 @@ while true do
     currentScreen = "welcome"
     drawWelcomeScreen()
   elseif e=="modem_message" then
-    -- ПРАВИЛЬНЫЙ ПОРЯДОК: _, senderAddress, _, _, data
-    local sender = ev[3]   -- адрес отправителя
-    local data = ev[6]     -- данные
-    print("Получено сообщение от " .. sender)
+    local sender = ev[3]
+    local data = ev[6]
     if sender == serverAddress then
       local success, msg = pcall(serialization.unserialize, data)
       if success and msg then
-        print("Сообщение расшифровано: op=" .. tostring(msg.op) .. " token=" .. tostring(msg.token))
         if msg.op == "welcome" and msg.token then
           currentToken = msg.token
           playerBalance = msg.balance or 0.0
-          playerTransactions = msg.transactions or 0
-          playerRegDate = msg.regDate or ""
-          print("✅ Авторизация успешна, токен: "..currentToken)
-          if currentScreen == "auth" then
-            currentScreen = "menu"
-            drawMainMenu()
-          end
-        elseif msg.op == "accountData" then
-          if currentScreen == "account" then
-            drawAccount(msg.data)
-          end
+          print("✅ Авторизация успешна")
+          currentScreen = "menu"
+          drawMainMenu()
         end
       end
     end
