@@ -112,12 +112,12 @@ local helpPages = {
     {text = "Информация об магазине", color = 0xff7300},
     {text = "Добро пожаловать в магазин/обменник warg'а Legend", color = 0xffffff},
     {text = "Обязательно к прочтению", color = 0xff0000},
-    {text = ""},
+    {text = "", color = 0xffffff},
     {text = "1. Что такое $ – Это торговая валюта", color = 0xff7300},
     {text = "   за ресурсы которыми можно пополнить данный магазин", color = 0xffffff},
     {text = "   Что такое ♦ – Это эмеральды", color = 0xff7300},
     {text = "   которыми можно пополнить магазин в виде физических \"денег\"", color = 0xffffff},
-    {text = ""},
+    {text = "", color = 0xffffff},
     {text = "2. Как пополнять свой баланс для покупок", color = 0xff7300},
     {text = "   в разделе \"Пополнить\"", color = 0x00aaff},
     {text = "   Вы можете пополнить свой баланс", color = 0xffffff},
@@ -162,19 +162,34 @@ local function drawHelpScreen()
   -- Заголовок
   drawCenteredText(2, "Информация об магазине", 0xff7300)
 
-  -- Основной текст
+  -- Основной текст страницы
   local page = helpPages[helpPage]
-  for i, line in ipairs(page) do
-    gpu.setForeground(line.color)
-    gpu.set(5, 4 + i, line.text)   -- отступ 5 символов слева
+  if not page then 
+    drawCenteredText(10, "Ошибка загрузки страницы", 0xFF0000)
+    return 
   end
 
-  -- Номер страницы по центру над кнопкой (y=21? перенесём на y=20 для свободного места)
-  local pageStr = "← " .. helpPage .. " →"
-  drawCenteredText(20, pageStr, 0xFFFFFF)
+  for i, line in ipairs(page) do
+    if type(line) == "table" and line.text then
+      gpu.setForeground(line.color or 0xFFFFFF)
+      gpu.set(5, 4 + i, line.text)        -- отступ 5 символов слева
+    end
+  end
 
-  -- Кнопка "Назад" по центру внизу (та же, что в аккаунте)
-  drawFlexButton(backButton)
+  -- Навигация страниц
+  local pageStr = "←   " .. helpPage .. "   →"
+  drawCenteredText(21, pageStr, 0x00CCFF)
+
+  -- Кнопка "Назад"
+  local btnText = "Назад"
+  local btnWidth = unicode.len(btnText) + 6
+  local btnX = math.floor((80 - btnWidth) / 2)
+  
+  gpu.setBackground(0x333333)
+  gpu.fill(btnX, 23, btnWidth, 2, " ")
+  gpu.setForeground(0xff7300)
+  gpu.set(btnX + 3, 24, btnText)
+  gpu.setBackground(0x000000)
 end
 
 local function drawWelcomeScreen()
