@@ -562,12 +562,13 @@ while true do
     elseif currentScreen == "utility" then
       if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
     end
-  elseif e == "scroll" and currentScreen == "shop_buy" then
+  elseif (e == "scroll" or e == "mouse_scroll" or e == "mousewheel") and currentScreen == "shop_buy" then
     local now = os.clock()
     if now - lastScrollTime >= SCROLL_COOLDOWN then
       lastScrollTime = now
       local direction = ev[3]
-      if direction > 0 then
+      -- В разных версиях направление может быть разным: положительное = вверх, отрицательное = вниз
+      if tonumber(direction) and tonumber(direction) > 0 then
         shopPage = math.max(1, shopPage - 1)
       else
         shopPage = math.min(shopTotalPages, shopPage + 1)
