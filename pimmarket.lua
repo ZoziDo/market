@@ -36,23 +36,21 @@ local function drawBigTitle()
     "  ██╔██╗ ██║ █████╗   █████╔╝  ███████║ ██████╔╝",
     "  ██║╚██╗██║ ██╔══╝   ██╔═██╗  ██╔══██║ ██╔══██╗",
     "  ██║ ╚████║ ███████╗ ██║  ██╗ ██║  ██║ ██║  ██║",
-    "                                               ", -- пустая строка
-    "        ███████╗ ██╗  ██╗  ██████╗  ██████╗    ",
-    "        ██╔════╝ ██║  ██║ ██╔═══██╗ ██╔══██╗   ",
-    "        ███████╗ ███████║ ██║   ██║ ██████╔╝   ",
-    "        ╚════██║ ██╔══██║ ██║   ██║ ██╔═══╝    ",
-    "        ███████║ ██║  ██║ ╚██████╔╝ ██║        ",
-        }
-  -- Дополняем каждую строку пробелами до 50 символов
+    "                                                ", -- пустая строка
+    "       ███████╗ ██╗  ██╗  ██████╗  ██████╗      ",
+    "       ██╔════╝ ██║  ██║ ██╔═══██╗ ██╔══██╗     ",
+    "       ███████╗ ███████║ ██║   ██║ ██████╔╝     ",
+    "       ╚════██║ ██╔══██║ ██║   ██║ ██╔═══╝      ",
+    "       ███████║ ██║  ██║ ╚██████╔╝ ██║          ",
+   }
   for i, line in ipairs(lines) do
     if #line < 50 then
       lines[i] = line .. string.rep(" ", 50 - #line)
     end
   end
-  local startX = math.floor((80 - 50) / 2) + 1  -- 16? 80-50=30/2=15, +1 = 16. Подгоню.
-  startX = 15  -- фиксируем для красоты
+  local startX = 15
   for i, line in ipairs(lines) do
-    gpu.set(startX, 2 + i, line)   -- начинаем с 3 строки (2+1=3)
+    gpu.set(startX, 2 + i, line)
   end
 end
 
@@ -80,6 +78,18 @@ local function drawBottomPanel()
   gpu.setForeground(0xcc3342) gpu.set(4,23,"[Помощь]")
   gpu.setForeground(0x00FF00) gpu.set(33,23,"[Конвертация + / $]")
   gpu.setForeground(0xcc3342) gpu.set(69,23,"[Отзывы]")
+end
+
+-- Маленькая кнопка с фоном (для "Назад")
+local function drawSmallButton(y, text, bgColor, fgColor)
+  local width = unicode.len(text) + 4  -- немного отступа
+  local x = math.floor((80 - width) / 2) + 1
+  gpu.setBackground(bgColor or 0x333333)
+  gpu.fill(x, y, width, 3, " ")
+  gpu.setForeground(fgColor or 0xFFFFFF)
+  local textX = x + math.floor((width - unicode.len(text)) / 2)
+  gpu.set(textX, y + 1, text)
+  gpu.setBackground(0x000000)
 end
 
 local function drawWelcomeScreen()
@@ -123,7 +133,7 @@ local function drawMainMenu()
   else drawWelcomeScreen() end
 end
 
--- Экран аккаунта
+-- Экран аккаунта (текст по центру, кнопка «Назад» с фоном)
 local function drawAccount(data)
   clear()
   drawCenteredText(7, currentPlayer .. ":", 0xFFFFFF)
@@ -132,20 +142,23 @@ local function drawAccount(data)
   drawCenteredText(11, "Совершенно транзакций: " .. tostring(data.transactions or 0), 0x00FF00)
   drawCenteredText(13, "Регистрация: " .. (data.regDate or "Неизвестно"), 0x00FF00)
 
-  local backText = "Назад"
-  local backX = math.floor((80 - unicode.len(backText)) / 2) + 1
-  gpu.setForeground(0xFFFFFF)
-  gpu.set(backX, 23, backText)
+  -- Кнопка "Назад" с фоном
+  drawSmallButton(22, "Назад", 0x333333, 0xFFFFFF)
 end
 
 -- Экран загрузки аккаунта
 local function drawAccountLoading()
   clear()
   drawCenteredText(12, "Загрузка...", 0x888888)
-  local backText = "Назад"
-  local backX = math.floor((80 - unicode.len(backText)) / 2) + 1
-  gpu.setForeground(0xFFFFFF)
-  gpu.set(backX, 23, backText)
+  drawSmallButton(22, "Назад", 0x333333, 0xFFFFFF)
+end
+
+-- Зона нажатия для маленькой кнопки
+local function isSmallButtonClicked(x, y, yStart, text)
+  if y < yStart or y > yStart + 2 then return false end
+  local width = unicode.len(text) + 4
+  local btnX = math.floor((80 - width) / 2) + 1
+  return x >= btnX and x < btnX + width
 end
 
 local function goToAccount()
@@ -204,9 +217,7 @@ while true do
         end
       end
     elseif currentScreen == "account" or currentScreen == "account_loading" then
-      local backText = "Назад"
-      local backX = math.floor((80 - unicode.len(backText)) / 2) + 1
-      if y >= 22 and y <= 24 and x >= backX-2 and x <= backX+unicode.len(backText)+2 then
+      if isSmallButtonClicked(x, y, 22, "Назад") then
         goBackToMenu()
       end
     elseif currentScreen=="shop" or currentScreen=="utility" then
@@ -221,7 +232,6 @@ while true do
       currentScreen = "menu"
       drawMainMenu()
     else
-      -- Сбрасываем старый токен
       currentToken = nil
       playerBalance = 0.0
       playerAuthorized = false
@@ -251,17 +261,12 @@ while true do
       if success and msg then
         print("Сообщение расшифровано: op=" .. tostring(msg.op) .. " token=" .. tostring(msg.token))
         if msg.op == "welcome" and msg.token then
-          -- Всегда обновляем токен при получении welcome
           currentToken = msg.token
           playerBalance = msg.balance or 0.0
           playerTransactions = msg.transactions or 0
           playerRegDate = msg.regDate or ""
           playerAuthorized = true
           print("✅ Авторизация успешна, токен: "..currentToken)
-          -- Прерываем загрузку аккаунта, если она была
-          if currentScreen == "account_loading" then
-            print("Прерываю загрузку аккаунта из-за нового welcome")
-          end
           if currentScreen == "auth" or currentScreen == "account_loading" then
             currentScreen = "menu"
             drawMainMenu()
