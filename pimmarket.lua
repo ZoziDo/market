@@ -27,7 +27,6 @@ local alreadyAuthorized = false
 local debugMessage = ""
 local function setDebug(text)
   debugMessage = text
-  -- Обновляем область отладки немедленно, если есть смысл
   if currentScreen ~= "welcome" then
     gpu.setBackground(0x000000)
     gpu.setForeground(0xFFFF00)
@@ -87,7 +86,7 @@ local function drawBottomPanel()
   gpu.setForeground(0xcc3342) gpu.set(4,23,"[Помощь]")
   gpu.setForeground(0x00FF00) gpu.set(33,23,"[Конвертация + / $]")
   gpu.setForeground(0xcc3342) gpu.set(69,23,"[Отзывы]")
-  -- отладочная строка на 24, рисуем её всегда
+  -- отладочная строка на 24
   gpu.setBackground(0x000000)
   gpu.setForeground(0xFFFF00)
   gpu.fill(1, 24, 80, 1, " ")
@@ -162,7 +161,7 @@ local function drawAccount(data)
   drawCenteredText(11, "Совершенно транзакций: " .. tostring(data.transactions or 0), 0x00FF00)
   drawCenteredText(13, "Регистрация: " .. (data.regDate or "Неизвестно"), 0x00FF00)
   drawSmallButton(22, "Назад", 0x333333, 0xFFFFFF)
-  drawBottomPanel()  -- чтобы обновить отладочную строку
+  drawBottomPanel()
 end
 
 local function drawAccountLoading()
@@ -170,6 +169,52 @@ local function drawAccountLoading()
   drawCenteredText(12, "Загрузка...", 0x888888)
   drawSmallButton(22, "Назад", 0x333333, 0xFFFFFF)
   drawBottomPanel()
+end
+
+-- Попытка автоматического обновления токена и повторного запроса аккаунта
+local function retryAccountAfterTokenRefresh()
+  if not currentPlayer then return end
+  setDebug("Обновление токена...")
+  -- Отправляем enter, чтобы получить свежий токен (игрок на PIM)
+  modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
+  -- Ждём welcome
+  local start = os.clock()
+  while os.clock() - start < 3 do
+    local ev = {event.pull(0.3)}
+    if ev[1] == "modem_message" then
+      local sender = ev[3]
+      local data = ev[6]
+      if sender == serverAddress then
+        local success, msg = pcall(serialization.unserialize, data)
+        if success and msg and msg.op == "welcome" and msg.token then
+          currentToken = msg.token
+          playerBalance = msg.balance or 0.0
+          alreadyAuthorized = true
+          setDebug("Токен обновлён, пробуем снова")
+          -- Повторяем запрос аккаунта
+          currentScreen = "account_loading"
+          accountRequestTime = os.clock()
+          drawAccountLoading()
+          modem.send(serverAddress, 0xffef, serialization.serialize({
+            op = "getAccount", name = currentPlayer, token = currentToken
+          }))
+          return  -- успех, выходим
+        end
+      end
+    elseif ev[1] == "player_off" or ev[1] == "pim_player_leave" then
+      -- Если игрок ушёл, прекращаем
+      currentPlayer = nil
+      currentToken = nil
+      alreadyAuthorized = false
+      currentScreen = "welcome"
+      drawWelcomeScreen()
+      return
+    end
+  end
+  -- Не удалось обновить токен
+  setDebug("Не удалось обновить токен")
+  currentScreen = "menu"
+  drawMainMenu()
 end
 
 local function goToAccount()
@@ -216,8 +261,8 @@ while true do
     if os.clock() - accountRequestTime >= ACCOUNT_TIMEOUT then
       print("⚠ Таймаут загрузки аккаунта")
       setDebug("Таймаут загрузки аккаунта")
-      currentScreen = "menu"
-      drawMainMenu()
+      -- Пробуем автоматически обновить токен
+      retryAccountAfterTokenRefresh()
     end
   end
 
@@ -250,16 +295,16 @@ while true do
     setDebug("Игрок на PIM: "..currentPlayer.." | Токен: "..tostring(currentToken):sub(1,10))
 
     if alreadyAuthorized then
-      print("alreadyAuthorized = true -> игнорируем повторный вход")
-      setDebug("Уже авторизован, вход игнорирован")
+      print("alreadyAuthorized = true -> вход игнорирован")
+      setDebug("Уже авторизован")
       if currentScreen == "auth" or currentScreen == "account_loading" then
         currentScreen = "menu"
         drawMainMenu()
       end
     elseif currentToken then
-      print("Токен есть, но флаг сброшен -> восстанавливаем alreadyAuthorized")
+      print("Токен есть, но флаг сброшен -> восстанавливаем")
       alreadyAuthorized = true
-      setDebug("Восстановлен флаг alreadyAuthorized")
+      setDebug("Флаг авторизации восстановлен")
       if currentScreen == "auth" or currentScreen == "account_loading" then
         currentScreen = "menu"
         drawMainMenu()
@@ -305,11 +350,18 @@ while true do
             drawMainMenu()
           end
         elseif msg.op == "accountData" then
-          print("Получен ответ аккаунта")
-          setDebug("Аккаунт загружен")
-          if currentScreen == "account_loading" then
-            currentScreen = "account"
-            drawAccount(msg.data)
+          if msg.error then
+            print("Ошибка аккаунта: " .. msg.message)
+            setDebug("Ошибка: " .. msg.message)
+            -- Автоматически обновляем токен
+            retryAccountAfterTokenRefresh()
+          else
+            print("Получен ответ аккаунта")
+            setDebug("Аккаунт загружен")
+            if currentScreen == "account_loading" then
+              currentScreen = "account"
+              drawAccount(msg.data)
+            end
           end
         end
       end
