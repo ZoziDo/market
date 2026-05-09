@@ -22,6 +22,8 @@ local AUTH_TIMEOUT = 3
 local accountRequestTime = 0
 local ACCOUNT_TIMEOUT = 3
 local alreadyAuthorized = false
+local helpPage = 1
+local HELP_PAGES = 3
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
@@ -58,7 +60,7 @@ local function drawCenteredText(y, text, color)
   gpu.set(x, y, text)
 end
 
--- Кнопки главного меню (старый формат, для примера)
+-- Кнопки главного меню
 local menuButtons = {
   shop = {x=31,xs=20,y=8,ys=3,text="Магазин",tx=6,ty=1,bg=0x444444,fg=0x3375cc},
   util = {x=31,xs=20,y=12,ys=3,text="Полезности",tx=5,ty=1,bg=0x444444,fg=0x3375cc},
@@ -76,35 +78,108 @@ local function drawBottomPanel()
   gpu.setForeground(0xcc3342) gpu.set(69,23,"[Отзывы]")
 end
 
--- Универсальная гибкая кнопка: можно задать любую высоту (ys) и ширину (xs)
+-- Гибкая кнопка (для "Назад" в аккаунте)
 local function drawFlexButton(btn)
   gpu.setBackground(btn.bg)
   gpu.fill(btn.x, btn.y, btn.xs, btn.ys, " ")
   gpu.setForeground(btn.fg)
   local textX = btn.x + math.floor((btn.xs - unicode.len(btn.text)) / 2)
-  local textY = btn.y + math.floor((btn.ys - 1) / 2)   -- центрируем по вертикали
+  local textY = btn.y + math.floor((btn.ys - 1) / 2)
   gpu.set(textX, textY, btn.text)
   gpu.setBackground(0x000000)
 end
 
--- Кнопка "Назад" размером ровно под текст (можно менять x, y, xs, ys)
+-- Кнопка "Назад" для аккаунта (ширина = текст + 2)
 local backButton = {
   text = "Назад",
-  x = nil, y = 22, -- x вычислится автоматически для центрирования
-  xs = unicode.len("Назад") + 6,  -- ширина: текст + 2 пробела (можно увеличить/уменьшить)
-  ys = 1,                           -- высота: 1 строка! Было 3, теперь минимальная
+  x = nil, y = 22,
+  xs = unicode.len("Назад") + 2,
+  ys = 1,
   bg = 0x333333,
   fg = 0xff7300
 }
-backButton.x = math.floor((80 - backButton.xs) / 2) + 1   -- центрируем
+backButton.x = math.floor((80 - backButton.xs) / 2) + 1
 
-local function drawBackButton()
-  drawFlexButton(backButton)
+-- Кнопка "Назад" для помощи (ширина = 6)
+local helpBackButton = {
+  text = "Назад",
+  x = 80 - 8, y = 22,   -- правый нижний угол
+  xs = 6,
+  ys = 1,
+  bg = 0x333333,
+  fg = 0xff7300
+}
+
+local function isButtonClicked(btn, x, y)
+  return y >= btn.y and y < btn.y + btn.ys and
+         x >= btn.x and x < btn.x + btn.xs
 end
 
-local function isBackButtonClicked(x, y)
-  return y >= backButton.y and y < backButton.y + backButton.ys and
-         x >= backButton.x and x < backButton.x + backButton.xs
+-- Страницы помощи (текст точно как на скриншотах)
+local helpPages = {
+  [[         Информация об магазине
+  Добро пожаловать в магазин/обменник
+        warg'а Legend
+  Обязательно к прочтению
+
+1. Что такое $ – Это торговая валюта
+за ресурсы которыми можно пополнить
+данный магазин
+Что такое ♦ – Это эмеральды
+которыми можно пополнить магазин
+в виде омических "денег"
+
+2. Как пополнять свой баланс для
+покупок - в разделе "Пополнить"
+Вы можете пополнить свой баланс
+$ – Ресурсами скупаемыми
+магазином и так-же ♦ –
+Омическими деньгами]],
+  [[         Информация об магазине
+
+3. Магазин имеет 3 вида оплаты
+$ - Только ресурсы
+$ - Только эмеральны
+$ и $ - Смежная оплата за обе валюты
+
+4. Как совершить покупку - в разделе
+"Покупка" выбираете интересующий
+товар, указываете кол-во и
+нажимаете на "купить" товар будет
+выдан автоматически. Таким же
+образом совершается покупка
+Наборов и Квестов в разделе
+"Наборы/Квесты"]],
+  [[         Информация об магазине
+
+5. Правила: Запрещено использовать
+уязвимости, баги и любые возможные
+способы обогащения не задуманные
+создателями данного магазина
+кроме купле/продажи, о любых сбоях
+в работе, багах или возможных
+улучшениях рекомендуется сообщить
+или предложить Владельцам в
+Discord fkpupsik/alex25764
+
+Приятных покупок]]
+}
+
+local function drawHelpScreen()
+  clear()
+  gpu.setForeground(0xFFFFFF)
+  local lines = {}
+  for line in helpPages[helpPage]:gmatch("[^\n]+") do
+    table.insert(lines, line)
+  end
+  for i, line in ipairs(lines) do
+    drawCenteredText(2 + i, line, 0xFFFFFF)
+  end
+  -- Номер страницы по центру
+  local pageStr = "← " .. helpPage .. " →"
+  drawCenteredText(22, pageStr, 0xFFFFFF)
+  -- Кнопка "Назад" в правом нижнем углу
+  drawFlexButton(helpBackButton)
 end
 
 local function drawWelcomeScreen()
@@ -151,11 +226,8 @@ end
 -- Экран аккаунта (цвета исправлены)
 local function drawAccount(data)
   clear()
-
-  -- Заголовок: Zozido:
   drawCenteredText(6, currentPlayer .. ":", 0xFFD700)
 
-  -- Баланс (зелёный, эмов * оранжевый)
   local balance = data.balance or 0
   local balancePart1 = string.format("Баланс: %.2f Ресов $ | ", balance)
   local balancePart2 = string.format("%.2f Эмов *", balance)
@@ -166,7 +238,6 @@ local function drawAccount(data)
   gpu.setForeground(0xff7300)
   gpu.set(balanceX + unicode.len(balancePart1), 8, balancePart2)
 
-  -- Транзакции (подпись зелёная, число белое)
   local transText = "Совершенно транзакций: " .. tostring(data.transactions or 0)
   local transX = math.floor((80 - unicode.len(transText)) / 2) + 1
   gpu.setForeground(0x00FF00)
@@ -174,7 +245,6 @@ local function drawAccount(data)
   gpu.setForeground(0xFFFFFF)
   gpu.set(transX + unicode.len("Совершенно транзакций: "), 10, tostring(data.transactions or 0))
 
-  -- Регистрация (подпись зелёная, дата белая)
   local regText = "Регистрация: " .. (data.regDate or "Неизвестно")
   local regX = math.floor((80 - unicode.len(regText)) / 2) + 1
   gpu.setForeground(0x00FF00)
@@ -182,15 +252,13 @@ local function drawAccount(data)
   gpu.setForeground(0xFFFFFF)
   gpu.set(regX + unicode.len("Регистрация: "), 12, data.regDate or "Неизвестно")
 
-  -- Кнопка Назад (гибкая, высота 1 строка)
-  drawBackButton()
+  drawFlexButton(backButton)
 end
 
--- Экран загрузки аккаунта
 local function drawAccountLoading()
   clear()
   drawCenteredText(12, "Загрузка...", 0x888888)
-  drawBackButton()
+  drawFlexButton(backButton)
 end
 
 -- Попытка автоматического обновления токена
@@ -246,6 +314,11 @@ end
 
 local function goToShop() currentScreen="shop" clear() drawCenteredText(8,"Магазин (в разработке)",0x00FF00) end
 local function goToUtility() currentScreen="utility" clear() drawCenteredText(8,"Полезности (в разработке)",0x00FF00) end
+local function goToHelp()
+  currentScreen = "help"
+  helpPage = 1
+  drawHelpScreen()
+end
 local function goBackToMenu() currentScreen="menu" drawMainMenu() end
 
 -- ======== ИНИЦИАЛИЗАЦИЯ ========
@@ -282,8 +355,33 @@ while true do
           break
         end
       end
+      -- Обработка нажатий на нижнюю панель
+      if y == 23 then
+        if x >= 4 and x <= 13 then        -- [Помощь] (примерно 4..13)
+          goToHelp()
+        elseif x >= 33 and x <= 53 then   -- [Конвертация + / $]
+          -- заглушка
+        elseif x >= 69 and x <= 78 then   -- [Отзывы]
+          -- заглушка
+        end
+      end
+    elseif currentScreen == "help" then
+      -- Листание страниц (стрелки и номер)
+      if y == 22 then
+        local pageStr = "← " .. helpPage .. " →"
+        local pageX = math.floor((80 - unicode.len(pageStr)) / 2) + 1
+        if x >= pageX and x < pageX + 4 then          -- левая стрелка
+          if helpPage > 1 then helpPage = helpPage - 1 drawHelpScreen() end
+        elseif x >= pageX + unicode.len(pageStr) - 4 and x < pageX + unicode.len(pageStr) then  -- правая стрелка
+          if helpPage < HELP_PAGES then helpPage = helpPage + 1 drawHelpScreen() end
+        end
+      end
+      -- Кнопка "Назад"
+      if isButtonClicked(helpBackButton, x, y) then
+        goBackToMenu()
+      end
     elseif currentScreen == "account" or currentScreen == "account_loading" then
-      if isBackButtonClicked(x, y) then
+      if isButtonClicked(backButton, x, y) then
         goBackToMenu()
       end
     elseif currentScreen=="shop" or currentScreen=="utility" then
