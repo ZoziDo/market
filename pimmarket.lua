@@ -58,7 +58,7 @@ local function drawCenteredText(y, text, color)
   gpu.set(x, y, text)
 end
 
--- Кнопки главного меню
+-- Кнопки главного меню (старый формат, для примера)
 local menuButtons = {
   shop = {x=31,xs=20,y=8,ys=3,text="Магазин",tx=6,ty=1,bg=0x444444,fg=0x3375cc},
   util = {x=31,xs=20,y=12,ys=3,text="Полезности",tx=5,ty=1,bg=0x444444,fg=0x3375cc},
@@ -76,23 +76,35 @@ local function drawBottomPanel()
   gpu.setForeground(0xcc3342) gpu.set(69,23,"[Отзывы]")
 end
 
--- Узкая кнопка "Назад" (ширина = текст + 2 пробела)
-local function drawSmallButton(y, text, bgColor, fgColor)
-  local width = unicode.len(text) + 2
-  local x = math.floor((80 - width) / 2) + 1
-  gpu.setBackground(bgColor or 0x333333)
-  gpu.fill(x, y, width, 3, " ")
-  gpu.setForeground(fgColor or 0xFFFFFF)
-  local textX = x + math.floor((width - unicode.len(text)) / 2)
-  gpu.set(textX, y + 1, text)
+-- Универсальная гибкая кнопка: можно задать любую высоту (ys) и ширину (xs)
+local function drawFlexButton(btn)
+  gpu.setBackground(btn.bg)
+  gpu.fill(btn.x, btn.y, btn.xs, btn.ys, " ")
+  gpu.setForeground(btn.fg)
+  local textX = btn.x + math.floor((btn.xs - unicode.len(btn.text)) / 2)
+  local textY = btn.y + math.floor((btn.ys - 1) / 2)   -- центрируем по вертикали
+  gpu.set(textX, textY, btn.text)
   gpu.setBackground(0x000000)
 end
 
-local function isSmallButtonClicked(x, y, yStart, text)
-  if y < yStart or y > yStart + 2 then return false end
-  local width = unicode.len(text) + 2
-  local btnX = math.floor((80 - width) / 2) + 1
-  return x >= btnX and x < btnX + width
+-- Кнопка "Назад" размером ровно под текст (можно менять x, y, xs, ys)
+local backButton = {
+  text = "Назад",
+  x = nil, y = 22, -- x вычислится автоматически для центрирования
+  xs = unicode.len("Назад") + 2,  -- ширина: текст + 2 пробела (можно увеличить/уменьшить)
+  ys = 1,                           -- высота: 1 строка! Было 3, теперь минимальная
+  bg = 0x333333,
+  fg = 0xff7300
+}
+backButton.x = math.floor((80 - backButton.xs) / 2) + 1   -- центрируем
+
+local function drawBackButton()
+  drawFlexButton(backButton)
+end
+
+local function isBackButtonClicked(x, y)
+  return y >= backButton.y and y < backButton.y + backButton.ys and
+         x >= backButton.x and x < backButton.x + backButton.xs
 end
 
 local function drawWelcomeScreen()
@@ -128,7 +140,7 @@ local function drawMainMenu()
     local pink2 = "Ваш баланс: " local white2 = string.format("%.2f",playerBalance).." Эмов"
     local full2 = pink2..white2
     local x2 = math.floor((80 - unicode.len(full2))/2)+1
-    gpu.setForeground(0xFF00FF) gpu.set(x2,5,pink2)
+    gpu.setForeground(0xFF00FF) gpu.set(x2,6,pink2)
     gpu.setForeground(0xFFFFFF) gpu.set(x2+unicode.len(pink2),6,white2)
 
     for _,btn in pairs(menuButtons) do drawButton(btn) end
@@ -151,7 +163,7 @@ local function drawAccount(data)
   local balanceX = math.floor((80 - unicode.len(balanceFull)) / 2) + 1
   gpu.setForeground(0x00FF00)
   gpu.set(balanceX, 8, balancePart1)
-  gpu.setForeground(0xff7300)   -- оранжевый как в NEXAR SHOP
+  gpu.setForeground(0xff7300)
   gpu.set(balanceX + unicode.len(balancePart1), 8, balancePart2)
 
   -- Транзакции (подпись зелёная, число белое)
@@ -170,15 +182,15 @@ local function drawAccount(data)
   gpu.setForeground(0xFFFFFF)
   gpu.set(regX + unicode.len("Регистрация: "), 12, data.regDate or "Неизвестно")
 
-  -- Кнопка Назад (узкая, оранжевый текст)
-  drawSmallButton(22, "Назад", 0x333333, 0xff7300)
+  -- Кнопка Назад (гибкая, высота 1 строка)
+  drawBackButton()
 end
 
 -- Экран загрузки аккаунта
 local function drawAccountLoading()
   clear()
   drawCenteredText(12, "Загрузка...", 0x888888)
-  drawSmallButton(22, "Назад", 0x333333, 0xff7300)
+  drawBackButton()
 end
 
 -- Попытка автоматического обновления токена
@@ -271,7 +283,7 @@ while true do
         end
       end
     elseif currentScreen == "account" or currentScreen == "account_loading" then
-      if isSmallButtonClicked(x, y, 22, "Назад") then
+      if isBackButtonClicked(x, y) then
         goBackToMenu()
       end
     elseif currentScreen=="shop" or currentScreen=="utility" then
