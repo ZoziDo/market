@@ -19,8 +19,6 @@ local playerRegDate = ""
 local currentScreen = "welcome"
 local authStartTime = 0
 local AUTH_TIMEOUT = 3
-
--- для таймаута запроса аккаунта
 local accountRequestTime = 0
 local ACCOUNT_TIMEOUT = 3
 
@@ -28,64 +26,26 @@ local ACCOUNT_TIMEOUT = 3
 gpu.setResolution(80, 25)
 gpu.setBackground(0x000000)
 
--- ========== КРУПНЫЙ ШРИФТ ==========
-local font = {}
-local function addLetter(char, rows) font[char] = rows end
-addLetter("A",{" ███ ","█   █","█████","█   █","█   █"})
-addLetter("B",{"████ ","█   █","████ ","█   █","████ "})
-addLetter("C",{" ████","█    ","█    ","█    "," ████"})
-addLetter("D",{"████ ","█   █","█   █","█   █","████ "})
-addLetter("E",{"█████","█    ","████ ","█    ","█████"})
-addLetter("F",{"█████","█    ","████ ","█    ","█    "})
-addLetter("G",{" ████","█    ","█ ███","█   █"," ████"})
-addLetter("H",{"█   █","█   █","█████","█   █","█   █"})
-addLetter("I",{"█████","  █  ","  █  ","  █  ","█████"})
-addLetter("J",{"   ██","    █","    █","█   █"," ███ "})
-addLetter("K",{"█   █","█  █ ","███  ","█  █ ","█   █"})
-addLetter("L",{"█    ","█    ","█    ","█    ","█████"})
-addLetter("M",{"█   █","██ ██","█ █ █","█   █","█   █"})
-addLetter("N",{"█   █","██  █","█ █ █","█  ██","█   █"})
-addLetter("O",{" ███ ","█   █","█   █","█   █"," ███ "})
-addLetter("P",{"████ ","█   █","████ ","█    ","█    "})
-addLetter("Q",{" ███ ","█   █","█   █","█  ██"," ████"})
-addLetter("R",{"████ ","█   █","████ ","█  █ ","█   █"})
-addLetter("S",{" ████","█    "," ███ ","    █","████ "})
-addLetter("T",{"█████","  █  ","  █  ","  █  ","  █  "})
-addLetter("U",{"█   █","█   █","█   █","█   █"," ███ "})
-addLetter("V",{"█   █","█   █","█   █"," ███ ","  █  "})
-addLetter("W",{"█   █","█   █","█ █ █","██ ██","█   █"})
-addLetter("X",{"█   █"," █ █ ","  █  "," █ █ ","█   █"})
-addLetter("Y",{"█   █"," █ █ ","  █  ","  █  ","  █  "})
-addLetter("Z",{"█████","   █ ","  █  "," █   ","█████"})
-addLetter(" ",{"     ","     ","     ","     ","     "})
-
-local function drawBigText(y, text, color, shadowColor)
-  local width = 0
-  for ch in text:gmatch(".") do if font[ch] then width = width + 5 + 1 end end
-  width = width - 1
-  local startX = math.floor((80 - width) / 2) + 1
-  for row = 1, 5 do
-    local curX = startX
-    for ch in text:gmatch(".") do
-      if font[ch] then
-        gpu.setForeground(shadowColor)
-        gpu.set(curX + 1, y + row, font[ch][row])
-        curX = curX + 5 + 1
-      end
-    end
-  end
-  for row = 1, 5 do
-    local curX = startX
-    for ch in text:gmatch(".") do
-      if font[ch] then
-        gpu.setForeground(color)
-        gpu.set(curX, y + row - 1, font[ch][row])
-        curX = curX + 5 + 1
-      end
-    end
-  end
+-- ========== КРУПНЫЙ ШРИФТ NEXAR SHOP ==========
+local function drawBigTitle()
+  gpu.setForeground(0x00FF00)  -- ярко-зелёный
+  
+  -- NEXAR
+  gpu.set(15, 3, "  ███╗   ██╗ ███████╗ ██╗  ██╗  █████╗  ██████╗ ")
+  gpu.set(15, 4, "  ████╗  ██║ ██╔════╝ ██║ ██╔╝ ██╔══██╗ ██╔══██╗")
+  gpu.set(15, 5, "  ██╔██╗ ██║ █████╗   █████╔╝  ███████║ ██████╔╝")
+  gpu.set(15, 6, "  ██║╚██╗██║ ██╔══╝   ██╔═██╗  ██╔══██║ ██╔══██╗")
+  gpu.set(15, 7, "  ██║ ╚████║ ███████╗ ██║  ██╗ ██║  ██║ ██║  ██║")
+  
+  -- SHOP
+  gpu.set(32, 9,  "  ███████╗ ██╗  ██╗  ██████╗  ██████╗ ")
+  gpu.set(32, 10, "  ██╔════╝ ██║  ██║ ██╔═══██╗ ██╔══██╗")
+  gpu.set(32, 11, "  ███████╗ ███████║ ██║   ██║ ██████╔╝")
+  gpu.set(32, 12, "  ╚════██║ ██╔══██║ ██║   ██║ ██╔═══╝ ")
+  gpu.set(32, 13, "  ███████║ ██║  ██║ ╚██████╔╝ ██║     ")
 end
 
+-- ========== ФУНКЦИИ ЭКРАНА ==========
 local function clear() gpu.setBackground(0x000000) gpu.fill(1,1,80,25," ") end
 local function drawCenteredText(y, text, color)
   gpu.setForeground(color or 0xFFFFFF)
@@ -113,32 +73,24 @@ end
 
 local function drawWelcomeScreen()
   gpu.setBackground(0x202020) gpu.fill(1,1,80,25," ")
-  local prefix = "Приветствуем в " local shop = "NEXAR SHOP"
-  local full = prefix..shop
-  local startX = math.floor((80 - unicode.len(full))/2)+1
-  gpu.setForeground(0xFFFFFF) gpu.set(startX,2,prefix)
-  gpu.setForeground(0x00FF00) gpu.set(startX+unicode.len(prefix),2,shop)
-  drawBigText(4,"NEXAR SHOP",0x00FF00,0x006600)
+  
+  drawBigTitle()
+  
   gpu.setForeground(0x00FF00)
-  drawCenteredText(11,"↓   Встаньте на PIM   ↓",0x00FF00)
-  drawCenteredText(12,"━━━━━━━━━━━━━━━━━━━━",0x00FF00)
+  drawCenteredText(16, "↓   Встаньте на PIM   ↓", 0x00FF00)
+  drawCenteredText(17, "━━━━━━━━━━━━━━━━━━━━", 0x00FF00)
   gpu.setForeground(0x414243)
-  drawCenteredText(15,"По любым вопросам пишите в Telegram: f0rb4ik",0x414243)
+  drawCenteredText(20, "По любым вопросам пишите в Telegram: f0rb4ik", 0x414243)
   gpu.setBackground(0x000000)
 end
 
 local function drawAuthScreen()
   gpu.setBackground(0x202020) gpu.fill(1,1,80,25," ")
-  local prefix = "Приветствуем в " local shop = "NEXAR SHOP"
-  local full = prefix..shop
-  local startX = math.floor((80 - unicode.len(full))/2)+1
-  gpu.setForeground(0xFFFFFF) gpu.set(startX,2,prefix)
-  gpu.setForeground(0x00FF00) gpu.set(startX+unicode.len(prefix),2,shop)
-  drawBigText(4,"NEXAR SHOP",0x00FF00,0x006600)
+  drawBigTitle()
   gpu.setForeground(0xFFFFFF)
-  drawCenteredText(12,"Авторизация....",0xFFFFFF)
+  drawCenteredText(16, "Авторизация....", 0xFFFFFF)
   gpu.setForeground(0x414243)
-  drawCenteredText(15,"По любым вопросам пишите в Telegram: f0rb4ik",0x414243)
+  drawCenteredText(20, "По любым вопросам пишите в Telegram: f0rb4ik", 0x414243)
   gpu.setBackground(0x000000)
 end
 
@@ -162,35 +114,44 @@ local function drawMainMenu()
   else drawWelcomeScreen() end
 end
 
--- Экран аккаунта
+-- Экран аккаунта (переработан под твой скриншот)
 local function drawAccount(data)
   clear()
-  drawCenteredText(2, "Аккаунт: " .. currentPlayer, 0xFFD700)
-  gpu.setForeground(0xFF00FF)
-  gpu.set(5,5,"Баланс:")
-  gpu.set(5,6,"Совершено транзакций:")
-  gpu.set(5,7,"Регистрация:")
-  gpu.setForeground(0xFFFFFF)
-  gpu.set(30,5,string.format("%.2f Ресурсы $ | %.2f Эмов", data.balance, data.balance))
-  gpu.set(30,6, tostring(data.transactions or 0))
-  gpu.set(30,7, data.regDate or "Неизвестно")
-  -- Кнопка "Назад"
+  
+  -- Имя игрока по центру
+  drawCenteredText(2, currentPlayer .. ":", 0xFFFFFF)
+  
+  -- Данные по центру
+  local balanceText = string.format("Баланс: %.2f Ресоб $ | %.2f Змоб *", data.balance, data.balance)
+  local transText = "Совершенно транзакций: " .. (data.transactions or 0)
+  local regText = "Регистрация: " .. (data.regDate or "Неизвестно")
+  
+  drawCenteredText(5, balanceText, 0x00FF00)
+  drawCenteredText(7, transText, 0x00FF00)
+  drawCenteredText(9, regText, 0x00FF00)
+  
+  -- Кнопка "Назад" внизу по центру (маленькая)
+  local backText = "Назад"
+  local backWidth = #backText + 2  -- небольшой отступ
+  local backX = math.floor((80 - backWidth) / 2) + 1
   gpu.setBackground(0x333333)
-  gpu.fill(2,22,12,3," ")
+  gpu.fill(backX, 22, backWidth, 3, " ")
   gpu.setForeground(0xFFFFFF)
-  gpu.set(4,23,"Назад")
+  gpu.set(backX + 1, 23, backText)
   gpu.setBackground(0x000000)
 end
 
--- Экран загрузки аккаунта с кнопкой "Назад"
+-- Экран загрузки аккаунта
 local function drawAccountLoading()
   clear()
   drawCenteredText(12, "Загрузка...", 0x888888)
-  -- кнопка Назад
+  local backText = "Назад"
+  local backWidth = #backText + 2
+  local backX = math.floor((80 - backWidth) / 2) + 1
   gpu.setBackground(0x333333)
-  gpu.fill(2,22,12,3," ")
+  gpu.fill(backX, 22, backWidth, 3, " ")
   gpu.setForeground(0xFFFFFF)
-  gpu.set(4,23,"Назад")
+  gpu.set(backX + 1, 23, backText)
   gpu.setBackground(0x000000)
 end
 
@@ -222,7 +183,6 @@ while true do
   local ev = {event.pull(0.5)}
   local e = ev[1]
 
-  -- Проверка таймаута авторизации
   if currentScreen == "auth" then
     if os.clock() - authStartTime >= AUTH_TIMEOUT then
       print("⚠ Таймаут авторизации")
@@ -231,7 +191,6 @@ while true do
     end
   end
 
-  -- Проверка таймаута загрузки аккаунта
   if currentScreen == "account_loading" then
     if os.clock() - accountRequestTime >= ACCOUNT_TIMEOUT then
       print("⚠ Таймаут загрузки аккаунта")
@@ -252,7 +211,13 @@ while true do
         end
       end
     elseif currentScreen == "account" or currentScreen == "account_loading" then
-      if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
+      -- Проверка кнопки "Назад" по центру
+      local backText = "Назад"
+      local backWidth = #backText + 2
+      local backX = math.floor((80 - backWidth) / 2) + 1
+      if x >= backX and x < backX + backWidth and y >= 22 and y <= 24 then
+        goBackToMenu()
+      end
     elseif currentScreen=="shop" or currentScreen=="utility" then
       if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
     end
