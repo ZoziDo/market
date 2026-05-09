@@ -26,11 +26,13 @@ local helpPage = 1
 local HELP_PAGES = 3
 
 -- Переменные магазина покупок
-local shopItems = {}          -- все предметы из ME
+local shopItems = {}
 local shopPage = 1
-local shopPageSize = 6
+local shopPageSize = 18
 local shopSearch = ""
 local shopTotalPages = 1
+local searchActive = false
+local searchInput = ""
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
@@ -39,8 +41,6 @@ gpu.setBackground(0x000000)
 -- ========== КРУПНЫЙ ШРИФТ NEXAR SHOP ==========
 local function drawBigTitle()
   gpu.setForeground(0xff7300)
-
-  -- DARKON (или NEXAR, смотря что у нас)
   local darkonLines = {
     "  ██████╗ ██████╗  █████╗ ██████╗ ██╗  ██╗ ██████╗ ███╗   ██╗",
     "  ██╔══██╗██╔══██╗██╔══██╗██╔══██╗██║ ██╔╝██╔═══██╗████╗  ██║",
@@ -48,14 +48,10 @@ local function drawBigTitle()
     "  ██║  ██║██╔══██╗██╔══██║██║  ██║██╔═██╗ ██║   ██║██║╚██╗██║",
     "  ██████╔╝██║  ██║██║  ██║██████╔╝██║  ██╗╚██████╔╝██║ ╚████║",
   }
-
-  local darkonOffset = 47        -- поправил под центр, можно менять
+  local darkonOffset = 47
   local darkonX = math.floor((80 - #darkonLines[1]) / 2) + darkonOffset
-  for i, line in ipairs(darkonLines) do
-    gpu.set(darkonX, 4 + i, line)
-  end
+  for i, line in ipairs(darkonLines) do gpu.set(darkonX, 4 + i, line) end
 
-  -- SHOP
   local shopLines = {
     "  ███████╗ ██╗  ██╗  ██████╗  ██████╗ ",
     "  ██╔════╝ ██║  ██║ ██╔═══██╗ ██╔══██╗",
@@ -63,12 +59,9 @@ local function drawBigTitle()
     "  ╚════██║ ██╔══██║ ██║   ██║ ██╔═══╝ ",
     "  ███████║ ██║  ██║ ╚██████╔╝ ██║     "
   }
-
-  local shopOffset = 28          -- 0 = по центру
+  local shopOffset = 28
   local shopX = math.floor((80 - #shopLines[1]) / 2) + shopOffset
-  for i, line in ipairs(shopLines) do
-    gpu.set(shopX, 10 + i, line)
-  end
+  for i, line in ipairs(shopLines) do gpu.set(shopX, 10 + i, line) end
 end
 
 -- ========== ФУНКЦИИ ЭКРАНА ==========
@@ -108,7 +101,7 @@ local function drawFlexButton(btn)
   gpu.setBackground(0x000000)
 end
 
--- Кнопка "Назад"
+-- Кнопка "Назад" главная
 local backButton = {
   text = "Назад",
   x = nil, y = 23,
@@ -123,6 +116,12 @@ local function isButtonClicked(btn, x, y)
   return y >= btn.y and y < btn.y + btn.ys and
          x >= btn.x and x < btn.x + btn.xs
 end
+
+-- Маленькие кнопки для панели поиска / навигации
+local searchButton = {text = "Поиск...", x=15, y=20, xs=10, ys=1, bg=0x333333, fg=0x00aaff}
+local stockButton   = {text = "В наличии", x=27, y=20, xs=12, ys=1, bg=0x333333, fg=0x00aaff}
+local prevButton    = {text = "Назад", x=43, y=20, xs=7, ys=1, bg=0x333333, fg=0xffaa00}
+local nextButton    = {text = "Далее", x=55, y=20, xs=7, ys=1, bg=0x333333, fg=0xffaa00}
 
 -- Кнопки меню "Магазин"
 local shopMenuButtons = {
@@ -142,44 +141,43 @@ local function loadShopItems()
         table.insert(shopItems, {
           name = item.label or item.name or "???",
           qty = item.size,
-          -- цена по умолчанию, если нет в таблице цен
           price = 0.0
         })
       end
     end
-    -- сортировка по имени
     table.sort(shopItems, function(a,b) return a.name < b.name end)
   end
 end
 
--- ========== ЭКРАН ПОКУПКИ (тот самый, по скриншоту) ==========
+-- ========== ЭКРАН ПОКУПКИ ==========
 local function drawBuyScreen()
   clear()
   
-  -- 1) Верхняя строка баланса
-  gpu.setForeground(0x00ff88)   -- зелёный (Ресов $)
-  gpu.set(2, 1, "Баланс: ")
-  gpu.set(10, 1, string.format("%.2f Ресов $  |  ", playerBalance))
-  gpu.setForeground(0xff7300)   -- оранжевый (Эмов *)
-  gpu.set(32, 1, string.format("%.2f Эмов *", playerBalance))
+  -- Баланс (без гигантских отступов)
+  gpu.setForeground(0x00ff88)
+  gpu.set(3, 1, "Баланс: ")
+  gpu.set(11, 1, string.format("%.2f Ресов $ | ", playerBalance))
+  gpu.setForeground(0xff7300)
+  gpu.set(31, 1, string.format("%.2f Эмов *", playerBalance))
 
-  -- 2) Заголовок "Магазин продаёт"
-  drawCenteredText(2, "Магазин продаёт", 0xff7300)   -- оранжевый
-  
-  -- 3) Панель заголовков таблицы (на строке 3)
+  -- "Магазин продаёт" (не центрирован)
+  gpu.setForeground(0xff7300)
+  gpu.set(3, 2, "Магазин продаёт")
+
+  -- Заголовки таблицы
   gpu.setBackground(0x222222)
   gpu.fill(2, 3, 76, 1, " ")
-  gpu.setForeground(0xffaa00)   -- золотой
+  gpu.setForeground(0xffaa00)
   gpu.set(3, 3, "Название")
   gpu.set(42, 3, "Кол-во")
   gpu.set(55, 3, "Цена")
   gpu.setBackground(0x000000)
 
-  -- 4) Разделительная линия
+  -- Разделитель
   gpu.setForeground(0x444444)
   gpu.set(3, 4, string.rep("─", 74))
 
-  -- 5) Таблица предметов (строки 5..11)
+  -- Фильтрация
   local filtered = {}
   for _, item in ipairs(shopItems) do
     if shopSearch == "" or string.find(string.lower(item.name), string.lower(shopSearch), 1, true) then
@@ -193,48 +191,82 @@ local function drawBuyScreen()
 
   for i = start, finish do
     local item = filtered[i]
-    local y = 4 + (i - start)  -- 5,6,7,8,9,10,11
-    -- Фон строки (тёмный/светлый для чётности)
+    local y = 4 + (i - start)  -- 5..22
     if (i - start) % 2 == 0 then
       gpu.setBackground(0x111111)
     else
       gpu.setBackground(0x1a1a1a)
     end
     gpu.fill(2, y, 76, 1, " ")
-    -- Название предмета
-    gpu.setForeground(0x00ff88)   -- зелёный
+    gpu.setForeground(0x00ff88)
     gpu.set(3, y, item.name:sub(1, 38))
-    -- Количество
     gpu.setForeground(0xffffff)
     gpu.set(42, y, tostring(item.qty))
-    -- Цена
     gpu.set(55, y, string.format("%.2f", item.price))
     gpu.setBackground(0x000000)
   end
 
-  -- 6) Нижняя панель (строка 17)
+  -- Нижняя панель
+  gpu.setForeground(0x444444)
+  gpu.set(3, 23, string.rep("─", 74))  -- разделитель перед кнопками (строка 23)
+  -- У нас всего 25 строк, разместим кнопки на 24 строке, но тогда не будет места для главного "Назад"
+  -- Поэтому опустим основную кнопку "Назад" вниз, а эти кнопки расположим на строке 20 (как планировалось)
+  -- Стираем старый разделитель, если он был не там, и рисуем новый
+  gpu.setBackground(0x000000)
+  gpu.fill(2, 17, 76, 1, " ")
   gpu.setForeground(0x444444)
   gpu.set(3, 17, string.rep("─", 74))
 
-  -- Кнопки/надписи
-  gpu.setForeground(0x00aaff)   -- голубой
-  gpu.set(3, 18, "Категория")
-  gpu.setForeground(0x888888)
-  gpu.set(15, 18, "Поиск...")
-  gpu.setForeground(0x00aaff)
-  gpu.set(30, 18, "В наличии")
-  gpu.setForeground(0xffaa00)
-  gpu.set(45, 18, "Назад")
-  gpu.set(55, 18, "Далее")
+  -- "Категория" по центру серым
+  drawCenteredText(18, "Категория", 0x888888)
 
-  -- Индикатор страниц
-  drawCenteredText(19, shopPage .. " / " .. shopTotalPages, 0x888888)
+  -- Кнопки поиска / навигации
+  drawFlexButton(searchButton)
+  drawFlexButton(stockButton)
+  drawFlexButton(prevButton)
+  drawFlexButton(nextButton)
 
-  -- 7) Кнопка возврата в меню магазина
+  -- Основная кнопка "Назад" (в самый низ)
   drawFlexButton(backButton)
 end
 
--- ========== ОСТАЛЬНЫЕ ЭКРАНЫ (полностью) ==========
+-- ========== ОБРАБОТКА ПОИСКА ==========
+local function activateSearch()
+  searchActive = true
+  searchInput = ""
+  -- маленькое поле ввода вручную
+  drawBuyScreen()
+  gpu.setForeground(0xffffff)
+  gpu.set(15, 20, "          ") -- очищаем место под кнопкой
+  gpu.set(15, 20, "_")
+  while true do
+    local ev = {event.pull(0.5)}
+    if ev[1] == "key_down" then
+      local ch = ev[3]
+      if ch == 13 then -- Enter завершает ввод
+        shopSearch = searchInput
+        shopPage = 1
+        searchActive = false
+        drawBuyScreen()
+        return
+      elseif ch == 8 then -- Backspace
+        searchInput = string.sub(searchInput, 1, -2)
+      elseif ch > 30 then
+        searchInput = searchInput .. unicode.char(ch)
+      end
+      -- Обновляем отображение ввода
+      gpu.setForeground(0x00aaff)
+      gpu.set(15, 20, searchInput .. "_")
+    elseif ev[1] == "touch" then
+      -- если нажали вне поля, отменяем
+      searchActive = false
+      drawBuyScreen()
+      return
+    end
+  end
+end
+
+-- ========== ОСТАЛЬНЫЕ ЭКРАНЫ ==========
 local function drawShopMenu()
   clear()
   drawCenteredText(4, "МАГАЗИН", 0xff7300)
@@ -242,15 +274,12 @@ local function drawShopMenu()
   drawFlexButton(backButton)
 end
 
--- Страницы помощи (без изменений)
 local function drawHelpScreen()
   clear()
-
   if helpPage == 1 then
     drawCenteredText(2, "Информация об магазине", 0xff7300)
     drawCenteredText(4, "Добро пожаловать в магазин/обменник warg'а Legend", 0xffffff)
     drawCenteredText(5, "Обязательно к прочтению", 0xff0000)
-
     gpu.setForeground(0xff7300)
     gpu.set(4, 7, "1. Что такое $ – Это торговая валюта")
     gpu.setForeground(0xffffff)
@@ -269,7 +298,6 @@ local function drawHelpScreen()
     gpu.set(4, 15, "$ – Ресурсами скупаемыми магазином")
     gpu.setForeground(0xffffff)
     gpu.set(4, 16, "и так-же ♦ – Физическими деньгами")
-
   elseif helpPage == 2 then
     drawCenteredText(2, "Информация об магазине", 0xff7300)
     gpu.setForeground(0xff7300)
@@ -288,7 +316,6 @@ local function drawHelpScreen()
     gpu.set(4, 13, "товар будет выдан автоматически. Таким же")
     gpu.set(4, 14, "образом совершается покупка Наборов и")
     gpu.set(4, 15, 'Квестов в разделе "Наборы/Квесты"')
-
   elseif helpPage == 3 then
     drawCenteredText(2, "Информация об магазине", 0xff7300)
     gpu.setForeground(0xff0000)
@@ -305,11 +332,8 @@ local function drawHelpScreen()
     gpu.set(4, 13, "Telegram: f0rb4ik")
     drawCenteredText(15, "Приятных покупок", 0x00ff88)
   end
-
-  -- Навигация
   local pageStr = "⟵ " .. helpPage .. " ⟶"
   drawCenteredText(20, pageStr, 0x00CCFF)
-  -- Кнопка Назад
   drawFlexButton(backButton)
 end
 
@@ -342,23 +366,19 @@ local function drawMainMenu()
     local x1 = math.floor((80 - unicode.len(full1))/2)+1
     gpu.setForeground(0xFF00FF) gpu.set(x1,4,pink1)
     gpu.setForeground(0xFFFFFF) gpu.set(x1+unicode.len(pink1),4,white1)
-
     local pink2 = "Ваш баланс: " local white2 = string.format("%.2f",playerBalance).." Эмов"
     local full2 = pink2..white2
     local x2 = math.floor((80 - unicode.len(full2))/2)+1
     gpu.setForeground(0xFF00FF) gpu.set(x2,6,pink2)
     gpu.setForeground(0xFFFFFF) gpu.set(x2+unicode.len(pink2),6,white2)
-
     for _,btn in pairs(menuButtons) do drawButton(btn) end
     drawBottomPanel()
   else drawWelcomeScreen() end
 end
 
--- Экран аккаунта
 local function drawAccount(data)
   clear()
   drawCenteredText(6, currentPlayer .. ":", 0xFFD700)
-
   local balance = data.balance or 0
   local balancePart1 = string.format("Баланс: %.2f Ресов $ | ", balance)
   local balancePart2 = string.format("%.2f Эмов *", balance)
@@ -368,21 +388,18 @@ local function drawAccount(data)
   gpu.set(balanceX, 8, balancePart1)
   gpu.setForeground(0xff7300)
   gpu.set(balanceX + unicode.len(balancePart1), 8, balancePart2)
-
   local transText = "Совершенно транзакций: " .. tostring(data.transactions or 0)
   local transX = math.floor((80 - unicode.len(transText)) / 2) + 1
   gpu.setForeground(0x00FF00)
   gpu.set(transX, 10, "Совершенно транзакций: ")
   gpu.setForeground(0xFFFFFF)
   gpu.set(transX + unicode.len("Совершенно транзакций: "), 10, tostring(data.transactions or 0))
-
   local regText = "Регистрация: " .. (data.regDate or "Неизвестно")
   local regX = math.floor((80 - unicode.len(regText)) / 2) + 1
   gpu.setForeground(0x00FF00)
   gpu.set(regX, 12, "Регистрация: ")
   gpu.setForeground(0xFFFFFF)
   gpu.set(regX + unicode.len("Регистрация: "), 12, data.regDate or "Неизвестно")
-
   drawFlexButton(backButton)
 end
 
@@ -443,7 +460,7 @@ local function goToAccount()
   }))
 end
 
--- Обработчики переходов
+-- Переходы
 local function goToShop()
   currentScreen = "shop"
   drawShopMenu()
@@ -460,7 +477,7 @@ local function goToBuy()
   currentScreen = "shop_buy"
   shopPage = 1
   shopSearch = ""
-  loadShopItems()  -- загружаем предметы при входе
+  loadShopItems()
   drawBuyScreen()
 end
 
@@ -543,18 +560,21 @@ while true do
       if isButtonClicked(backButton, x, y) then
         currentScreen = "shop"
         drawShopMenu()
-      elseif y == 18 then   -- строка нижних кнопок
-        if x >= 45 and x < 51 then           -- "Назад" (страница)
-          if shopPage > 1 then shopPage = shopPage - 1 drawBuyScreen() end
-        elseif x >= 55 and x < 63 then       -- "Далее"
-          if shopPage < shopTotalPages then shopPage = shopPage + 1 drawBuyScreen() end
-        elseif x >= 30 and x < 39 then       -- "В наличии" (сброс поиска/фильтра)
-          shopSearch = ""
-          shopPage = 1
-          drawBuyScreen()
-        elseif x >= 15 and x < 23 then       -- "Поиск..." (активировать ввод текста)
-          -- здесь можно включить режим поиска, пока заглушка
-        end
+      elseif isButtonClicked(searchButton, x, y) then
+        activateSearch()
+      elseif isButtonClicked(stockButton, x, y) then
+        shopSearch = ""
+        shopPage = 1
+        drawBuyScreen()
+      elseif isButtonClicked(prevButton, x, y) then
+        if shopPage > 1 then shopPage = shopPage - 1 drawBuyScreen() end
+      elseif isButtonClicked(nextButton, x, y) then
+        if shopPage < shopTotalPages then shopPage = shopPage + 1 drawBuyScreen() end
+      end
+    elseif currentScreen == "shop_sell" or currentScreen == "shop_bundle" then
+      if isButtonClicked(backButton, x, y) then
+        currentScreen = "shop"
+        drawShopMenu()
       end
     elseif currentScreen == "utility" then
       if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
