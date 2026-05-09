@@ -26,23 +26,23 @@ local ACCOUNT_TIMEOUT = 3
 gpu.setResolution(80, 25)
 gpu.setBackground(0x000000)
 
--- ========== КРУПНЫЙ ШРИФТ NEXAR SHOP ==========
+-- ========== КРУПНЫЙ ШРИФТ NEXAR SHOP (центрирован) ==========
 local function drawBigTitle()
-  gpu.setForeground(0x00FF00)  -- ярко-зелёный
-  
+  gpu.setForeground(0x00FF00)
+
   -- NEXAR
-  gpu.set(15, 3, "  ███╗   ██╗ ███████╗ ██╗  ██╗  █████╗  ██████╗ ")
-  gpu.set(15, 4, "  ████╗  ██║ ██╔════╝ ██║ ██╔╝ ██╔══██╗ ██╔══██╗")
-  gpu.set(15, 5, "  ██╔██╗ ██║ █████╗   █████╔╝  ███████║ ██████╔╝")
-  gpu.set(15, 6, "  ██║╚██╗██║ ██╔══╝   ██╔═██╗  ██╔══██║ ██╔══██╗")
-  gpu.set(15, 7, "  ██║ ╚████║ ███████╗ ██║  ██╗ ██║  ██║ ██║  ██║")
-  
+  gpu.set(14, 3, "  ███╗   ██╗ ███████╗ ██╗  ██╗  █████╗  ██████╗ ")
+  gpu.set(14, 4, "  ████╗  ██║ ██╔════╝ ██║ ██╔╝ ██╔══██╗ ██╔══██╗")
+  gpu.set(14, 5, "  ██╔██╗ ██║ █████╗   █████╔╝  ███████║ ██████╔╝")
+  gpu.set(14, 6, "  ██║╚██╗██║ ██╔══╝   ██╔═██╗  ██╔══██║ ██╔══██╗")
+  gpu.set(14, 7, "  ██║ ╚████║ ███████╗ ██║  ██╗ ██║  ██║ ██║  ██║")
+
   -- SHOP
-  gpu.set(32, 9,  "  ███████╗ ██╗  ██╗  ██████╗  ██████╗ ")
-  gpu.set(32, 10, "  ██╔════╝ ██║  ██║ ██╔═══██╗ ██╔══██╗")
-  gpu.set(32, 11, "  ███████╗ ███████║ ██║   ██║ ██████╔╝")
-  gpu.set(32, 12, "  ╚════██║ ██╔══██║ ██║   ██║ ██╔═══╝ ")
-  gpu.set(32, 13, "  ███████║ ██║  ██║ ╚██████╔╝ ██║     ")
+  gpu.set(14, 9,  "  ███████╗ ██╗  ██╗  ██████╗  ██████╗ ")
+  gpu.set(14, 10, "  ██╔════╝ ██║  ██║ ██╔═══██╗ ██╔══██╗")
+  gpu.set(14, 11, "  ███████╗ ███████║ ██║   ██║ ██████╔╝")
+  gpu.set(14, 12, "  ╚════██║ ██╔══██║ ██║   ██║ ██╔═══╝ ")
+  gpu.set(14, 13, "  ███████║ ██║  ██║ ╚██████╔╝ ██║     ")
 end
 
 -- ========== ФУНКЦИИ ЭКРАНА ==========
@@ -73,9 +73,7 @@ end
 
 local function drawWelcomeScreen()
   gpu.setBackground(0x202020) gpu.fill(1,1,80,25," ")
-  
   drawBigTitle()
-  
   gpu.setForeground(0x00FF00)
   drawCenteredText(16, "↓   Встаньте на PIM   ↓", 0x00FF00)
   drawCenteredText(17, "━━━━━━━━━━━━━━━━━━━━", 0x00FF00)
@@ -114,45 +112,34 @@ local function drawMainMenu()
   else drawWelcomeScreen() end
 end
 
--- Экран аккаунта (переработан под твой скриншот)
+-- Экран аккаунта (текст по центру, кнопка «Назад» маленькая)
 local function drawAccount(data)
   clear()
-  
-  -- Имя игрока по центру
-  drawCenteredText(2, currentPlayer .. ":", 0xFFFFFF)
-  
-  -- Данные по центру
-  local balanceText = string.format("Баланс: %.2f Ресоб $ | %.2f Змоб *", data.balance, data.balance)
-  local transText = "Совершенно транзакций: " .. (data.transactions or 0)
-  local regText = "Регистрация: " .. (data.regDate or "Неизвестно")
-  
-  drawCenteredText(5, balanceText, 0x00FF00)
-  drawCenteredText(7, transText, 0x00FF00)
-  drawCenteredText(9, regText, 0x00FF00)
-  
-  -- Кнопка "Назад" внизу по центру (маленькая)
+  -- Имя игрока
+  drawCenteredText(7, currentPlayer .. ":", 0xFFFFFF)
+  -- Баланс
+  local balanceText = string.format("Баланс: %.2f Ресоб $ | %.2f Змоб ֍", data.balance, data.balance)
+  drawCenteredText(9, balanceText, 0x00FF00)
+  -- Транзакции
+  drawCenteredText(11, "Совершенно транзакций: " .. tostring(data.transactions or 0), 0x00FF00)
+  -- Регистрация
+  drawCenteredText(13, "Регистрация: " .. (data.regDate or "Неизвестно"), 0x00FF00)
+
+  -- Кнопка «Назад» (маленькая, по центру внизу)
   local backText = "Назад"
-  local backWidth = #backText + 2  -- небольшой отступ
-  local backX = math.floor((80 - backWidth) / 2) + 1
-  gpu.setBackground(0x333333)
-  gpu.fill(backX, 22, backWidth, 3, " ")
+  local backX = math.floor((80 - unicode.len(backText)) / 2) + 1
   gpu.setForeground(0xFFFFFF)
-  gpu.set(backX + 1, 23, backText)
-  gpu.setBackground(0x000000)
+  gpu.set(backX, 23, backText)
 end
 
--- Экран загрузки аккаунта
+-- Экран загрузки аккаунта (аналогично с маленькой кнопкой)
 local function drawAccountLoading()
   clear()
   drawCenteredText(12, "Загрузка...", 0x888888)
   local backText = "Назад"
-  local backWidth = #backText + 2
-  local backX = math.floor((80 - backWidth) / 2) + 1
-  gpu.setBackground(0x333333)
-  gpu.fill(backX, 22, backWidth, 3, " ")
+  local backX = math.floor((80 - unicode.len(backText)) / 2) + 1
   gpu.setForeground(0xFFFFFF)
-  gpu.set(backX + 1, 23, backText)
-  gpu.setBackground(0x000000)
+  gpu.set(backX, 23, backText)
 end
 
 local function goToAccount()
@@ -211,11 +198,10 @@ while true do
         end
       end
     elseif currentScreen == "account" or currentScreen == "account_loading" then
-      -- Проверка кнопки "Назад" по центру
+      -- Проверка нажатия на слово «Назад» (без фона)
       local backText = "Назад"
-      local backWidth = #backText + 2
-      local backX = math.floor((80 - backWidth) / 2) + 1
-      if x >= backX and x < backX + backWidth and y >= 22 and y <= 24 then
+      local backX = math.floor((80 - unicode.len(backText)) / 2) + 1
+      if y >= 22 and y <= 24 and x >= backX-2 and x <= backX+unicode.len(backText)+2 then
         goBackToMenu()
       end
     elseif currentScreen=="shop" or currentScreen=="utility" then
