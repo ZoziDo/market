@@ -107,13 +107,17 @@ end
 
 local function drawHelpScreen()
   clear()
-  
+
   if helpPage == 1 then
+    -- Страница 1 (как в примере Grok)
     drawCenteredText(2, "Информация об магазине", 0xff7300)
+
+    gpu.setForeground(0xffffff)
+    gpu.set(4, 4, "Добро пожаловать в магазин/обменник warg'а Legend")
     
-    drawCenteredText(4, "Добро пожаловать в магазин/обменник warg'а Legend", 0xffffff)
-    drawCenteredText(5, "Обязательно к прочтению", 0xff0000)
-    
+    gpu.setForeground(0xff0000)
+    gpu.set(4, 5, "Обязательно к прочтению")
+
     gpu.setForeground(0xff7300)
     gpu.set(4, 7, "1. Что такое $ – Это торговая валюта")
     
@@ -125,7 +129,7 @@ local function drawHelpScreen()
     
     gpu.setForeground(0xffffff)
     gpu.set(4, 10, 'которыми можно пополнить магазин в виде физических "денег"')
-    
+
     gpu.setForeground(0xff7300)
     gpu.set(4, 12, '2. Как пополнять свой баланс для покупок - в разделе')
     
@@ -142,8 +146,9 @@ local function drawHelpScreen()
     gpu.set(4, 16, "и так-же ♦ – Физическими деньгами")
 
   elseif helpPage == 2 then
+    -- Страница 2
     drawCenteredText(2, "Информация об магазине", 0xff7300)
-    
+
     gpu.setForeground(0xff7300)
     gpu.set(4, 5, "3. Магазин имеет 3 вида оплаты")
     
@@ -155,7 +160,7 @@ local function drawHelpScreen()
     
     gpu.setForeground(0xffaa00)
     gpu.set(4, 8, "$ и ♦ - Смежная оплата за обе валюты")
-    
+
     gpu.setForeground(0xff7300)
     gpu.set(4, 10, "4. Как совершить покупку - в разделе")
     
@@ -167,10 +172,12 @@ local function drawHelpScreen()
     gpu.set(4, 15, 'Квестов в разделе "Наборы/Квесты"')
 
   elseif helpPage == 3 then
+    -- Страница 3
     drawCenteredText(2, "Информация об магазине", 0xff7300)
-    
+
     gpu.setForeground(0xff0000)
     gpu.set(4, 5, "5. Правила:")
+
     gpu.setForeground(0xffffff)
     gpu.set(4, 6, "Запрещено использовать уязвимости,")
     gpu.set(4, 7, "баги и любые возможные способы")
@@ -182,16 +189,15 @@ local function drawHelpScreen()
     
     gpu.setForeground(0x00aaff)
     gpu.set(4, 13, "Discord fkpupsik/alex25764")
-    
+
     gpu.setForeground(0x00ff88)
     gpu.set(4, 15, "Приятных покупок")
   end
 
-  -- Навигация
+  -- Навигация (стрелки)
   local pageStr = "←   " .. helpPage .. "   →"
   drawCenteredText(21, pageStr, 0x00CCFF)
 
-  
   -- Кнопка Назад
   drawFlexButton(backButton)
 end
