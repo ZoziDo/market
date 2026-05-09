@@ -106,86 +106,86 @@ local function isButtonClicked(btn, x, y)
 end
 
 -- Страницы помощи с поддержкой смешанных цветов в одной строке
-local helpPages = {
-  { -- страница 1
-    {text = "         Информация об магазине", color = 0xff7300, centered = true},
-    {text = "  Добро пожаловать в магазин/обменник", color = 0xffffff, centered = true},
-    {text = "        warg'а Legend", color = 0xffffff, centered = true},
-    {text = "  Обязательно к прочтению", color = 0xff0000, centered = true},
-    {text = ""},
-    {text = "1. Что такое $ – Это торговая валюта", color = 0xff7300},
-    {text = "   за ресурсы которыми можно пополнить", color = 0xffffff},
-    {text = "   данный магазин", color = 0xffffff},
-    {text = "   Что такое ♦ – Это эмеральды", color = 0xff7300},
-    {text = "   которыми можно пополнить магазин", color = 0xffffff},
-    {text = "   в виде омических \"денег\"", color = 0xffffff},
-    {text = ""},
-    -- Составная строка: "2. Как пополнять свой баланс для покупок - в разделе " + голубое "Пополнить"
-    {parts = {
-      {text = "2. Как пополнять свой баланс для покупок - в разделе ", color = 0xffffff},
-      {text = "\"Пополнить\"", color = 0x00aaff}
-    }},
-    {text = "   Вы можете пополнить свой баланс", color = 0xffffff},
-    {text = "   $ – Ресурсами скупаемыми", color = 0x00ff88},
-    {text = "   магазином и так-же ♦ –", color = 0x00ff88},
-    {text = "   Омическими деньгами", color = 0x00ff88},
-  },
-  { -- страница 2
-    {text = "         Информация об магазине", color = 0xff7300, centered = true},
-    {text = ""},
-    {text = "3. Магазин имеет 3 вида оплаты", color = 0xff7300},
-    {text = "   $ - Только ресурсы", color = 0x00ff88},
-    {text = "   ♦ - Только эмеральны", color = 0x00aaff},
-    {text = "   $ и ♦ - Смежная оплата за обе валюты", color = 0xffaa00},
-    {text = ""},
-    {text = "4. Как совершить покупку - в разделе", color = 0xff7300},
-    {text = "   \"Покупка\" выбираете интересующий", color = 0xffffff},
-    {text = "   товар, указываете кол-во и", color = 0xffffff},
-    {text = "   нажимаете на \"купить\" товар будет", color = 0xffffff},
-    {text = "   выдан автоматически. Таким же", color = 0xffffff},
-    {text = "   образом совершается покупка", color = 0xffffff},
-    {text = "   Наборов и Квестов в разделе", color = 0xffffff},
-    {text = "   \"Наборы/Квесты\"", color = 0xffffff},
-  },
-  { -- страница 3
-    {text = "         Информация об магазине", color = 0xff7300, centered = true},
-    {text = ""},
-    {text = "5. Правила:", color = 0xff0000},
-    {text = "   Запрещено использовать", color = 0xffffff},
-    {text = "   уязвимости, баги и любые возможные", color = 0xffffff},
-    {text = "   способы обогащения не задуманные", color = 0xffffff},
-    {text = "   создателями данного магазина", color = 0xffffff},
-    {text = "   кроме купле/продажи, о любых сбоях", color = 0xffffff},
-    {text = "   в работе, багах или возможных", color = 0xffffff},
-    {text = "   улучшениях рекомендуется сообщить", color = 0xffffff},
-    {text = "   или предложить Владельцам в", color = 0xffffff},
-    {text = "   Discord fkpupsik/alex25764", color = 0x00aaff},
-    {text = ""},
-    {text = "Приятных покупок", color = 0x00ff88},
-  }
-}
+local function drawHelpScreen()
+  clear()
+  
+  -- Заголовок
+  drawCenteredText(2, "Информация об магазине", 0xff7300)
+
+  -- Текст страницы 1 точно как на скриншоте
+  gpu.setForeground(0xffffff)
+  gpu.set(4, 4, "Добро пожаловать в магазин/обменник warg'а Legend")
+  
+  gpu.setForeground(0xff0000)
+  gpu.set(4, 5, "Обязательно к прочтению")
+
+  gpu.setForeground(0xff7300)
+  gpu.set(4, 7, "1. Что такое $ – Это торговая валюта")
+  
+  gpu.setForeground(0xffffff)
+  gpu.set(4, 8, "за ресурсы которыми можно пополнить данный магазин")
+  
+  gpu.setForeground(0xff7300)
+  gpu.set(4, 9, "Что такое ♦ – Это эмеральды")
+  
+  gpu.setForeground(0xffffff)
+  gpu.set(4, 10, 'которыми можно пополнить магазин в виде физических "денег"')
+
+  gpu.setForeground(0xff7300)
+  gpu.set(4, 12, '2. Как пополнять свой баланс для покупок - в разделе')
+  
+  gpu.setForeground(0x00aaff)
+  gpu.set(4, 13, '"Пополнить"')
+  
+  gpu.setForeground(0xffffff)
+  gpu.set(4, 14, "Вы можете пополнить свой баланс")
+  
+  gpu.setForeground(0x00ff88)
+  gpu.set(4, 15, "$ – Ресурсами скупаемыми магазином")
+  
+  gpu.setForeground(0xffffff)
+  gpu.set(4, 16, "и так-же ♦ – Физическими деньгами")
+
+  -- Навигация
+  local pageStr = "←   " .. helpPage .. "   →"
+  drawCenteredText(21, pageStr, 0x00CCFF)
+
+  -- Кнопка Назад
+  drawFlexButton(backButton)
+end
 
 local function drawHelpScreen()
   clear()
+  
   local page = helpPages[helpPage]
-  for i, item in ipairs(page) do
+  local y = 3   -- начинаем с 3 строки
+
+  for _, item in ipairs(page) do
     if item.parts then
-      -- Составная строка с разными цветами, левый отступ 3
-      local x = 3
+      -- Специальная обработка для строки с несколькими цветами
+      local x = 4
       for _, part in ipairs(item.parts) do
         gpu.setForeground(part.color)
-        gpu.set(x, 1 + i, part.text)
+        gpu.set(x, y, part.text)
         x = x + unicode.len(part.text)
       end
-    elseif item.text and item.centered then
-      drawCenteredText(1 + i, item.text, item.color or 0xFFFFFF)
+      y = y + 1
     elseif item.text then
       gpu.setForeground(item.color or 0xFFFFFF)
-      gpu.set(3, 1 + i, item.text)
+      if item.centered then
+        drawCenteredText(y, item.text, item.color)
+      else
+        gpu.set(4, y, item.text)
+      end
+      y = y + 1
     end
   end
-  local pageStr = "← " .. helpPage .. " →"
-  drawCenteredText(20, pageStr, 0xFFFFFF)
+
+  -- Навигация страниц
+  local pageStr = "←   " .. helpPage .. "   →"
+  drawCenteredText(21, pageStr, 0x00CCFF)
+
+  -- Кнопка Назад
   drawFlexButton(backButton)
 end
 
