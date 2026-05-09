@@ -93,7 +93,7 @@ end
 local backButton = {
   text = "Назад",
   x = nil, y = 22,
-  xs = unicode.len("Назад") + 2,   -- ширина: текст + 2 пробела
+  xs = unicode.len("Назад") + 6,   -- ширина: текст + 2 пробела
   ys = 1,                           -- высота 1 строка
   bg = 0x333333,
   fg = 0xff7300
@@ -105,52 +105,61 @@ local function isButtonClicked(btn, x, y)
          x >= btn.x and x < btn.x + btn.xs
 end
 
--- Страницы помощи с цветовой разметкой (таблицы)
+-- Страницы помощи с цветовой разметкой
 local helpPages = {
-  { -- страница 1
-    {text = "         Информация об магазине", color = 0xff7300, centered = true},
-    {text = "  Добро пожаловать в магазин/обменник", color = 0xffffff, centered = true},
-    {text = "        warg'а Legend", color = 0xffffff, centered = true},
-    {text = "  Обязательно к прочтению", color = 0xff0000, centered = true},
+  -- Страница 1
+  {
+    {text = " Информация об магазине", color = 0xff7300, centered = true},
+    {text = " Добро пожаловать в магазин/обменник", color = 0xffffff, centered = true},
+    {text = " warg'а Legend", color = 0xffffff, centered = true},
+    {text = " Обязательно к прочтению", color = 0xff0000, centered = true},
     {text = ""},
+
     {text = "1. Что такое $ – Это торговая валюта", color = 0xff7300},
     {text = "   за ресурсы которыми можно пополнить", color = 0xffffff},
     {text = "   данный магазин", color = 0xffffff},
     {text = "   Что такое ♦ – Это эмеральды", color = 0xff7300},
     {text = "   которыми можно пополнить магазин", color = 0xffffff},
-    {text = "   в виде омических \"денег\"", color = 0xffffff},
+    {text = '   в виде физических "денег"', color = 0xffffff},
     {text = ""},
+
     {text = "2. Как пополнять свой баланс для", color = 0xff7300},
-    {text = "   покупок - в разделе \"Пополнить\"", color = 0x00aaff},
+    {text = "   покупок - в разделе ", color = 0xffffff},           -- белый
+    {text = '"Пополнить"', color = 0x00aaff},                      -- голубой
     {text = "   Вы можете пополнить свой баланс", color = 0xffffff},
     {text = "   $ – Ресурсами скупаемыми", color = 0x00ff88},
     {text = "   магазином и так-же ♦ –", color = 0x00ff88},
-    {text = "   Омическими деньгами", color = 0x00ff88},
+    {text = "   Физическими деньгами", color = 0x00ff88},
   },
-  { -- страница 2
-    {text = "         Информация об магазине", color = 0xff7300, centered = true},
+
+  -- Страница 2
+  {
+    {text = " Информация об магазине", color = 0xff7300, centered = true},
     {text = ""},
+
     {text = "3. Магазин имеет 3 вида оплаты", color = 0xff7300},
     {text = "   $ - Только ресурсы", color = 0x00ff88},
-    {text = "   ♦ - Только эмеральны", color = 0x00aaff},
+    {text = "   ♦ - Только эмеральды", color = 0x00aaff},
     {text = "   $ и ♦ - Смежная оплата за обе валюты", color = 0xffaa00},
     {text = ""},
+
     {text = "4. Как совершить покупку - в разделе", color = 0xff7300},
-    {text = "   \"Покупка\" выбираете интересующий", color = 0xffffff},
+    {text = '   "Покупка" выбираете интересующий', color = 0xffffff},
     {text = "   товар, указываете кол-во и", color = 0xffffff},
-    {text = "   нажимаете на \"купить\" товар будет", color = 0xffffff},
-    {text = "   выдан автоматически. Таким же", color = 0xffffff},
-    {text = "   образом совершается покупка", color = 0xffffff},
-    {text = "   Наборов и Квестов в разделе", color = 0xffffff},
-    {text = "   \"Наборы/Квесты\"", color = 0xffffff},
+    {text = '   нажимаете на "купить"', color = 0xffffff},
+    {text = "   товар будет выдан автоматически.", color = 0xffffff},
+    {text = "   Таким же образом совершается покупка", color = 0xffffff},
+    {text = '   Наборов и Квестов в разделе "Наборы/Квесты"', color = 0xffffff},
   },
-  { -- страница 3
-    {text = "         Информация об магазине", color = 0xff7300, centered = true},
+
+  -- Страница 3
+  {
+    {text = " Информация об магазине", color = 0xff7300, centered = true},
     {text = ""},
+
     {text = "5. Правила:", color = 0xff0000},
-    {text = "   Запрещено использовать", color = 0xffffff},
-    {text = "   уязвимости, баги и любые возможные", color = 0xffffff},
-    {text = "   способы обогащения не задуманные", color = 0xffffff},
+    {text = "   Запрещено использовать уязвимости, баги и любые", color = 0xffffff},
+    {text = "   возможные способы обогащения не задуманные", color = 0xffffff},
     {text = "   создателями данного магазина", color = 0xffffff},
     {text = "   кроме купле/продажи, о любых сбоях", color = 0xffffff},
     {text = "   в работе, багах или возможных", color = 0xffffff},
@@ -158,7 +167,8 @@ local helpPages = {
     {text = "   или предложить Владельцам в", color = 0xffffff},
     {text = "   Discord fkpupsik/alex25764", color = 0x00aaff},
     {text = ""},
-    {text = "Приятных покупок", color = 0x00ff88},
+
+    {text = "Приятных покупок", color = 0x00ff88, centered = true},
   }
 }
 
