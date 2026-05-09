@@ -90,8 +90,8 @@ end
 
 local function isSmallButtonClicked(x, y, yStart, text)
   if y < yStart or y > yStart + 2 then return false end
-  local width = unicode.len(text) + 2
-  local btnX = math.floor((80 - width) / 2) + 1
+  local width = unicode.len(text) + 4
+  local btnX = math.floor((80 - width) / 2)
   return x >= btnX and x < btnX + width
 end
 
@@ -138,12 +138,24 @@ end
 
 local function drawAccount(data)
   clear()
-  drawCenteredText(7, currentPlayer .. ":", 0xFFFFFF)
-  local balanceText = string.format("Баланс: %.2f Ресоб $ | %.2f Змоб *", data.balance, data.balance)
+  drawCenteredText(7, currentPlayer .. ":", 0xFFD700)
+  
+  local balanceText = string.format("Баланс: %.2f Ресов $ | %.2f Эмов *", data.balance or 0, data.balance or 0)
   drawCenteredText(9, balanceText, 0x00FF00)
+  
   drawCenteredText(11, "Совершенно транзакций: " .. tostring(data.transactions or 0), 0x00FF00)
   drawCenteredText(13, "Регистрация: " .. (data.regDate or "Неизвестно"), 0x00FF00)
-  drawSmallButton(22, "Назад", 0x333333, 0xff7300)
+  
+  -- Маленькая узкая кнопка "Назад"
+  local btnText = "Назад"
+  local btnWidth = unicode.len(btnText) + 4   -- узкая кнопка
+  local btnX = math.floor((80 - btnWidth) / 2)
+  
+  gpu.setBackground(0x333333)
+  gpu.fill(btnX, 22, btnWidth, 3, " ")
+  gpu.setForeground(0xFFAA00)   -- оранжевый текст
+  gpu.set(btnX + 2, 23, btnText)
+  gpu.setBackground(0x000000)
 end
 
 local function drawAccountLoading()
