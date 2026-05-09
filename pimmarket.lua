@@ -76,9 +76,9 @@ local function drawBottomPanel()
   gpu.setForeground(0xcc3342) gpu.set(69,23,"[Отзывы]")
 end
 
--- Узкая кнопка "Назад" с оранжевым текстом (ширина = текст + 2)
+-- Узкая кнопка "Назад" (ширина = текст + 2 пробела)
 local function drawSmallButton(y, text, bgColor, fgColor)
-  local width = unicode.len(text) + 2   -- минимальный отступ
+  local width = unicode.len(text) + 2
   local x = math.floor((80 - width) / 2) + 1
   gpu.setBackground(bgColor or 0x333333)
   gpu.fill(x, y, width, 3, " ")
@@ -89,9 +89,9 @@ local function drawSmallButton(y, text, bgColor, fgColor)
 end
 
 local function isSmallButtonClicked(x, y, yStart, text)
-  if y < yStart or y > yStart + 1 then return false end   -- высота 2 строки
-  local width = unicode.len(text) + 4
-  local btnX = math.floor((80 - width) / 2)
+  if y < yStart or y > yStart + 2 then return false end
+  local width = unicode.len(text) + 2
+  local btnX = math.floor((80 - width) / 2) + 1
   return x >= btnX and x < btnX + width
 end
 
@@ -136,38 +136,52 @@ local function drawMainMenu()
   else drawWelcomeScreen() end
 end
 
+-- Экран аккаунта (цвета исправлены)
 local function drawAccount(data)
   clear()
-  
-  drawCenteredText(6, currentPlayer .. ":", 0xFFD700)
-  
-  local balanceText = "Баланс: " .. string.format("%.2f", data.balance or 0) .. " Ресов $ | " .. string.format("%.2f", data.balance or 0) .. " Эмов *"
-  drawCenteredText(8, balanceText, 0x00FF00)
-  
-  drawCenteredText(10, "Совершенно транзакций: " .. tostring(data.transactions or 0), 0x00FF00)
-  drawCenteredText(12, "Регистрация: " .. (data.regDate or "Неизвестно"), 0x00FF00)
 
-  -- === ОЧЕНЬ МАЛЕНЬКАЯ КНОПКА "Назад" ===
-  local btnText = "Назад"
-  local btnWidth = unicode.len(btnText) + 4   -- минимальная ширина
-  local btnX = math.floor((80 - btnWidth) / 2)
-  
-  gpu.setBackground(0x222222)           -- тёмный фон
-  gpu.fill(btnX, 20, btnWidth, 2, " ")  -- высота всего 2 строки (низкая)
-  
-  gpu.setForeground(0xFFAA00)           -- оранжевый текст
-  gpu.set(btnX + 2, 21, btnText)
-  
-  gpu.setBackground(0x000000)
+  -- Заголовок: Zozido:
+  drawCenteredText(6, currentPlayer .. ":", 0xFFD700)
+
+  -- Баланс (зелёный, эмов * оранжевый)
+  local balance = data.balance or 0
+  local balancePart1 = string.format("Баланс: %.2f Ресов $ | ", balance)
+  local balancePart2 = string.format("%.2f Эмов *", balance)
+  local balanceFull = balancePart1 .. balancePart2
+  local balanceX = math.floor((80 - unicode.len(balanceFull)) / 2) + 1
+  gpu.setForeground(0x00FF00)
+  gpu.set(balanceX, 8, balancePart1)
+  gpu.setForeground(0xff7300)   -- оранжевый как в NEXAR SHOP
+  gpu.set(balanceX + unicode.len(balancePart1), 8, balancePart2)
+
+  -- Транзакции (подпись зелёная, число белое)
+  local transText = "Совершенно транзакций: " .. tostring(data.transactions or 0)
+  local transX = math.floor((80 - unicode.len(transText)) / 2) + 1
+  gpu.setForeground(0x00FF00)
+  gpu.set(transX, 10, "Совершенно транзакций: ")
+  gpu.setForeground(0xFFFFFF)
+  gpu.set(transX + unicode.len("Совершенно транзакций: "), 10, tostring(data.transactions or 0))
+
+  -- Регистрация (подпись зелёная, дата белая)
+  local regText = "Регистрация: " .. (data.regDate or "Неизвестно")
+  local regX = math.floor((80 - unicode.len(regText)) / 2) + 1
+  gpu.setForeground(0x00FF00)
+  gpu.set(regX, 12, "Регистрация: ")
+  gpu.setForeground(0xFFFFFF)
+  gpu.set(regX + unicode.len("Регистрация: "), 12, data.regDate or "Неизвестно")
+
+  -- Кнопка Назад (узкая, оранжевый текст)
+  drawSmallButton(22, "Назад", 0x333333, 0xff7300)
 end
 
+-- Экран загрузки аккаунта
 local function drawAccountLoading()
   clear()
   drawCenteredText(12, "Загрузка...", 0x888888)
   drawSmallButton(22, "Назад", 0x333333, 0xff7300)
 end
 
--- Попытка автоматического обновления токена и повторного запроса аккаунта
+-- Попытка автоматического обновления токена
 local function retryAccountAfterTokenRefresh()
   if not currentPlayer then return end
   modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
