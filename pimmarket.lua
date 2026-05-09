@@ -17,10 +17,8 @@ local currentPlayer, currentToken, playerBalance = nil, nil, 0.0
 local playerTransactions = 0
 local playerRegDate = ""
 local currentScreen = "welcome"
-
--- таймер авторизации
 local authStartTime = 0
-local AUTH_TIMEOUT = 3  -- секунд
+local AUTH_TIMEOUT = 3
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
@@ -252,9 +250,11 @@ while true do
     currentScreen = "welcome"
     drawWelcomeScreen()
   elseif e=="modem_message" then
-    local _,_,from,_,_,data = ev[2],ev[3],ev[4],ev[5],ev[6]
-    print("Получено сообщение от " .. from)   -- ОТЛАДКА
-    if from == serverAddress then
+    -- ПРАВИЛЬНЫЙ ПОРЯДОК: _, senderAddress, _, _, data
+    local sender = ev[3]   -- адрес отправителя
+    local data = ev[6]     -- данные
+    print("Получено сообщение от " .. sender)
+    if sender == serverAddress then
       local success, msg = pcall(serialization.unserialize, data)
       if success and msg then
         print("Сообщение расшифровано: op=" .. tostring(msg.op) .. " token=" .. tostring(msg.token))
