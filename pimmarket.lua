@@ -14,96 +14,99 @@ modem.open(0xfffe)
 local serverAddress = "535305a9-37c9-4645-b7c4-46204187ee7b"
 local currentPlayer = nil
 local playerBalance = 0.00
-local currentScreen = "welcome"
+local currentScreen = "welcome"   -- welcome / auth / menu / shop / utility / account
+local authStartTime = 0
+local AUTH_DELAY = 3              -- секунд задержки
 
--- ========== ПИКСЕЛЬНЫЙ ШРИФТ 5x3 (A-Z, пробел) ==========
+-- ========== КРУПНЫЙ ОБЪЁМНЫЙ ШРИФТ 5x5 ==========
 local font = {}
 local function addLetter(char, rows)
   font[char] = rows
 end
+
 addLetter("A", {
-  " ██ ",
-  "█  █",
-  "████",
-  "█  █",
-  "█  █"
+  " ███ ",
+  "█   █",
+  "█████",
+  "█   █",
+  "█   █"
 })
 addLetter("B", {
-  "███ ",
-  "█  █",
-  "███ ",
-  "█  █",
-  "███ "
+  "████ ",
+  "█   █",
+  "████ ",
+  "█   █",
+  "████ "
 })
 addLetter("C", {
-  " ███",
-  "█   ",
-  "█   ",
-  "█   ",
-  " ███"
+  " ████",
+  "█    ",
+  "█    ",
+  "█    ",
+  " ████"
 })
 addLetter("D", {
-  "███ ",
-  "█  █",
-  "█  █",
-  "█  █",
-  "███ "
+  "████ ",
+  "█   █",
+  "█   █",
+  "█   █",
+  "████ "
 })
 addLetter("E", {
-  "████",
-  "█   ",
-  "███ ",
-  "█   ",
-  "████"
+  "█████",
+  "█    ",
+  "████ ",
+  "█    ",
+  "█████"
 })
 addLetter("F", {
-  "████",
-  "█   ",
-  "███ ",
-  "█   ",
-  "█   "
+  "█████",
+  "█    ",
+  "████ ",
+  "█    ",
+  "█    "
 })
 addLetter("G", {
-  " ███",
-  "█   ",
-  "█ ██",
-  "█  █",
-  " ███"
+  " ████",
+  "█    ",
+  "█ ███",
+  "█   █",
+  " ████"
 })
 addLetter("H", {
-  "█  █",
-  "█  █",
-  "████",
-  "█  █",
-  "█  █"
+  "█   █",
+  "█   █",
+  "█████",
+  "█   █",
+  "█   █"
 })
 addLetter("I", {
-  "███",
-  " █ ",
-  " █ ",
-  " █ ",
-  "███"
+  "█████",
+  "  █  ",
+  "  █  ",
+  "  █  ",
+  "█████"
 })
 addLetter("J", {
-  "  ██",
-  "   █",
-  "   █",
-  "█  █",
-  " ██ "
+  "   ██",
+  "    █",
+  "    █",
+  "█   █",
+  " ███ "
 })
 addLetter("K", {
-  "█  █",
-  "█ █ ",
-  "██  ",
-  "█ █ ",
-  "█  █"
+  "█   █",
+  "█  █ ",
+  "███  ",
+  "█  █ ",
+  "█   █"
 })
 addLetter("L", {
-  "█   ",
-  "█   ",
-  "█   ",
-  "█   ",
-  "████"
+  "█    ",
+  "█    ",
+  "█    ",
+  "█    ",
+  "█████"
 })
 addLetter("M", {
   "█   █",
@@ -120,60 +123,60 @@ addLetter("N", {
   "█   █"
 })
 addLetter("O", {
-  " ██ ",
-  "█  █",
-  "█  █",
-  "█  █",
-  " ██ "
+  " ███ ",
+  "█   █",
+  "█   █",
+  "█   █",
+  " ███ "
 })
 addLetter("P", {
-  "███ ",
-  "█  █",
-  "███ ",
-  "█   ",
-  "█   "
+  "████ ",
+  "█   █",
+  "████ ",
+  "█    ",
+  "█    "
 })
 addLetter("Q", {
-  " ██ ",
-  "█  █",
-  "█  █",
-  "█ ██",
-  " ██ "
+  " ███ ",
+  "█   █",
+  "█   █",
+  "█  ██",
+  " ████"
 })
 addLetter("R", {
-  "███ ",
-  "█  █",
-  "███ ",
-  "█ █ ",
-  "█  █"
+  "████ ",
+  "█   █",
+  "████ ",
+  "█  █ ",
+  "█   █"
 })
 addLetter("S", {
-  " ███",
-  "█   ",
-  " ██ ",
-  "   █",
-  "███ "
+  " ████",
+  "█    ",
+  " ███ ",
+  "    █",
+  "████ "
 })
 addLetter("T", {
-  "████",
-  "  █ ",
-  "  █ ",
-  "  █ ",
-  "  █ "
+  "█████",
+  "  █  ",
+  "  █  ",
+  "  █  ",
+  "  █  "
 })
 addLetter("U", {
-  "█  █",
-  "█  █",
-  "█  █",
-  "█  █",
-  " ██ "
+  "█   █",
+  "█   █",
+  "█   █",
+  "█   █",
+  " ███ "
 })
 addLetter("V", {
-  "█  █",
-  "█  █",
-  "█  █",
-  " ██ ",
-  "  █ "
+  "█   █",
+  "█   █",
+  "█   █",
+  " ███ ",
+  "  █  "
 })
 addLetter("W", {
   "█   █",
@@ -197,39 +200,51 @@ addLetter("Y", {
   "  █  "
 })
 addLetter("Z", {
-  "████",
-  "   █",
-  "  █ ",
-  " █  ",
-  "████"
+  "█████",
+  "   █ ",
+  "  █  ",
+  " █   ",
+  "█████"
 })
 addLetter(" ", {
-  "   ",
-  "   ",
-  "   ",
-  "   ",
-  "   "
+  "     ",
+  "     ",
+  "     ",
+  "     ",
+  "     "
 })
 
-local function drawBigText(y, text, color)
-  -- Рисует крупный текст (5 строк) горизонтально, центрируя по экрану
-  -- Сначала вычисляем общую ширину (каждая буква 3 + пробел 1)
+-- Рисует крупный текст с тенью
+local function drawBigText(y, text, color, shadowColor)
   local width = 0
   for ch in text:gmatch(".") do
     if font[ch] then
-      width = width + 3 + 1   -- буква + пробел
+      width = width + 5 + 1
     end
   end
-  width = width - 1  -- убираем последний пробел
+  width = width - 1
   local startX = math.floor((80 - width) / 2) + 1
 
+  -- тень
   for row = 1, 5 do
-    gpu.setForeground(color)
     local curX = startX
     for ch in text:gmatch(".") do
       if font[ch] then
+        gpu.setForeground(shadowColor)
+        gpu.set(curX + 1, y + row, font[ch][row])
+        curX = curX + 5 + 1
+      end
+    end
+  end
+
+  -- основной цвет
+  for row = 1, 5 do
+    local curX = startX
+    for ch in text:gmatch(".") do
+      if font[ch] then
+        gpu.setForeground(color)
         gpu.set(curX, y + row - 1, font[ch][row])
-        curX = curX + 3 + 1
+        curX = curX + 5 + 1
       end
     end
   end
@@ -271,12 +286,11 @@ local function drawBottomPanel()
   gpu.set(69, 23, "[Отзывы]")
 end
 
--- 🔥 Приветственный экран (NEXAR SHOP)
+-- Приветственный экран (NEXAR SHOP)
 local function drawWelcomeScreen()
   gpu.setBackground(0x202020)
   gpu.fill(1, 1, 80, 25, " ")
 
-  -- Строка "Приветствуем в NEXAR SHOP"
   local prefix = "Приветствуем в "
   local shop = "NEXAR SHOP"
   local full = prefix .. shop
@@ -286,22 +300,45 @@ local function drawWelcomeScreen()
   gpu.setForeground(0x00FF00)
   gpu.set(startX + unicode.len(prefix), 2, shop)
 
-  -- Гигантский логотип NEXAR SHOP
-  drawBigText(4, "NEXAR SHOP", 0x00FF00)
+  drawBigText(4, "NEXAR SHOP", 0x00FF00, 0x006600)
 
-  -- "Встаньте на PIM" (зелёный)
   gpu.setForeground(0x00FF00)
-  drawCenteredText(10, "↓   Встаньте на PIM   ↓", 0x00FF00)
-  drawCenteredText(11, "━━━━━━━━━━━━━━━━━━━━", 0x00FF00)
+  drawCenteredText(11, "↓   Встаньте на PIM   ↓", 0x00FF00)
+  drawCenteredText(12, "━━━━━━━━━━━━━━━━━━━━", 0x00FF00)
 
-  -- Контактная строка (серая)
   gpu.setForeground(0x414243)
-  drawCenteredText(14, "По любым вопросам пишите в Telegram: f0rb4ik", 0x414243)
+  drawCenteredText(15, "По любым вопросам пишите в Telegram: f0rb4ik", 0x414243)
 
   gpu.setBackground(0x000000)
 end
 
--- Главное меню (после входа на PIM)
+-- Экран авторизации (показывается после входа на PIM)
+local function drawAuthScreen()
+  gpu.setBackground(0x202020)
+  gpu.fill(1, 1, 80, 25, " ")
+
+  -- Тот же верх, что и на приветственном, но без стрелок, с надписью "Авторизация"
+  local prefix = "Приветствуем в "
+  local shop = "NEXAR SHOP"
+  local full = prefix .. shop
+  local startX = math.floor((80 - unicode.len(full)) / 2) + 1
+  gpu.setForeground(0xFFFFFF)
+  gpu.set(startX, 2, prefix)
+  gpu.setForeground(0x00FF00)
+  gpu.set(startX + unicode.len(prefix), 2, shop)
+
+  drawBigText(4, "NEXAR SHOP", 0x00FF00, 0x006600)
+
+  gpu.setForeground(0xFFFFFF)
+  drawCenteredText(12, "Авторизация....", 0xFFFFFF)
+
+  gpu.setForeground(0x414243)
+  drawCenteredText(15, "По любым вопросам пишите в Telegram: f0rb4ik", 0x414243)
+
+  gpu.setBackground(0x000000)
+end
+
+-- Главное меню (после авторизации)
 local function drawMainMenu()
   clear()
   if currentPlayer then
@@ -349,12 +386,22 @@ local function goToAccount() currentScreen = "account"; drawPlaceholder("Иск�
 local function goBackToMenu() currentScreen = "menu"; drawMainMenu() end
 
 -- ======== Инициализация ========
-drawMainMenu()
+drawWelcomeScreen()
 
 -- ======== Главный цикл ========
 while true do
-  local ev = {event.pull(1)}
+  local ev = {event.pull(0.5)}
   local e = ev[1]
+
+  -- Обработка авторизации (задержка 3 сек)
+  if currentScreen == "auth" then
+    if os.clock() - authStartTime >= AUTH_DELAY then
+      -- Завершаем авторизацию, отправляем запрос на сервер
+      modem.send(serverAddress, 0xffef, serialization.serialize({op = "enter"}))
+      currentScreen = "menu"
+      drawMainMenu()
+    end
+  end
 
   if e == "touch" then
     local x, y = ev[3], ev[4]
@@ -375,11 +422,16 @@ while true do
   elseif e == "pim_player_enter" or e == "player_on" or e == "pim" then
     currentPlayer = ev[2] and ev[2]:match("^%s*(.-)%s*$") or "Игрок"
     playerBalance = 0.00
-    currentScreen = "menu"
-    drawMainMenu()
+
+    -- Запуск авторизации с задержкой
+    if currentScreen ~= "auth" then
+      currentScreen = "auth"
+      authStartTime = os.clock()
+      drawAuthScreen()
+    end
   elseif e == "pim_player_leave" or e == "player_off" then
     currentPlayer = nil
     currentScreen = "welcome"
-    drawMainMenu()
+    drawWelcomeScreen()
   end
 end
