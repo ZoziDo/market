@@ -188,7 +188,7 @@ local function goToAccount()
   end
   currentScreen = "account"
   modem.send(serverAddress, 0xffef, serialization.serialize({
-    op = "getAccount",
+    top = "getAccount",
     name = currentPlayer,
     token = currentToken
   }))
