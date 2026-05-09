@@ -7,170 +7,58 @@ local modem = component.modem
 modem.open(0xffef)
 modem.open(0xfffe)
 
--- ================== КОНФИГУРАЦИЯ ==================
-local DB_PATH = "/home/playerdata.db"
-local ADMIN_NAME = "Zozido"  -- замени на свой ник
+-- ========== КОНФИГУРАЦИЯ ==========
+local DB_PATH = "/home/players.db"
 
--- ================== БАЗА ДАННЫХ ==================
-local playerData = {}   -- [name] = {balance=0, emeralds=0, transactions=0, regDate=""}
-local sessions = {}     -- [name] = {token=..., lastAction=...}
-local ownerAddress = nil
-local marketAddress = nil  -- адрес терминала market_01
-
--- Загрузка данных с диска
-local function loadDatabase()
-  if filesystem.exists(DB_PATH) then
-    local file = io.open(DB_PATH, "r")
-    local content = file:read("*all")
-    file:close()
-    local success, data = pcall(serialization.unserialize, content)
-    if success and type(data) == "table" then
-      playerData = data
-    end
+-- ========== ЗАГРУЗКА БАЗЫ ДАННЫХ ==========
+local players = {}
+if filesystem.exists(DB_PATH) then
+  local file = io.open(DB_PATH, "r")
+  local raw = file:read("*a")
+  file:close()
+  if #raw > 0 then
+    local success, data = pcall(serialization.unserialize, raw)
+    if success and data then players = data end
   end
 end
 
--- Сохранение данных на диск
-local function saveDatabase()
+local function saveDB()
   local file = io.open(DB_PATH, "w")
-  file:write(serialization.serialize(playerData))
+  file:write(serialization.serialize(players))
   file:close()
 end
 
--- Генерация токена (псевдослучайная строка)
-local function generateToken()
-  local chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-  local token = ""
-  for i = 1, 32 do
-    local rand = math.random(1, #chars)
-    token = token .. chars:sub(rand, rand)
-  end
-  return token
-end
+-- ========== ПЕРЕМЕННЫЕ ==========
+local owner = nil           -- адрес модема владельца (админ)
+local sessions = {}         -- [name] = {token = "...", lastAction = os.time()}
 
--- Проверка админа
-local function isAdmin(name)
-  return name == ADMIN_NAME
-end
-
--- Логирование с временной меткой
-local function log(level, message)
+-- ========== УТИЛИТЫ ==========
+local function log(level, msg)
   local timestamp = os.date("%Y-%m-%d %H:%M:%S")
-  print(string.format("[%s] [%s] %s", timestamp, level, message))
+  print(string.format("[%s] [%s] %s", timestamp, level, msg))
 end
 
--- Обработка сообщения от клиента
-local function processMessage(from, port, data)
-  local success, msg = pcall(serialization.unserialize, data)
-  if not success or type(msg) ~= "table" then
-    log("WARN", "Невалидное сообщение от " .. from)
-    return
+local function getOrCreatePlayer(name)
+  if not players[name] then
+    players[name] = {
+      uid = nil,
+      balance = 0.00,
+      transactions = 0,
+      regDate = os.date("%d.%m.%Y %H:%M:%S")
+    }
+    saveDB()
   end
-
-  local op = msg.op
-
-  -- === РЕГИСТРАЦИЯ ТЕРМИНАЛА ===
-  if op == "register" then
-    if not ownerAddress then
-      ownerAddress = from
-      log("INFO", "Владелец зарегистрирован: " .. from)
-      modem.send(from, port, serialization.serialize({op = "welcome", owner = true}))
-    elseif not marketAddress and from ~= ownerAddress then
-      marketAddress = from
-      log("INFO", "Терминал маркета зарегистрирован: " .. from)
-      modem.send(from, port, serialization.serialize({op = "welcome", owner = false}))
-    else
-      log("WARN", "Попытка повторной регистрации от " .. from)
-    end
-  -- === ВХОД ИГРОКА ===
-  elseif op == "enter" then
-    local player = msg.name
-    if not player or type(player) ~= "string" then
-      log("WARN", "Попытка входа без имени от " .. from)
-      return
-    end
-    -- Игнорируем пустые имена
-    if player == "" then
-      log("WARN", "Пустое имя при входе")
-      return
-    end
-    -- Защита от спама
-    if sessions[player] and os.clock() - (sessions[player].lastAction or 0) < 5 then
-      log("WARN", "Слишком частый вход: " .. player)
-      return
-    end
-    -- Инициализация данных игрока
-    if not playerData[player] then
-      playerData[player] = {
-        balance = 0,
-        emeralds = 0,
-        transactions = 0,
-        regDate = os.date("%d.%m.%Y %H:%M:%S")
-      }
-      saveDatabase()
-      log("INFO", "Новый игрок: " .. player)
-    end
-    -- Создание сессии с токеном
-    local token = generateToken()
-    sessions[player] = {token = token, lastAction = os.clock()}
-    log("INFO", "Вход игрока " .. player .. " (терминал " .. from .. ")")
-    modem.send(from, port, serialization.serialize({
-      op = "welcome",
-      status = "ok",
-      token = token,
-      balance = playerData[player].balance,
-      emeralds = playerData[player].emeralds
-    }))
-  -- === ПОЛУЧЕНИЕ ДАННЫХ АККАУНТА ===
-  elseif op == "getAccount" then
-    local player = msg.name
-    local token = msg.token
-    if not player or not token then
-      log("WARN", "Неполные данные аккаунта от " .. from)
-      return
-    end
-    if sessions[player] and sessions[player].token == token then
-      sessions[player].lastAction = os.clock()
-      modem.send(from, port, serialization.serialize({
-        op = "accountData",
-        data = playerData[player],
-        player = player
-      }))
-    else
-      log("WARN", "Неверный токен для " .. player)
-    end
-  -- === ПОКУПКА (добавим позже) ===
-  elseif op == "buy" then
-    local player = msg.name
-    local token = msg.token
-    local amount = tonumber(msg.amount) or 0
-    if not sessions[player] or sessions[player].token ~= token then
-      log("WARN", "Невалидный токен при покупке: " .. player)
-      return
-    end
-    if amount <= 0 or amount > playerData[player].balance then
-      log("WARN", "Недостаточно средств: " .. player)
-      return
-    end
-    playerData[player].balance = playerData[player].balance - amount
-    playerData[player].transactions = playerData[player].transactions + 1
-    saveDatabase()
-    log("INFO", string.format("Покупка %s: -%.2f", player, amount))
-    modem.send(from, port, serialization.serialize({
-      op = "buyResult",
-      status = "ok",
-      balance = playerData[player].balance
-    }))
-  end
+  return players[name]
 end
 
--- ================== ИНИЦИАЛИЗАЦИЯ ==================
-math.randomseed(os.time())
-loadDatabase()
+local function validateSession(session, token)
+  return session and session.token == token and os.time() - (session.lastAction or 0) < 300
+end
+
+-- ========== ОСНОВНОЙ ЦИКЛ ==========
 log("INFO", "Сервер запущен")
-print("Ожидание терминалов...")
+log("INFO", "Ожидание терминалов...")
 
--- ================== ГЛАВНЫЙ ЦИКЛ ==================
 while true do
   local ev = {event.pull(0.5)}
   local name = ev[1]
@@ -178,6 +66,78 @@ while true do
   if name == "modem_message" then
     local from = ev[3]
     local raw = ev[6]
-    processMessage(from, 0xffef, raw)
+    local success, msg = pcall(serialization.unserialize, raw)
+    if not success or not msg or type(msg) ~= "table" then goto continue end
+
+    -- Анти-спам (0.5 сек между сообщениями от одного адреса)
+    local lastTime = sessions["__modem_" .. from] or 0
+    if os.time() - lastTime < 0.5 then
+      log("WARN", "Спам от " .. from)
+      goto continue
+    end
+    sessions["__modem_" .. from] = os.time()
+
+    log("INFO", string.format("Получено от %s | op = %s", from, tostring(msg.op)))
+
+    if msg.op == "register" then
+      if not owner then
+        owner = from
+        log("INFO", "✅ ВЛАДЕЛЕЦ (АДМИН) ЗАРЕГИСТРИРОВАН: " .. from)
+      end
+      modem.send(from, 0xffef, serialization.serialize({
+        op = "welcome",
+        owner = (from == owner)
+      }))
+
+    elseif msg.op == "enter" then
+      local playerName = msg.name
+      if not playerName or playerName == "" then
+        log("WARN", "Попытка входа без имени от " .. from)
+        goto continue
+      end
+
+      -- Создаём/обновляем запись игрока
+      local player = getOrCreatePlayer(playerName)
+
+      -- Генерируем токен
+      local token = tostring(math.random(100000000, 999999999))
+      sessions[playerName] = {
+        token = token,
+        lastAction = os.time()
+      }
+
+      log("INFO", "👤 ИГРОК " .. playerName .. " ЗАШЁЛ (токен: " .. token .. ")")
+      modem.send(from, 0xffef, serialization.serialize({
+        op = "welcome",
+        status = "ok",
+        token = token,
+        balance = player.balance,
+        transactions = player.transactions,
+        regDate = player.regDate
+      }))
+
+    elseif msg.op == "buy" then
+      -- Обработка покупки (позже)
+      -- Проверяем сессию: msg.token, msg.name
+      local player = players[msg.name]
+      if not player then goto continue end
+      if not validateSession(sessions[msg.name], msg.token) then
+        log("WARN", "Неверный токен для " .. msg.name)
+        goto continue
+      end
+      log("INFO", "Покупка запрошена: " .. msg.name .. " сумма " .. tostring(msg.value))
+      -- TODO: реализовать транзакцию
+
+    elseif msg.op == "sell" then
+      -- Обработка продажи (позже)
+      local player = players[msg.name]
+      if not player then goto continue end
+      if not validateSession(sessions[msg.name], msg.token) then
+        log("WARN", "Неверный токен для " .. msg.name)
+        goto continue
+      end
+      log("INFO", "Продажа запрошена: " .. msg.name .. " сумма " .. tostring(msg.value))
+    end
   end
+  ::continue::
 end
