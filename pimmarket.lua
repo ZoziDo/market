@@ -21,23 +21,24 @@ local authStartTime = 0
 local AUTH_TIMEOUT = 3
 local accountRequestTime = 0
 local ACCOUNT_TIMEOUT = 3
+local playerAuthorized = false   -- флаг, что игрок уже авторизован и токен получен
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
 gpu.setBackground(0x000000)
 
--- ========== КРУПНЫЙ ШРИФТ NEXAR SHOP (центрирован) ==========
+-- ========== КРУПНЫЙ ШРИФТ NEXAR SHOP (центрирован, SHOP под NEXAR) ==========
 local function drawBigTitle()
-  gpu.setForeground(0x00FF00)
+  gpu.setForeground(0xff00c8)
 
-  -- NEXAR
+  -- NEXAR (50 символов ширина)
   gpu.set(14, 3, "  ███╗   ██╗ ███████╗ ██╗  ██╗  █████╗  ██████╗ ")
   gpu.set(14, 4, "  ████╗  ██║ ██╔════╝ ██║ ██╔╝ ██╔══██╗ ██╔══██╗")
   gpu.set(14, 5, "  ██╔██╗ ██║ █████╗   █████╔╝  ███████║ ██████╔╝")
   gpu.set(14, 6, "  ██║╚██╗██║ ██╔══╝   ██╔═██╗  ██╔══██║ ██╔══██╗")
   gpu.set(14, 7, "  ██║ ╚████║ ███████╗ ██║  ██╗ ██║  ██║ ██║  ██║")
 
-  -- SHOP
+  -- SHOP (47 символов ширина, под NEXAR с тем же X=14)
   gpu.set(14, 9,  "  ███████╗ ██╗  ██╗  ██████╗  ██████╗ ")
   gpu.set(14, 10, "  ██╔════╝ ██║  ██║ ██╔═══██╗ ██╔══██╗")
   gpu.set(14, 11, "  ███████╗ ███████║ ██║   ██║ ██████╔╝")
@@ -115,24 +116,19 @@ end
 -- Экран аккаунта (текст по центру, кнопка «Назад» маленькая)
 local function drawAccount(data)
   clear()
-  -- Имя игрока
   drawCenteredText(7, currentPlayer .. ":", 0xFFFFFF)
-  -- Баланс
   local balanceText = string.format("Баланс: %.2f Ресоб $ | %.2f Змоб ֍", data.balance, data.balance)
   drawCenteredText(9, balanceText, 0x00FF00)
-  -- Транзакции
   drawCenteredText(11, "Совершенно транзакций: " .. tostring(data.transactions or 0), 0x00FF00)
-  -- Регистрация
   drawCenteredText(13, "Регистрация: " .. (data.regDate or "Неизвестно"), 0x00FF00)
 
-  -- Кнопка «Назад» (маленькая, по центру внизу)
   local backText = "Назад"
   local backX = math.floor((80 - unicode.len(backText)) / 2) + 1
   gpu.setForeground(0xFFFFFF)
   gpu.set(backX, 23, backText)
 end
 
--- Экран загрузки аккаунта (аналогично с маленькой кнопкой)
+-- Экран загрузки аккаунта
 local function drawAccountLoading()
   clear()
   drawCenteredText(12, "Загрузка...", 0x888888)
@@ -198,7 +194,6 @@ while true do
         end
       end
     elseif currentScreen == "account" or currentScreen == "account_loading" then
-      -- Проверка нажатия на слово «Назад» (без фона)
       local backText = "Назад"
       local backX = math.floor((80 - unicode.len(backText)) / 2) + 1
       if y >= 22 and y <= 24 and x >= backX-2 and x <= backX+unicode.len(backText)+2 then
@@ -210,21 +205,32 @@ while true do
   elseif e=="player_on" or e=="pim" or e=="pim_player_enter" then
     local playerName = ev[2] or "Игрок"
     currentPlayer = playerName:match("^%s*(.-)%s*$") or playerName
-    playerBalance = 0.0
-    currentToken = nil
-    print("Игрок встал на PIM: "..currentPlayer)
 
-    currentScreen = "auth"
-    authStartTime = os.clock()
-    drawAuthScreen()
+    -- Если игрок уже авторизован и это тот же самый, не отправляем повторный enter
+    if playerAuthorized and currentPlayer == currentPlayer then
+      print("Игрок уже авторизован, пропускаю enter")
+      currentScreen = "menu"
+      drawMainMenu()
+    else
+      -- Сбрасываем старый токен и отправляем enter заново
+      currentToken = nil
+      playerBalance = 0.0
+      playerAuthorized = false
+      print("Игрок встал на PIM: "..currentPlayer)
 
-    modem.send(serverAddress,0xffef,serialization.serialize({op="enter", name=currentPlayer}))
-    print("Отправлен enter для "..currentPlayer)
+      currentScreen = "auth"
+      authStartTime = os.clock()
+      drawAuthScreen()
+
+      modem.send(serverAddress,0xffef,serialization.serialize({op="enter", name=currentPlayer}))
+      print("Отправлен enter для "..currentPlayer)
+    end
 
   elseif e=="player_off" or e=="pim_player_leave" then
     print("Игрок сошёл с PIM")
     currentPlayer = nil
     currentToken = nil
+    playerAuthorized = false
     currentScreen = "welcome"
     drawWelcomeScreen()
   elseif e=="modem_message" then
@@ -240,6 +246,7 @@ while true do
           playerBalance = msg.balance or 0.0
           playerTransactions = msg.transactions or 0
           playerRegDate = msg.regDate or ""
+          playerAuthorized = true   -- игрок успешно авторизован
           print("✅ Авторизация успешна, токен: "..currentToken)
           if currentScreen == "auth" then
             currentScreen = "menu"
