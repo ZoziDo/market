@@ -44,7 +44,10 @@ end
 
 local function validateSession(name, token)
   local s = sessions[name]
-  return s and s.token == token and os.time() - (s.lastAction or 0) < 300
+  local valid = s and s.token == token and os.time() - (s.lastAction or 0) < 300
+  log("DEBUG", string.format("Проверка сессии: name=%s token=%s, server_token=%s, time_diff=%s, result=%s",
+    name, token, s and s.token or "nil", s and os.time() - s.lastAction or "нет", tostring(valid)))
+  return valid
 end
 
 -- ========== ЦИКЛ ==========
@@ -67,7 +70,7 @@ while true do
     end
     sessions["__modem_"..from] = os.time()
 
-    log("INFO", string.format("От %s | op=%s", from, tostring(msg.op)))
+    log("INFO", string.format("От %s | op=%s | name=%s | token=%s", from, tostring(msg.op), msg.name or "?", msg.token or "нет"))
 
     if msg.op == "register" then
       if not owner then
@@ -83,9 +86,19 @@ while true do
         goto continue
       end
       local player = getOrCreatePlayer(playerName)
-      local token = tostring(math.random(100000000, 999999999))
-      sessions[playerName] = {token=token, lastAction=os.time()}
-      log("INFO", "👤 " .. playerName .. " вошёл. Токен: " .. token)
+
+      local existingSession = sessions[playerName]
+      local token
+      if existingSession and os.time() - (existingSession.lastAction or 0) < 300 then
+        token = existingSession.token
+        existingSession.lastAction = os.time()
+        log("INFO", "👤 " .. playerName .. " продлил сессию. Токен: " .. token)
+      else
+        token = tostring(math.floor(math.random() * 900000000 + 100000000))
+        sessions[playerName] = {token = token, lastAction = os.time()}
+        log("INFO", "👤 " .. playerName .. " вошёл. Токен: " .. token)
+      end
+
       modem.send(from, 0xffef, serialization.serialize({
         op="welcome", status="ok", token=token,
         balance=player.balance, transactions=player.transactions,
@@ -93,13 +106,17 @@ while true do
       }))
 
     elseif msg.op == "getAccount" then
-      -- Отправка данных аккаунта по запросу (требует токен)
+      log("DEBUG", string.format("getAccount запрос: name=%s token=%s", msg.name, msg.token))
       if not validateSession(msg.name, msg.token) then
         log("WARN", "Неверный токен для getAccount от " .. (msg.name or "?"))
         goto continue
       end
       local player = players[msg.name]
-      if not player then goto continue end
+      if not player then
+        log("WARN", "Игрок не найден: " .. msg.name)
+        goto continue
+      end
+      sessions[msg.name].lastAction = os.time()
       modem.send(from, 0xffef, serialization.serialize({
         op="accountData",
         data = {
@@ -108,6 +125,7 @@ while true do
           regDate = player.regDate
         }
       }))
+      log("INFO", "Аккаунт отправлен для " .. msg.name)
 
     elseif msg.op == "buy" or msg.op == "sell" then
       local player = players[msg.name]
@@ -115,6 +133,7 @@ while true do
         log("WARN", "Неверный токен от " .. (msg.name or "?"))
         goto continue
       end
+      sessions[msg.name].lastAction = os.time()
       log("INFO", string.format("%s: %s сумма %s", msg.op, msg.name, tostring(msg.value)))
     end
   end
