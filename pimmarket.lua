@@ -14,6 +14,8 @@ modem.open(0xfffe)
 
 local serverAddress = "535305a9-37c9-4645-b7c4-46204187ee7b"
 local currentPlayer, currentToken, playerBalance = nil, nil, 0.0
+local playerTransactions = 0
+local playerRegDate = ""
 local currentScreen = "welcome"
 
 -- ========== ЭКРАН ==========
@@ -89,7 +91,7 @@ end
 local menuButtons = {
   shop = {x=31,xs=20,y=8,ys=3,text="Магазин",tx=6,ty=1,bg=0x444444,fg=0x3375cc},
   util = {x=31,xs=20,y=12,ys=3,text="Полезности",tx=5,ty=1,bg=0x444444,fg=0x3375cc},
-  account = {x=31,xs=20,y=16,ys=3,text="Исключить",tx=5,ty=1,bg=0x444444,fg=0x3375cc}
+  account = {x=31,xs=20,y=16,ys=3,text="Аккаунт",tx=6,ty=1,bg=0x444444,fg=0x3375cc}   -- переименована
 }
 local function drawButton(btn)
   gpu.setBackground(btn.bg) gpu.fill(btn.x,btn.y,btn.xs,btn.ys," ")
@@ -154,16 +156,46 @@ local function drawMainMenu()
   else drawWelcomeScreen() end
 end
 
-local function drawPlaceholder(title)
-  clear() drawCenteredText(8,title.." (в разработке)",0x00FF00)
-  gpu.setBackground(0x333333) gpu.fill(2,22,12,3," ")
-  gpu.setForeground(0xFFFFFF) gpu.set(4,23,"Назад")
+-- ========== НОВЫЙ ЭКРАН АККАУНТА ==========
+local function drawAccount(data)
+  clear()
+  drawCenteredText(2, "Аккаунт", 0xFFD700)   -- золотой заголовок
+
+  -- Левая колонка: подписи
+  gpu.setForeground(0xFF00FF)   -- розовый
+  gpu.set(5, 5, "Баланс:")
+  gpu.set(5, 6, "Совершено транзакций:")
+  gpu.set(5, 7, "Регистрация:")
+
+  -- Правая колонка: значения (белый)
+  gpu.setForeground(0xFFFFFF)
+  gpu.set(30, 5, string.format("%.2f Ресурсы $ | %.2f Эмов", data.balance or 0, data.balance or 0))  -- пока эмов = ресурсы, можно разделить
+  gpu.set(30, 6, tostring(data.transactions or 0))
+  gpu.set(30, 7, data.regDate or "Неизвестно")
+
+  -- Кнопка "Назад"
+  gpu.setBackground(0x333333)
+  gpu.fill(2, 22, 12, 3, " ")
+  gpu.setForeground(0xFFFFFF)
+  gpu.set(4, 23, "Назад")
   gpu.setBackground(0x000000)
 end
 
-local function goToShop() currentScreen="shop" drawPlaceholder("Магазин") end
-local function goToUtility() currentScreen="utility" drawPlaceholder("Полезности") end
-local function goToAccount() currentScreen="account" drawPlaceholder("Исключить") end
+-- Обработчик перехода в аккаунт (отправляет запрос)
+local function goToAccount()
+  if not currentToken then return end
+  currentScreen = "account"
+  modem.send(serverAddress, 0xffef, serialization.serialize({
+    op = "getAccount",
+    name = currentPlayer,
+    token = currentToken
+  }))
+  -- экран нарисуется при получении ответа
+  drawCenteredText(12, "Загрузка...", 0x888888)  -- временная заглушка
+end
+
+local function goToShop() currentScreen="shop" drawCenteredText(8,"Магазин (в разработке)",0x00FF00) end
+local function goToUtility() currentScreen="utility" drawCenteredText(8,"Полезности (в разработке)",0x00FF00) end
 local function goBackToMenu() currentScreen="menu" drawMainMenu() end
 
 -- ======== ИНИЦИАЛИЗАЦИЯ ========
@@ -187,7 +219,10 @@ while true do
           break
         end
       end
-    elseif currentScreen=="shop" or currentScreen=="utility" or currentScreen=="account" then
+    elseif currentScreen == "account" then
+      -- Если нажали "Назад" (область 2..13, 22..24)
+      if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
+    elseif currentScreen=="shop" or currentScreen=="utility" then
       if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
     end
   elseif e=="player_on" or e=="pim" or e=="pim_player_enter" then
@@ -197,7 +232,7 @@ while true do
     print("Игрок встал на PIM: "..currentPlayer)
     currentScreen = "auth"
     drawAuthScreen()
-    os.sleep(1)   -- 1 секунда авторизации
+    os.sleep(1)
     modem.send(serverAddress,0xffef,serialization.serialize({op="enter",name=currentPlayer}))
     print("Отправлен enter для "..currentPlayer)
     currentScreen = "menu"
@@ -212,14 +247,22 @@ while true do
     local _,_,from,_,_,data = ev[2],ev[3],ev[4],ev[5],ev[6]
     if from == serverAddress then
       local success, msg = pcall(serialization.unserialize, data)
-      if success and msg and msg.op=="welcome" then
-        print("✅ Получен welcome от сервера")
-        if msg.token then
-          currentToken = msg.token
-          playerBalance = msg.balance or 0.0
-          print("Токен: "..currentToken.." Баланс: "..playerBalance)
+      if success and msg then
+        if msg.op == "welcome" then
+          print("✅ Получен welcome от сервера")
+          if msg.token then
+            currentToken = msg.token
+            playerBalance = msg.balance or 0.0
+            playerTransactions = msg.transactions or 0
+            playerRegDate = msg.regDate or ""
+          end
+          if currentScreen=="menu" then drawMainMenu() end
+        elseif msg.op == "accountData" then
+          -- Данные аккаунта пришли
+          if currentScreen == "account" then
+            drawAccount(msg.data)
+          end
         end
-        if currentScreen=="menu" then drawMainMenu() end
       end
     end
   end
