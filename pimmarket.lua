@@ -35,7 +35,7 @@ local searchActive = false
 local searchInput = ""
 local showOnlyAvailable = false
 local lastScrollTime = 0
-local SCROLL_COOLDOWN = 0.08
+local SCROLL_COOLDOWN = 0.05
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
@@ -123,7 +123,7 @@ end
 -- Кнопки панели покупки (строка 21)
 local searchButton = {text = "Поиск...", x=3, y=21, xs=20, ys=1, bg=0x333333, fg=0x00aaff}
 local stockButton   = {text = "● В наличии", x=33, y=21, xs=14, ys=1, bg=0x333333, fg=0x00aaff}
-local prevButton    = {text = "Назад", x=55, y=21, xs=7, ys=1, bg=0x333333, fg=0xffaa00}
+local prevButton    = {text = "Назад", x=56, y=21, xs=7, ys=1, bg=0x333333, fg=0xffaa00}
 local nextButton    = {text = "Далее", x=70, y=21, xs=7, ys=1, bg=0x333333, fg=0xffaa00}
 
 -- Кнопки меню "Магазин"
@@ -180,29 +180,18 @@ local function drawBuyStatic()
   gpu.set(3, 5, string.rep("─", 74))
 
   -- Нижние статические элементы
-  -- Разделитель после списка (строка 18)
   gpu.set(3, 18, string.rep("─", 74))
-  -- "Категория" (строка 19)
   drawCenteredText(19, "Категория", 0x888888)
-  -- Пустая строка 20
-  -- Кнопки на 21 строке (будут обновлены в drawBuyItems)
-  -- Разделитель перед главной кнопкой (строка 23)
   gpu.set(3, 23, string.rep("─", 74))
-  -- Главная кнопка "Назад" (строка 24)
   drawFlexButton(backButton)
 end
 
 -- ========== ДИНАМИЧЕСКОЕ ОБНОВЛЕНИЕ СПИСКА ==========
 local function drawBuyItems()
-  -- Очищаем только область предметов (строки 6..17) и индикатор страницы (22)
   gpu.setBackground(0x000000)
-  for y = 6, 17 do
-    gpu.fill(2, y, 76, 1, " ")
-  end
-  -- Индикатор страницы (строка 22)
+  for y = 6, 17 do gpu.fill(2, y, 76, 1, " ") end
   gpu.fill(2, 22, 76, 1, " ")
 
-  -- Фильтрация
   local filtered = {}
   for _, item in ipairs(shopItems) do
     local matchesSearch = (shopSearch == "" or string.find(string.lower(item.name), string.lower(shopSearch), 1, true))
@@ -216,15 +205,11 @@ local function drawBuyItems()
   local start = (shopPage - 1) * shopPageSize + 1
   local finish = math.min(start + shopPageSize - 1, #filtered)
 
-  -- Предметы
   for i = start, finish do
     local item = filtered[i]
-    local y = 5 + (i - start)  -- 6..17
-    if (i - start) % 2 == 0 then
-      gpu.setBackground(0x111111)
-    else
-      gpu.setBackground(0x1a1a1a)
-    end
+    local y = 5 + (i - start)
+    if (i - start) % 2 == 0 then gpu.setBackground(0x111111)
+    else gpu.setBackground(0x1a1a1a) end
     gpu.fill(2, y, 76, 1, " ")
     gpu.setForeground(0x00ff88)
     gpu.set(3, y, item.name:sub(1, 37))
@@ -234,27 +219,19 @@ local function drawBuyItems()
   end
   gpu.setBackground(0x000000)
 
-  -- Индикатор страницы МЕЖДУ кнопками "Назад" и "Далее"
+  -- Индикатор страницы между кнопками "Назад" и "Далее"
   local pageStr = shopPage .. "/" .. shopTotalPages
-  local middleX = math.floor((62 + 70) / 2)   -- центр промежутка (66)
+  local middleX = math.floor((62 + 70) / 2)
   local pageX = middleX - math.floor(unicode.len(pageStr) / 2)
   gpu.setForeground(0xffffff)
-  gpu.set(pageX, 22, pageStr)
+  gpu.fill(middleX - 4, 22, 8, 1, " ")
+  gpu.set(pageX, 21, pageStr)
 
-  -- Обновим кнопки (текст поиска, цвет "В наличии")
-  if searchActive then
-    searchButton.text = searchInput .. "_"
-  else
-    searchButton.text = "Поиск..."
-  end
-  if showOnlyAvailable then
-    stockButton.text = "● В наличии"
-    stockButton.fg = 0x00ff00
-  else
-    stockButton.text = "● В наличии"
-    stockButton.fg = 0xff0000
-  end
-  -- Перерисовываем кнопки на своём месте (строка 21)
+  -- Обновление кнопок
+  if searchActive then searchButton.text = searchInput .. "_"
+  else searchButton.text = "Поиск..." end
+  if showOnlyAvailable then stockButton.text = "● В наличии"; stockButton.fg = 0x00ff00
+  else stockButton.text = "● В наличии"; stockButton.fg = 0xff0000 end
   drawFlexButton(searchButton)
   drawFlexButton(stockButton)
   drawFlexButton(prevButton)
@@ -349,10 +326,10 @@ local function drawWelcomeScreen()
   gpu.setBackground(0x202020) gpu.fill(1,1,80,25," ")
   drawBigTitle()
   gpu.setForeground(0x00FF00)
-  drawCenteredText(18, "↓   Встаньте на PIM   ↓", 0x00FF00)
-  drawCenteredText(19, "━━━━━━━━━━━━━━━━━━━━", 0x00FF00)
+  drawCenteredText(17, "↓   Встаньте на PIM   ↓", 0x00FF00)
+  drawCenteredText(18, "━━━━━━━━━━━━━━━━━━━━", 0x00FF00)
   gpu.setForeground(0x414243)
-  drawCenteredText(22, "По любым вопросам пишите в Telegram: f0rb4ik", 0x414243)
+  drawCenteredText(21, "По любым вопросам пишите в Telegram: f0rb4ik", 0x414243)
   gpu.setBackground(0x000000)
 end
 
