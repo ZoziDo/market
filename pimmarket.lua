@@ -190,7 +190,7 @@ local function drawHelpScreen()
 
   -- Навигация
   local pageStr = "←   " .. helpPage .. "   →"
-  drawCenteredText(21, pageStr, 0x00CCFF)
+  drawCenteredText(20, pageStr, 0x00CCFF)
 
   -- Кнопка Назад
   drawFlexButton(backButton)
@@ -376,7 +376,7 @@ while true do
       -- Стрелки перелистывания (строка 21)
       local pageStr = "←   " .. helpPage .. "   →"
       local pageX = math.floor((80 - unicode.len(pageStr)) / 2) + 1
-      if y == 21 then
+      if y == 20 then
         if x >= pageX and x < pageX + 4 and helpPage > 1 then
           helpPage = helpPage - 1
           drawHelpScreen()
