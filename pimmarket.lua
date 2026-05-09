@@ -32,24 +32,32 @@ gpu.setBackground(0x000000)
 -- ========== КРУПНЫЙ ШРИФТ NEXAR SHOP ==========
 local function drawBigTitle()
   gpu.setForeground(0xff7300)
-  local lines = {
-"  ██████╗ ██████╗  █████╗ ██████╗ ██╗  ██╗ ██████╗ ███╗   ██╗",
-"  ██╔══██╗██╔══██╗██╔══██╗██╔══██╗██║ ██╔╝██╔═══██╗████╗  ██║",
-"  ██║  ██║██████╔╝███████║██║  ██║█████╔╝ ██║   ██║██╔██╗ ██║",
-"  ██║  ██║██╔══██╗██╔══██║██║  ██║██╔═██╗ ██║   ██║██║╚██╗██║",
-"  ██████╔╝██║  ██║██║  ██║██████╔╝██║  ██╗╚██████╔╝██║ ╚████║",
-              "                                                ",
-              "       ███████╗ ██╗  ██╗  ██████╗  ██████╗      ",
-              "       ██╔════╝ ██║  ██║ ██╔═══██╗ ██╔══██╗     ",
-              "       ███████╗ ███████║ ██║   ██║ ██████╔╝     ",
-              "       ╚════██║ ██╔══██║ ██║   ██║ ██╔═══╝      ",
-              "       ███████║ ██║  ██║ ╚██████╔╝ ██║          ",
+
+  local darkonLines = {
+    "  ██████╗ ██████╗  █████╗ ██████╗ ██╗  ██╗ ██████╗ ███╗   ██╗",
+    "  ██╔══██╗██╔══██╗██╔══██╗██╔══██╗██║ ██╔╝██╔═══██╗████╗  ██║",
+    "  ██║  ██║██████╔╝███████║██║  ██║█████╔╝ ██║   ██║██╔██╗ ██║",
+    "  ██║  ██║██╔══██╗██╔══██║██║  ██║██╔═██╗ ██║   ██║██║╚██╗██║",
+    "  ██████╔╝██║  ██║██║  ██║██████╔╝██║  ██╗╚██████╔╝██║ ╚████║",
   }
-  for i, line in ipairs(lines) do
-    if #line < 50 then lines[i] = line .. string.rep(" ", 50 - #line) end
+  local darkonOffset = 47
+  local darkonX = math.floor((80 - #darkonLines[1]) / 2) + darkonOffset
+  for i, line in ipairs(darkonLines) do
+    gpu.set(darkonX, 4 + i, line)
   end
-  local startX = 10
-  for i, line in ipairs(lines) do gpu.set(startX, 3 + i, line) end
+
+  local shopLines = {
+    "  ███████╗ ██╗  ██╗  ██████╗  ██████╗ ",
+    "  ██╔════╝ ██║  ██║ ██╔═══██╗ ██╔══██╗",
+    "  ███████╗ ███████║ ██║   ██║ ██████╔╝",
+    "  ╚════██║ ██╔══██║ ██║   ██║ ██╔═══╝ ",
+    "  ███████║ ██║  ██║ ╚██████╔╝ ██║     "
+  }
+  local shopOffset = 28
+  local shopX = math.floor((80 - #shopLines[1]) / 2) + shopOffset
+  for i, line in ipairs(shopLines) do
+    gpu.set(shopX, 10 + i, line)
+  end
 end
 
 -- ========== ФУНКЦИИ ЭКРАНА ==========
@@ -105,71 +113,68 @@ local function isButtonClicked(btn, x, y)
          x >= btn.x and x < btn.x + btn.xs
 end
 
+-- Кнопки меню "Магазин"
+local shopMenuButtons = {
+  buy = {x=31,xs=20,y=7,ys=3,text="Покупка",tx=6,ty=1,bg=0x444444,fg=0x3375cc},
+  sell = {x=31,xs=20,y=11,ys=3,text="Пополнение",tx=5,ty=1,bg=0x444444,fg=0x3375cc},
+  bundle = {x=31,xs=20,y=15,ys=3,text="Наборы/Квесты",tx=4,ty=1,bg=0x444444,fg=0x3375cc}
+}
+
+local function drawShopMenu()
+  clear()
+  drawCenteredText(4, "МАГАЗИН", 0xff7300)
+  for _,btn in pairs(shopMenuButtons) do
+    drawButton(btn)
+  end
+  drawFlexButton(backButton)
+end
+
 -- Страницы помощи (прямая отрисовка)
 local function drawHelpScreen()
   clear()
   
   if helpPage == 1 then
     drawCenteredText(2, "Информация об магазине", 0xff7300)
-    
     drawCenteredText(4, "Добро пожаловать в магазин/обменник warg'а Legend", 0xffffff)
     drawCenteredText(5, "Обязательно к прочтению", 0xff0000)
-    
     gpu.setForeground(0xff7300)
     gpu.set(4, 7, "1. Что такое $ – Это торговая валюта")
-    
     gpu.setForeground(0xffffff)
     gpu.set(4, 8, "за ресурсы которыми можно пополнить данный магазин")
-    
     gpu.setForeground(0xff7300)
     gpu.set(4, 9, "Что такое ♦ – Это эмеральды")
-    
     gpu.setForeground(0xffffff)
     gpu.set(4, 10, 'которыми можно пополнить магазин в виде физических "денег"')
-    
     gpu.setForeground(0xff7300)
     gpu.set(4, 12, '2. Как пополнять свой баланс для покупок - в разделе')
-    
     gpu.setForeground(0x00aaff)
     gpu.set(4, 13, '"Пополнить"')
-    
     gpu.setForeground(0xffffff)
     gpu.set(4, 14, "Вы можете пополнить свой баланс")
-    
     gpu.setForeground(0x00ff88)
     gpu.set(4, 15, "$ – Ресурсами скупаемыми магазином")
-    
     gpu.setForeground(0xffffff)
     gpu.set(4, 16, "и так-же ♦ – Физическими деньгами")
-
   elseif helpPage == 2 then
     drawCenteredText(2, "Информация об магазине", 0xff7300)
-    
     gpu.setForeground(0xff7300)
     gpu.set(4, 5, "3. Магазин имеет 3 вида оплаты")
-    
     gpu.setForeground(0x00ff88)
     gpu.set(4, 6, "$ - Только ресурсы")
-    
     gpu.setForeground(0x00aaff)
     gpu.set(4, 7, "♦ - Только эмеральны")
-    
     gpu.setForeground(0xffaa00)
     gpu.set(4, 8, "$ и ♦ - Смежная оплата за обе валюты")
-    
     gpu.setForeground(0xff7300)
     gpu.set(4, 10, "4. Как совершить покупку - в разделе")
-    
     gpu.setForeground(0xffffff)
     gpu.set(4, 11, '"Покупка" Выбираете интересующий товар,')
     gpu.set(4, 12, "указываете кол-во и нажимаете на 'купить'")
     gpu.set(4, 13, "товар будет выдан автоматически. Таким же")
     gpu.set(4, 14, "образом совершается покупка Наборов и")
     gpu.set(4, 15, 'Квестов в разделе "Наборы/Квесты"')
-
   elseif helpPage == 3 then
     drawCenteredText(2, "Информация об магазине", 0xff7300)
-    
     gpu.setForeground(0xff0000)
     gpu.set(4, 5, "5. Правила:")
     gpu.setForeground(0xffffff)
@@ -180,18 +185,13 @@ local function drawHelpScreen()
     gpu.set(4, 10, "о любых сбоях в работе, багах или")
     gpu.set(4, 11, "возможных улучшениях рекомендуется")
     gpu.set(4, 12, "сообщить или предложить Владельцам в")
-    
     gpu.setForeground(0x00aaff)
     gpu.set(4, 13, "Telegram: f0rb4ik")
-    
     drawCenteredText(15, "Приятных покупок", 0x00ff88)
   end
 
-  -- Навигация
   local pageStr = "⟵ " .. helpPage .. " ⟶"
   drawCenteredText(20, pageStr, 0x00CCFF)
-
-  -- Кнопка Назад
   drawFlexButton(backButton)
 end
 
@@ -236,11 +236,9 @@ local function drawMainMenu()
   else drawWelcomeScreen() end
 end
 
--- Экран аккаунта
 local function drawAccount(data)
   clear()
   drawCenteredText(6, currentPlayer .. ":", 0xFFD700)
-
   local balance = data.balance or 0
   local balancePart1 = string.format("Баланс: %.2f Ресов $ | ", balance)
   local balancePart2 = string.format("%.2f Эмов *", balance)
@@ -274,7 +272,7 @@ local function drawAccountLoading()
   drawFlexButton(backButton)
 end
 
--- Попытка автоматического обновления токена
+-- Попытка обновления токена
 local function retryAccountAfterTokenRefresh()
   if not currentPlayer then return end
   modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
@@ -325,7 +323,10 @@ local function goToAccount()
   }))
 end
 
-local function goToShop() currentScreen="shop" clear() drawCenteredText(8,"Магазин (в разработке)",0x00FF00) end
+local function goToShop()
+  currentScreen = "shop"
+  drawShopMenu()
+end
 local function goToUtility() currentScreen="utility" clear() drawCenteredText(8,"Полезности (в разработке)",0x00FF00) end
 local function goToHelp()
   currentScreen = "help"
@@ -339,7 +340,7 @@ drawWelcomeScreen()
 modem.send(serverAddress,0xffef,serialization.serialize({op="register"}))
 print("Терминал отправляет регистрацию...")
 
--- ======== ГЛАВНЫЙ ЦИКЛ (исправлен) ========
+-- ======== ГЛАВНЫЙ ЦИКЛ ========
 while true do
   local ev = {event.pull(0.5)}
   local e = ev[1]
@@ -372,7 +373,6 @@ while true do
         if x >= 4 and x <= 13 then goToHelp() end
       end
     elseif currentScreen == "help" then
-      -- Стрелки перелистывания (строка 21)
       local pageStr = "←   " .. helpPage .. "   →"
       local pageX = math.floor((80 - unicode.len(pageStr)) / 2) + 1
       if y == 20 then
@@ -384,7 +384,6 @@ while true do
           drawHelpScreen()
         end
       end
-      -- Кнопка "Назад"
       if isButtonClicked(backButton, x, y) then
         goBackToMenu()
       end
@@ -392,7 +391,37 @@ while true do
       if isButtonClicked(backButton, x, y) then
         goBackToMenu()
       end
-    elseif currentScreen=="shop" or currentScreen=="utility" then
+    elseif currentScreen == "shop" then
+      for name, btn in pairs(shopMenuButtons) do
+        if x>=btn.x and x<btn.x+btn.xs and y>=btn.y and y<btn.y+btn.ys then
+          if name == "buy" then
+            currentScreen = "shop_buy"
+            clear()
+            drawCenteredText(10, "Покупка (в разработке)", 0xffffff)
+            drawFlexButton(backButton)
+          elseif name == "sell" then
+            currentScreen = "shop_sell"
+            clear()
+            drawCenteredText(10, "Пополнение (в разработке)", 0xffffff)
+            drawFlexButton(backButton)
+          elseif name == "bundle" then
+            currentScreen = "shop_bundle"
+            clear()
+            drawCenteredText(10, "Наборы/Квесты (в разработке)", 0xffffff)
+            drawFlexButton(backButton)
+          end
+          break
+        end
+      end
+      if isButtonClicked(backButton, x, y) then
+        goBackToMenu()
+      end
+    elseif currentScreen == "shop_buy" or currentScreen == "shop_sell" or currentScreen == "shop_bundle" then
+      if isButtonClicked(backButton, x, y) then
+        currentScreen = "shop"
+        drawShopMenu()
+      end
+    elseif currentScreen == "utility" then
       if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
     end
   elseif e=="player_on" or e=="pim" or e=="pim_player_enter" then
