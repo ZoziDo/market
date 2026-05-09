@@ -41,7 +41,8 @@ local function getRealTime()
         body = body .. chunk
       end
       conn:close()
-      local match = body:match("(%d+%-\d+%-\d+ %d+:%d+:%d+)")
+      -- ИСПРАВЛЕННАЯ СТРОКА: %d для цифр, %- для тире
+      local match = body:match("(%d+%-%d+%-%d+ %d+:%d+:%d+)")
       if match then
         local year, month, day, time = match:match("(%d+)%-(%d+)%-(%d+) (.+)")
         if year and month and day and time then
