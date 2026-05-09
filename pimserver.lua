@@ -7,10 +7,8 @@ local modem = component.modem
 modem.open(0xffef)
 modem.open(0xfffe)
 
--- ========== КОНФИГУРАЦИЯ ==========
+-- ========== БАЗА ДАННЫХ ==========
 local DB_PATH = "/home/players.db"
-
--- ========== ЗАГРУЗКА БАЗЫ ДАННЫХ ==========
 local players = {}
 if filesystem.exists(DB_PATH) then
   local file = io.open(DB_PATH, "r")
@@ -29,35 +27,28 @@ local function saveDB()
 end
 
 -- ========== ПЕРЕМЕННЫЕ ==========
-local owner = nil           -- адрес модема владельца (админ)
-local sessions = {}         -- [name] = {token = "...", lastAction = os.time()}
+local owner = nil
+local sessions = {}   -- [name] = {token, lastAction}
 
--- ========== УТИЛИТЫ ==========
 local function log(level, msg)
-  local timestamp = os.date("%Y-%m-%d %H:%M:%S")
-  print(string.format("[%s] [%s] %s", timestamp, level, msg))
+  print(string.format("[%s] [%s] %s", os.date("%Y-%m-%d %H:%M:%S"), level, msg))
 end
 
 local function getOrCreatePlayer(name)
   if not players[name] then
-    players[name] = {
-      uid = nil,
-      balance = 0.00,
-      transactions = 0,
-      regDate = os.date("%d.%m.%Y %H:%M:%S")
-    }
+    players[name] = {balance = 0.0, transactions = 0, regDate = os.date("%d.%m.%Y %H:%M:%S")}
     saveDB()
   end
   return players[name]
 end
 
-local function validateSession(session, token)
-  return session and session.token == token and os.time() - (session.lastAction or 0) < 300
+local function validateSession(name, token)
+  local s = sessions[name]
+  return s and s.token == token and os.time() - (s.lastAction or 0) < 300
 end
 
--- ========== ОСНОВНОЙ ЦИКЛ ==========
-log("INFO", "Сервер запущен")
-log("INFO", "Ожидание терминалов...")
+-- ========== ЦИКЛ ==========
+log("INFO", "Сервер запущен. Ожидание терминалов...")
 
 while true do
   local ev = {event.pull(0.5)}
@@ -69,74 +60,47 @@ while true do
     local success, msg = pcall(serialization.unserialize, raw)
     if not success or not msg or type(msg) ~= "table" then goto continue end
 
-    -- Анти-спам (0.5 сек между сообщениями от одного адреса)
-    local lastTime = sessions["__modem_" .. from] or 0
-    if os.time() - lastTime < 0.5 then
+    -- Анти-спам
+    local last = sessions["__modem_"..from] or 0
+    if os.time() - last < 0.5 then
       log("WARN", "Спам от " .. from)
       goto continue
     end
-    sessions["__modem_" .. from] = os.time()
+    sessions["__modem_"..from] = os.time()
 
-    log("INFO", string.format("Получено от %s | op = %s", from, tostring(msg.op)))
+    log("INFO", string.format("От %s | op=%s", from, tostring(msg.op)))
 
     if msg.op == "register" then
       if not owner then
         owner = from
-        log("INFO", "✅ ВЛАДЕЛЕЦ (АДМИН) ЗАРЕГИСТРИРОВАН: " .. from)
+        log("INFO", "✅ АДМИН ЗАРЕГИСТРИРОВАН: " .. from)
       end
-      modem.send(from, 0xffef, serialization.serialize({
-        op = "welcome",
-        owner = (from == owner)
-      }))
+      modem.send(from, 0xffef, serialization.serialize({op="welcome", owner=(from==owner)}))
 
     elseif msg.op == "enter" then
       local playerName = msg.name
       if not playerName or playerName == "" then
-        log("WARN", "Попытка входа без имени от " .. from)
+        log("WARN", "Вход без имени от " .. from)
         goto continue
       end
-
-      -- Создаём/обновляем запись игрока
       local player = getOrCreatePlayer(playerName)
-
-      -- Генерируем токен
       local token = tostring(math.random(100000000, 999999999))
-      sessions[playerName] = {
-        token = token,
-        lastAction = os.time()
-      }
-
-      log("INFO", "👤 ИГРОК " .. playerName .. " ЗАШЁЛ (токен: " .. token .. ")")
+      sessions[playerName] = {token=token, lastAction=os.time()}
+      log("INFO", "👤 " .. playerName .. " вошёл. Токен: " .. token)
       modem.send(from, 0xffef, serialization.serialize({
-        op = "welcome",
-        status = "ok",
-        token = token,
-        balance = player.balance,
-        transactions = player.transactions,
-        regDate = player.regDate
+        op="welcome", status="ok", token=token,
+        balance=player.balance, transactions=player.transactions,
+        regDate=player.regDate
       }))
 
-    elseif msg.op == "buy" then
-      -- Обработка покупки (позже)
-      -- Проверяем сессию: msg.token, msg.name
+    elseif msg.op == "buy" or msg.op == "sell" then
       local player = players[msg.name]
-      if not player then goto continue end
-      if not validateSession(sessions[msg.name], msg.token) then
-        log("WARN", "Неверный токен для " .. msg.name)
+      if not player or not validateSession(msg.name, msg.token) then
+        log("WARN", "Неверный токен от " .. (msg.name or "?"))
         goto continue
       end
-      log("INFO", "Покупка запрошена: " .. msg.name .. " сумма " .. tostring(msg.value))
-      -- TODO: реализовать транзакцию
-
-    elseif msg.op == "sell" then
-      -- Обработка продажи (позже)
-      local player = players[msg.name]
-      if not player then goto continue end
-      if not validateSession(sessions[msg.name], msg.token) then
-        log("WARN", "Неверный токен для " .. msg.name)
-        goto continue
-      end
-      log("INFO", "Продажа запрошена: " .. msg.name .. " сумма " .. tostring(msg.value))
+      -- Здесь будет обработка транзакций (пока заглушка)
+      log("INFO", string.format("%s: %s сумма %s", msg.op, msg.name, tostring(msg.value)))
     end
   end
   ::continue::
