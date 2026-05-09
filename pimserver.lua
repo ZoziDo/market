@@ -28,24 +28,31 @@ end
 
 -- ========== ПОЛУЧЕНИЕ РЕАЛЬНОГО ВРЕМЕНИ ==========
 local function getRealTime()
-  -- Пробуем запросить время через интернет
   if component.isAvailable("internet") then
-    local internet = require("internet")
-    local success, response = pcall(internet.request, "http://worldtimeapi.org/api/timezone/Etc/UTC")
-    if success and response then
-      local raw = ""
-      for chunk in response do raw = raw .. chunk end
-      local json = require("json")
-      local data = json.decode(raw)
-      if data and data.datetime then
-        -- Формат: "2024-01-01T12:00:00+00:00"
-        local dt = data.datetime:sub(1, 19)  -- "2024-01-01T12:00:00"
-        local year, month, day, hour, min, sec = dt:match("(%d+)-(%d+)-(%d+)T(%d+):(%d+):(%d+)")
-        return string.format("%s.%s.%s %s:%s:%s", day, month, year, hour, min, sec)
+    -- Пробуем получить время с веб-сервиса
+    local ok, result = pcall(function()
+      local internet = require("internet")
+      internet.setTimeout(5)  -- таймаут 5 секунд
+      local handle = internet.request("http://just-the-time.appspot.com/")
+      local body = ""
+      for chunk in handle do
+        body = body .. chunk
       end
+      -- Ответ: "2026-05-10 21:04:33"
+      if body and #body >= 19 then
+        -- Переводим в формат "дд.мм.гггг чч:мм:сс"
+        local year, month, day, time = body:match("(%d+)%-(%d+)%-(%d+) (.+)")
+        if year and month and day and time then
+          return string.format("%s.%s.%s %s", day, month, year, time)
+        end
+      end
+      return nil
+    end)
+    if ok and result then
+      return result
     end
   end
-  -- Если интернет не доступен, берём серверное время
+  -- Если интернет не отработал, используем время сервера
   return os.date("%d.%m.%Y %H:%M:%S")
 end
 
@@ -66,6 +73,7 @@ local function getOrCreatePlayer(name)
       regDate = getRealTime()  -- реальная дата регистрации
     }
     saveDB()
+    log("INFO", "Создан игрок " .. name .. " с датой: " .. players[name].regDate)
   end
   return players[name]
 end
