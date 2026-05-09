@@ -29,7 +29,7 @@ gpu.setBackground(0x000000)
 
 -- ========== КРУПНЫЙ ШРИФТ NEXAR SHOP (выровнен идеально) ==========
 local function drawBigTitle()
-  gpu.setForeground(0x00FF00)
+  gpu.setForeground(0xff7300)
   local lines = {
     "  ███╗   ██╗ ███████╗ ██╗  ██╗  █████╗  ██████╗ ",
     "  ████╗  ██║ ██╔════╝ ██║ ██╔╝ ██╔══██╗ ██╔══██╗",
