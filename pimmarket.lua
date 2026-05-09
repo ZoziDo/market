@@ -21,12 +21,13 @@ local authStartTime = 0
 local AUTH_TIMEOUT = 3
 local accountRequestTime = 0
 local ACCOUNT_TIMEOUT = 3
+local alreadyAuthorized = false  -- ключевой флаг, что авторизация пройдена
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
 gpu.setBackground(0x000000)
 
--- ========== КРУПНЫЙ ШРИФТ NEXAR SHOP (твой вариант) ==========
+-- ========== КРУПНЫЙ ШРИФТ NEXAR SHOP ==========
 local function drawBigTitle()
   gpu.setForeground(0xff7300)
   local lines = {
@@ -43,14 +44,10 @@ local function drawBigTitle()
     "       ███████║ ██║  ██║ ╚██████╔╝ ██║          ",
   }
   for i, line in ipairs(lines) do
-    if #line < 50 then
-      lines[i] = line .. string.rep(" ", 50 - #line)
-    end
+    if #line < 50 then lines[i] = line .. string.rep(" ", 50 - #line) end
   end
   local startX = 15
-  for i, line in ipairs(lines) do
-    gpu.set(startX, 2 + i, line)
-  end
+  for i, line in ipairs(lines) do gpu.set(startX, 2 + i, line) end
 end
 
 -- ========== ФУНКЦИИ ЭКРАНА ==========
@@ -79,7 +76,7 @@ local function drawBottomPanel()
   gpu.setForeground(0xcc3342) gpu.set(69,23,"[Отзывы]")
 end
 
--- Маленькая кнопка с фоном (для "Назад")
+-- Маленькая кнопка "Назад"
 local function drawSmallButton(y, text, bgColor, fgColor)
   local width = unicode.len(text) + 4
   local x = math.floor((80 - width) / 2) + 1
@@ -139,7 +136,6 @@ local function drawMainMenu()
   else drawWelcomeScreen() end
 end
 
--- Экран аккаунта
 local function drawAccount(data)
   clear()
   drawCenteredText(7, currentPlayer .. ":", 0xFFFFFF)
@@ -150,7 +146,6 @@ local function drawAccount(data)
   drawSmallButton(22, "Назад", 0x333333, 0xFFFFFF)
 end
 
--- Экран загрузки аккаунта
 local function drawAccountLoading()
   clear()
   drawCenteredText(12, "Загрузка...", 0x888888)
@@ -223,28 +218,43 @@ while true do
     local playerName = ev[2] or "Игрок"
     currentPlayer = playerName:match("^%s*(.-)%s*$") or playerName
 
-    -- НЕ ОТПРАВЛЯЕМ enter, если уже есть токен (игрок просто перешёл в другое меню и вернулся)
-    if currentToken then
-      print("Игрок уже имеет токен, пропускаем enter")
-      currentScreen = "menu"
-      drawMainMenu()
+    print("=== СОБЫТИЕ ИГРОК НА PIM ===")
+    print("Имя: " .. currentPlayer)
+    print("Токен: " .. tostring(currentToken))
+    print("alreadyAuthorized: " .. tostring(alreadyAuthorized))
+
+    -- Если игрок уже полностью авторизован, ничего не делаем
+    if alreadyAuthorized then
+      print("alreadyAuthorized = true -> игнорируем повторный вход")
+      if currentScreen == "auth" or currentScreen == "account_loading" then
+        currentScreen = "menu"
+        drawMainMenu()
+      end
+    elseif currentToken then
+      -- Токен есть, но флага alreadyAuthorized нет (например, после сбоя)
+      print("Токен есть, но флаг сброшен -> восстанавливаем alreadyAuthorized")
+      alreadyAuthorized = true
+      if currentScreen == "auth" or currentScreen == "account_loading" then
+        currentScreen = "menu"
+        drawMainMenu()
+      end
     else
       -- Первый вход
+      print("Первый вход -> отправляем enter")
       playerBalance = 0.0
-      print("Игрок встал на PIM: "..currentPlayer)
-
       currentScreen = "auth"
       authStartTime = os.clock()
       drawAuthScreen()
-
       modem.send(serverAddress,0xffef,serialization.serialize({op="enter", name=currentPlayer}))
       print("Отправлен enter для "..currentPlayer)
     end
+    print("=== КОНЕЦ ОБРАБОТКИ === ")
 
   elseif e=="player_off" or e=="pim_player_leave" then
-    print("Игрок сошёл с PIM")
+    print("Игрок сошёл с PIM -> сбрасываем всё")
     currentPlayer = nil
     currentToken = nil
+    alreadyAuthorized = false
     currentScreen = "welcome"
     drawWelcomeScreen()
   elseif e=="modem_message" then
@@ -260,6 +270,7 @@ while true do
           playerBalance = msg.balance or 0.0
           playerTransactions = msg.transactions or 0
           playerRegDate = msg.regDate or ""
+          alreadyAuthorized = true   -- устанавливаем флаг, что авторизация успешна
           print("✅ Авторизация успешна, токен: "..currentToken)
           if currentScreen == "auth" or currentScreen == "account_loading" then
             currentScreen = "menu"
