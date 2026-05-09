@@ -26,11 +26,32 @@ local function saveDB()
   file:close()
 end
 
+-- ========== ПОЛУЧЕНИЕ РЕАЛЬНОГО ВРЕМЕНИ ==========
+local function getRealTime()
+  -- Пробуем запросить время через интернет
+  if component.isAvailable("internet") then
+    local internet = require("internet")
+    local success, response = pcall(internet.request, "http://worldtimeapi.org/api/timezone/Etc/UTC")
+    if success and response then
+      local raw = ""
+      for chunk in response do raw = raw .. chunk end
+      local json = require("json")
+      local data = json.decode(raw)
+      if data and data.datetime then
+        -- Формат: "2024-01-01T12:00:00+00:00"
+        local dt = data.datetime:sub(1, 19)  -- "2024-01-01T12:00:00"
+        local year, month, day, hour, min, sec = dt:match("(%d+)-(%d+)-(%d+)T(%d+):(%d+):(%d+)")
+        return string.format("%s.%s.%s %s:%s:%s", day, month, year, hour, min, sec)
+      end
+    end
+  end
+  -- Если интернет не доступен, берём серверное время
+  return os.date("%d.%m.%Y %H:%M:%S")
+end
+
 -- ========== ПЕРЕМЕННЫЕ ==========
 local owner = nil
 local sessions = {}   -- [name] = {token, lastAction}
-
--- Увеличенный таймаут сессии: 30 минут (1800 секунд)
 local SESSION_TIMEOUT = 1800
 
 local function log(level, msg)
@@ -39,7 +60,11 @@ end
 
 local function getOrCreatePlayer(name)
   if not players[name] then
-    players[name] = {balance = 0.0, transactions = 0, regDate = os.date("%d.%m.%Y %H:%M:%S")}
+    players[name] = {
+      balance = 0.0,
+      transactions = 0,
+      regDate = getRealTime()  -- реальная дата регистрации
+    }
     saveDB()
   end
   return players[name]
@@ -47,10 +72,7 @@ end
 
 local function validateSession(name, token)
   local s = sessions[name]
-  local valid = s and s.token == token and os.time() - (s.lastAction or 0) < SESSION_TIMEOUT
-  log("DEBUG", string.format("Проверка сессии: name=%s token=%s, server_token=%s, time_diff=%s, result=%s",
-    name, token, s and s.token or "nil", s and os.time() - s.lastAction or "нет", tostring(valid)))
-  return valid
+  return s and s.token == token and os.time() - (s.lastAction or 0) < SESSION_TIMEOUT
 end
 
 -- ========== ЦИКЛ ==========
@@ -109,10 +131,8 @@ while true do
       }))
 
     elseif msg.op == "getAccount" then
-      log("DEBUG", string.format("getAccount запрос: name=%s token=%s", msg.name, msg.token))
       if not validateSession(msg.name, msg.token) then
         log("WARN", "Неверный токен для getAccount от " .. (msg.name or "?"))
-        -- Отправляем ответ с ошибкой, чтобы клиент понял
         modem.send(from, 0xffef, serialization.serialize({
           op="accountData",
           error = true,
@@ -121,10 +141,7 @@ while true do
         goto continue
       end
       local player = players[msg.name]
-      if not player then
-        log("WARN", "Игрок не найден: " .. msg.name)
-        goto continue
-      end
+      if not player then goto continue end
       sessions[msg.name].lastAction = os.time()
       modem.send(from, 0xffef, serialization.serialize({
         op="accountData",
