@@ -601,7 +601,7 @@ while true do
     end
     shopScroll = (shopPage - 1) * shopPageSize
     drawBuyItems()
-  end
+
   elseif e == "key_down" and currentScreen == "shop_buy" and searchActive then
     local ch = ev[3]
     if ch == 13 then
