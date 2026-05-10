@@ -36,8 +36,7 @@ local searchInput = ""
 local showOnlyAvailable = false
 local lastScrollTime = 0
 local SCROLL_COOLDOWN = 0.05
-local shopScroll = 0                     -- смещение скролла
-local filteredItems = {}                 -- отфильтрованный список
+local shopScroll = 0
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
@@ -125,10 +124,8 @@ end
 -- Кнопки панели покупки (строка 21)
 local searchButton = {text = "Поиск...", x=3, y=21, xs=20, ys=1, bg=0x333333, fg=0x00aaff}
 local stockButton   = {text = "● В наличии", x=33, y=21, xs=14, ys=1, bg=0x333333, fg=0x00aaff}
-local prevButton    = {text = "Назад", x=56, y=21, xs=7, ys=1, bg=0x333333, fg=0xffaa00}
+local prevButton    = {text = "Назад", x=55, y=21, xs=7, ys=1, bg=0x333333, fg=0xffaa00}
 local nextButton    = {text = "Далее", x=70, y=21, xs=7, ys=1, bg=0x333333, fg=0xffaa00}
-
--- Кнопки скролла (▲ ▼) справа от списка
 local scrollUpButton   = {text = "▲", x=73, y=6, xs=3, ys=1, bg=0x444444, fg=0xffffff}
 local scrollDownButton = {text = "▼", x=73, y=17, xs=3, ys=1, bg=0x444444, fg=0xffffff}
 
@@ -185,7 +182,7 @@ local function drawBuyStatic()
   gpu.setForeground(0x444444)
   gpu.set(3, 5, string.rep("─", 74))
 
-  -- Кнопки скролла (рисуются один раз)
+  -- Кнопки скролла
   drawFlexButton(scrollUpButton)
   drawFlexButton(scrollDownButton)
 
@@ -202,29 +199,29 @@ local function drawBuyItems()
   for y = 6, 17 do gpu.fill(2, y, 76, 1, " ") end
   gpu.fill(2, 22, 76, 1, " ")
 
-  -- Фильтрация
-  filteredItems = {}
+  local filtered = {}
   for _, item in ipairs(shopItems) do
     local matchesSearch = (shopSearch == "" or string.find(string.lower(item.name), string.lower(shopSearch), 1, true))
     local matchesAvailability = (not showOnlyAvailable) or (item.qty > 0)
     if matchesSearch and matchesAvailability then
-      table.insert(filteredItems, item)
+      table.insert(filtered, item)
     end
   end
 
-  -- Корректируем смещение
-  local maxScroll = math.max(0, #filteredItems - shopPageSize)
+  -- Сохраняем для обработчиков
+  filteredItems = filtered
+
+  local maxScroll = math.max(0, #filtered - shopPageSize)
   if shopScroll > maxScroll then shopScroll = maxScroll end
   if shopScroll < 0 then shopScroll = 0 end
 
-  shopTotalPages = math.max(1, math.ceil(#filteredItems / shopPageSize))
-  -- shopPage для совместимости (не обязательно, но пусть обновляется)
-  shopPage = math.floor(shopScroll / shopPageSize) + 1
+  shopTotalPages = math.max(1, math.ceil(#filtered / shopPageSize))
+  if shopPage > shopTotalPages then shopPage = shopTotalPages end
 
   for i = 1, shopPageSize do
     local idx = shopScroll + i
-    if idx <= #filteredItems then
-      local item = filteredItems[idx]
+    if idx <= #filtered then
+      local item = filtered[idx]
       local y = 5 + i
       if i % 2 == 1 then gpu.setBackground(0x111111)
       else gpu.setBackground(0x1a1a1a) end
@@ -238,20 +235,17 @@ local function drawBuyItems()
   end
   gpu.setBackground(0x000000)
 
-  -- Индикатор страницы
-  local pageStr = shopPage .. "/" .. shopTotalPages
+  local pageStr = (math.floor(shopScroll/shopPageSize)+1) .. "/" .. shopTotalPages
   local middleX = math.floor((62 + 70) / 2)
   local pageX = middleX - math.floor(unicode.len(pageStr) / 2)
   gpu.setForeground(0xffffff)
   gpu.fill(middleX - 4, 22, 8, 1, " ")
   gpu.set(pageX, 21, pageStr)
 
-  -- Обновление текста кнопок
   if searchActive then searchButton.text = searchInput .. "_"
   else searchButton.text = "Поиск..." end
   if showOnlyAvailable then stockButton.text = "● В наличии"; stockButton.fg = 0x00ff00
   else stockButton.text = "● В наличии"; stockButton.fg = 0xff0000 end
-
   drawFlexButton(searchButton)
   drawFlexButton(stockButton)
   drawFlexButton(prevButton)
@@ -262,11 +256,11 @@ end
 local function goToBuy()
   currentScreen = "shop_buy"
   shopPage = 1
-  shopScroll = 0
   shopSearch = ""
   searchActive = false
   searchInput = ""
   showOnlyAvailable = false
+  shopScroll = 0
   loadShopItems()
   drawBuyStatic()
   drawBuyItems()
@@ -567,24 +561,27 @@ while true do
         shopScroll = 0
         drawBuyItems()
       elseif isButtonClicked(prevButton, x, y) then
-        -- Страница назад
-        shopScroll = math.max(0, shopScroll - shopPageSize)
-        drawBuyItems()
+        if shopScroll > 0 then
+          shopScroll = math.max(0, shopScroll - shopPageSize)
+          drawBuyItems()
+        end
       elseif isButtonClicked(nextButton, x, y) then
-        -- Страница вперёд
-        local maxScroll = math.max(0, #filteredItems - shopPageSize)
-        shopScroll = math.min(maxScroll, shopScroll + shopPageSize)
-        drawBuyItems()
+        if filteredItems and shopScroll + shopPageSize < #filteredItems then
+          shopScroll = shopScroll + shopPageSize
+          drawBuyItems()
+        end
       elseif isButtonClicked(scrollUpButton, x, y) then
         shopScroll = math.max(0, shopScroll - 1)
         drawBuyItems()
       elseif isButtonClicked(scrollDownButton, x, y) then
-        local maxScroll = math.max(0, #filteredItems - shopPageSize)
-        shopScroll = math.min(maxScroll, shopScroll + 1)
+        if filteredItems then
+          shopScroll = math.min(math.max(0, #filteredItems - shopPageSize), shopScroll + 1)
+        end
         drawBuyItems()
       elseif searchActive then
         shopSearch = searchInput
         searchActive = false
+        shopScroll = 0
         drawBuyItems()
       end
     elseif currentScreen == "shop_sell" or currentScreen == "shop_bundle" then
@@ -595,7 +592,7 @@ while true do
     elseif currentScreen == "utility" then
       if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
     end
-  elseif (e == "scroll" or e == "mouse_scroll" or e == "mousewheel") and currentScreen == "shop_buy" then
+  elseif (e == "scroll" or e == "mouse_scroll" or e == "wheel") and currentScreen == "shop_buy" then
     local now = os.clock()
     if now - lastScrollTime >= SCROLL_COOLDOWN then
       lastScrollTime = now
@@ -603,8 +600,9 @@ while true do
       if tonumber(direction) and tonumber(direction) > 0 then
         shopScroll = math.max(0, shopScroll - 1)
       else
-        local maxScroll = math.max(0, #filteredItems - shopPageSize)
-        shopScroll = math.min(maxScroll, shopScroll + 1)
+        if filteredItems then
+          shopScroll = math.min(math.max(0, #filteredItems - shopPageSize), shopScroll + 1)
+        end
       end
       drawBuyItems()
     end
