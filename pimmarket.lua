@@ -35,44 +35,20 @@ local searchActive = false
 local searchInput = ""
 local showOnlyAvailable = false
 local shopScroll = 0
-local SCROLL_STEP = 1   -- шаг скролла в строках (1 = плавно)
+local SCROLL_STEP = 3
+
+-- Кеш предметов
+local shopItemsCache = {}
+local lastCacheTime = 0
+local CACHE_TTL = 5   -- секунд
+
+-- Дебаунс скролла
 local lastScrollTime = 0
-local SCROLL_DEBOUNCE = 0.05  -- 50 мс защита от спама колеса
+local SCROLL_DEBOUNCE = 0.05
 
--- Буфер экрана и флаги обновлений
-local screenBuffer = {}   -- [y][x] = {char, fg, bg}
-local bufferDirty = true  -- если true, весь буфер будет перерисован
-local function initBuffer()
-  for y = 1, 25 do
-    screenBuffer[y] = {}
-    for x = 1, 80 do
-      screenBuffer[y][x] = {char = " ", fg = 0xFFFFFF, bg = 0x000000}
-    end
-  end
-end
-initBuffer()
-
-local function bufferSet(x, y, char, fg, bg)
-  if not screenBuffer[y] then return end
-  screenBuffer[y][x] = {char = char or " ", fg = fg or 0xFFFFFF, bg = bg or 0x000000}
-end
-
-local function flushBuffer()
-  for y = 1, 25 do
-    local line = screenBuffer[y]
-    if line then
-      for x = 1, 80 do
-        local cell = line[x]
-        if cell then
-          gpu.setBackground(cell.bg)
-          gpu.setForeground(cell.fg)
-          gpu.set(x, y, cell.char)
-        end
-      end
-    end
-  end
-  gpu.setBackground(0x000000)
-end
+-- ========== ЭКРАН ==========
+gpu.setResolution(80, 25)
+gpu.setBackground(0x000000)
 
 -- ========== КРУПНЫЙ ШРИФТ NEXAR SHOP ==========
 local function drawBigTitle()
@@ -86,9 +62,7 @@ local function drawBigTitle()
   }
   local darkonOffset = 47
   local darkonX = math.floor((80 - #darkonLines[1]) / 2) + darkonOffset
-  for i, line in ipairs(darkonLines) do
-    gpu.set(darkonX, 4 + i, line)
-  end
+  for i, line in ipairs(darkonLines) do gpu.set(darkonX, 4 + i, line) end
 
   local shopLines = {
     "  ███████╗ ██╗  ██╗  ██████╗  ██████╗ ",
@@ -99,9 +73,7 @@ local function drawBigTitle()
   }
   local shopOffset = 28
   local shopX = math.floor((80 - #shopLines[1]) / 2) + shopOffset
-  for i, line in ipairs(shopLines) do
-    gpu.set(shopX, 10 + i, line)
-  end
+  for i, line in ipairs(shopLines) do gpu.set(shopX, 10 + i, line) end
 end
 
 -- ========== ФУНКЦИИ ЭКРАНА ==========
@@ -170,27 +142,38 @@ local shopMenuButtons = {
   bundle = {x=31,xs=20,y=15,ys=3,text="Наборы/Квесты",tx=4,ty=1,bg=0x444444,fg=0x3375cc}
 }
 
--- ========== ЗАГРУЗКА ПРЕДМЕТОВ ИЗ ME (с кешированием) ==========
-local lastCacheUpdate = 0
-local CACHE_TTL = 5   -- секунд между полными обновлениями
+-- ========== ЗАГРУЗКА ПРЕДМЕТОВ ИЗ ME ==========
 local function loadShopItems()
-  if not component.isAvailable("me_interface") then return end
-  local now = os.clock()
-  if now - lastCacheUpdate < CACHE_TTL and #shopItems > 0 then return end  -- используем кеш
-  lastCacheUpdate = now
-  shopItems = {}
-  local me = component.me_interface
-  local rawItems = me.getItemsInNetwork()
-  for _, item in ipairs(rawItems) do
-    if item and item.size and item.size > 0 then
-      table.insert(shopItems, {
-        name = item.label or item.name or "???",
-        qty = item.size,
-        price = 0.0
-      })
+  if component.isAvailable("me_interface") then
+    local me = component.me_interface
+    local rawItems = me.getItemsInNetwork()
+    shopItems = {}
+    for _, item in ipairs(rawItems) do
+      if item and item.size and item.size > 0 then
+        table.insert(shopItems, {
+          name = item.label or item.name or "???",
+          qty = item.size,
+          price = 0.0
+        })
+      end
+    end
+    table.sort(shopItems, function(a,b) return a.name < b.name end)
+  end
+  lastCacheTime = os.clock()
+end
+
+-- ========== ПОЛУЧЕНИЕ ОТФИЛЬТРОВАННОГО СПИСКА ==========
+-- ВАЖНО: эта функция теперь определена ДО её использования
+local function getFilteredItems()
+  local filtered = {}
+  for _, item in ipairs(shopItems) do
+    local matchesSearch = (shopSearch == "" or string.find(string.lower(item.name), string.lower(shopSearch), 1, true))
+    local matchesAvailability = (not showOnlyAvailable) or (item.qty > 0)
+    if matchesSearch and matchesAvailability then
+      table.insert(filtered, item)
     end
   end
-  table.sort(shopItems, function(a,b) return a.name < b.name end)
+  return filtered
 end
 
 -- ========== СТАТИЧЕСКАЯ ЧАСТЬ ПОКУПКИ ==========
@@ -227,13 +210,29 @@ local function drawBuyStatic()
   drawFlexButton(backButton)
 end
 
--- ========== ОБНОВЛЕНИЕ ОДНОЙ СТРОКИ СПИСКА ==========
-local function drawSingleRow(y, item)
-  if not item then return end
-  if y < 6 or y > 17 then return end
+-- ========== ПЛАВНЫЙ СКРОЛЛ С ИСПОЛЬЗОВАНИЕМ GPU.COPY ==========
+local function smoothScrollUp()
+  gpu.copy(2, 7, 76, 10, 0, -1)  -- сдвиг вверх
+  -- стираем верхнюю строку
   gpu.setBackground(0x000000)
-  local bg = ((y - 5) % 2 == 1) and 0x111111 or 0x1a1a1a
-  gpu.setBackground(bg)
+  gpu.fill(2, 6, 76, 1, " ")
+end
+
+local function smoothScrollDown()
+  gpu.copy(2, 6, 76, 10, 0, 1)   -- сдвиг вниз
+  -- стираем нижнюю строку
+  gpu.setBackground(0x000000)
+  gpu.fill(2, 17, 76, 1, " ")
+end
+
+-- ========== ОТРИСОВКА ОДНОЙ СТРОКИ СПИСКА ==========
+local function drawSingleRow(y, item, isOdd)
+  if not item then return end
+  if isOdd then
+    gpu.setBackground(0x111111)
+  else
+    gpu.setBackground(0x1a1a1a)
+  end
   gpu.fill(2, y, 76, 1, " ")
   gpu.setForeground(0x00ff88)
   gpu.set(3, y, item.name:sub(1, 37))
@@ -243,62 +242,16 @@ local function drawSingleRow(y, item)
   gpu.setBackground(0x000000)
 end
 
--- ========== ПЛАВНЫЙ СКРОЛЛ С ПОМОЩЬЮ GPU.COPY() ==========
-local function smoothScroll(direction)
-  local filtered = getFilteredItems()
-  local maxScroll = math.max(0, #filtered - shopPageSize)
-  if direction > 0 then
-    -- скролл вверх (двигаем текст вниз на 1 позицию)
-    gpu.copy(2, 7, 76, 10, 0, 1)
-    -- дорисовываем верхнюю строку
-    shopScroll = math.max(0, shopScroll - SCROLL_STEP)
-    local idx = shopScroll + 1
-    drawSingleRow(6, filtered[idx])
-  else
-    -- скролл вниз (двигаем текст вверх)
-    gpu.copy(2, 6, 76, 10, 0, -1)
-    shopScroll = math.min(maxScroll, shopScroll + SCROLL_STEP)
-    local idx = shopScroll + shopPageSize
-    drawSingleRow(17, filtered[idx])
+-- ========== ОБНОВЛЕНИЕ ТОЛЬКО СПИСКА ==========
+local function drawBuyItemsListOnly()
+  -- Проверка кеша
+  if os.clock() - lastCacheTime > CACHE_TTL then
+    loadShopItems()
   end
-  -- обновляем индикатор страницы
-  updatePageIndicator()
-end
 
-local function updatePageIndicator()
   local filtered = getFilteredItems()
-  shopTotalPages = math.max(1, math.ceil(#filtered / shopPageSize))
-  if shopPage > shopTotalPages then shopPage = shopTotalPages end
-  shopPage = math.floor(shopScroll / shopPageSize) + 1
-  local pageStr = shopPage .. "/" .. shopTotalPages
-  local middleX = math.floor((62 + 70) / 2)
-  local pageX = middleX - math.floor(unicode.len(pageStr) / 2)
-  gpu.setForeground(0xffffff)
-  gpu.fill(middleX - 4, 22, 8, 1, " ")
-  gpu.set(pageX, 21, pageStr)
-end
-
--- ========== ПОЛУЧЕНИЕ ОТФИЛЬТРОВАННОГО СПИСКА ==========
-local function getFilteredItems()
-  local filtered = {}
-  for _, item in ipairs(shopItems) do
-    local matchesSearch = (shopSearch == "" or string.find(string.lower(item.name), string.lower(shopSearch), 1, true))
-    local matchesAvailability = (not showOnlyAvailable) or (item.qty > 0)
-    if matchesSearch and matchesAvailability then
-      table.insert(filtered, item)
-    end
-  end
   filteredItems = filtered
-  return filtered
-end
 
--- ========== ПОЛНАЯ ПЕРЕРИСОВКА СПИСКА (ТОЛЬКО ПРИ НЕОБХОДИМОСТИ) ==========
-local function drawBuyItemsFull()
-  gpu.setBackground(0x000000)
-  for y = 6, 17 do gpu.fill(2, y, 76, 1, " ") end
-  gpu.fill(2, 22, 76, 1, " ")
-
-  local filtered = getFilteredItems()
   local maxScroll = math.max(0, #filtered - shopPageSize)
   if shopScroll > maxScroll then shopScroll = maxScroll end
   if shopScroll < 0 then shopScroll = 0 end
@@ -307,20 +260,28 @@ local function drawBuyItemsFull()
   if shopPage > shopTotalPages then shopPage = shopTotalPages end
   shopPage = math.floor(shopScroll / shopPageSize) + 1
 
+  -- Полная перерисовка списка (только при входе или изменении фильтра)
+  -- В дальнейшем скролл будет обновляться через smoothScroll + drawSingleRow
   for i = 1, shopPageSize do
     local idx = shopScroll + i
-    if idx <= #filtered then
-      drawSingleRow(5 + i, filtered[idx])
-    end
+    local item = filtered[idx]
+    drawSingleRow(5 + i, item, (i % 2 == 1))
   end
 
-  updatePageIndicator()
+  -- Индикатор страницы
+  local pageStr = (math.floor(shopScroll/shopPageSize)+1) .. "/" .. shopTotalPages
+  local middleX = math.floor((62 + 70) / 2)
+  local pageX = middleX - math.floor(unicode.len(pageStr) / 2)
+  gpu.setForeground(0xffffff)
+  gpu.fill(middleX - 4, 22, 8, 1, " ")
+  gpu.set(pageX, 21, pageStr)
 end
 
--- ========== ОБНОВЛЕНИЕ КНОПОК ==========
+-- ========== ОБНОВЛЕНИЕ ТОЛЬКО КНОПОК ==========
 local function drawBuyButtons()
   if searchActive then
-    local displayText = unicode.sub(searchInput, -16)  -- ограничение длины
+    -- ограничение длины текста на кнопке поиска
+    local displayText = unicode.sub(searchInput, -16)
     searchButton.text = displayText .. "_"
   else
     searchButton.text = "Поиск..."
@@ -349,11 +310,11 @@ local function goToBuy()
   shopScroll = 0
   loadShopItems()
   drawBuyStatic()
-  drawBuyItemsFull()
+  drawBuyItemsListOnly()
   drawBuyButtons()
 end
 
--- ========== ОСТАЛЬНЫЕ ЭКРАНЫ (без изменений) ==========
+-- ========== ОСТАЛЬНЫЕ ЭКРАНЫ ==========
 local function drawShopMenu()
   clear()
   drawCenteredText(4, "МАГАЗИН", 0xff7300)
@@ -646,24 +607,24 @@ while true do
       elseif isButtonClicked(stockButton, x, y) then
         showOnlyAvailable = not showOnlyAvailable
         shopScroll = 0
-        drawBuyItemsFull()
+        drawBuyItemsListOnly()
         drawBuyButtons()
       elseif isButtonClicked(prevButton, x, y) then
         if shopScroll > 0 then
           shopScroll = math.max(0, shopScroll - shopPageSize)
-          drawBuyItemsFull()
+          drawBuyItemsListOnly()
         end
       elseif isButtonClicked(nextButton, x, y) then
         local filtered = getFilteredItems()
         if shopScroll + shopPageSize < #filtered then
           shopScroll = shopScroll + shopPageSize
-          drawBuyItemsFull()
+          drawBuyItemsListOnly()
         end
       elseif searchActive then
         shopSearch = searchInput
         searchActive = false
         shopScroll = 0
-        drawBuyItemsFull()
+        drawBuyItemsListOnly()
         drawBuyButtons()
       end
     elseif currentScreen == "shop_sell" or currentScreen == "shop_bundle" then
@@ -676,12 +637,41 @@ while true do
     end
   elseif (e == "scroll" or e == "mouse_scroll") and currentScreen == "shop_buy" then
     local now = os.clock()
-    if now - lastScrollTime < SCROLL_DEBOUNCE then return end
-    lastScrollTime = now
-    local direction = ev[5]
-    if direction and direction ~= 0 then
-      loadShopItems()  -- обновим кеш если пора
-      smoothScroll(direction)
+    if now - lastScrollTime < SCROLL_DEBOUNCE then
+      -- слишком часто, игнорируем
+    else
+      lastScrollTime = now
+      local direction = ev[5]
+      local filtered = getFilteredItems()
+      local maxScroll = math.max(0, #filtered - shopPageSize)
+      local oldScroll = shopScroll
+      if direction > 0 then
+        shopScroll = math.max(0, shopScroll - SCROLL_STEP)
+      else
+        shopScroll = math.min(maxScroll, shopScroll + SCROLL_STEP)
+      end
+      if oldScroll ~= shopScroll then
+        -- Определяем направление скролла и используем gpu.copy
+        if shopScroll > oldScroll then
+          smoothScrollDown()
+          -- отрисовываем новую нижнюю строку
+          local newIdx = shopScroll + shopPageSize
+          local item = filtered[newIdx]
+          drawSingleRow(17, item, (shopPageSize % 2 == 0))
+        else
+          smoothScrollUp()
+          -- отрисовываем новую верхнюю строку
+          local item = filtered[shopScroll + 1]
+          drawSingleRow(6, item, true)
+        end
+        -- обновляем индикатор страницы
+        local pageStr = (math.floor(shopScroll/shopPageSize)+1) .. "/" .. shopTotalPages
+        local middleX = math.floor((62 + 70) / 2)
+        local pageX = middleX - math.floor(unicode.len(pageStr) / 2)
+        gpu.setForeground(0xffffff)
+        gpu.fill(middleX - 4, 22, 8, 1, " ")
+        gpu.set(pageX, 21, pageStr)
+      end
     end
   elseif e == "key_down" and currentScreen == "shop_buy" and searchActive then
     local ch = ev[3]
@@ -689,19 +679,19 @@ while true do
       shopSearch = searchInput
       searchActive = false
       shopScroll = 0
-      drawBuyItemsFull()
+      drawBuyItemsListOnly()
       drawBuyButtons()
     elseif ch == 8 then
       searchInput = unicode.sub(searchInput, 1, -2)
       shopSearch = searchInput
       shopScroll = 0
-      drawBuyItemsFull()
+      drawBuyItemsListOnly()
       drawBuyButtons()
     elseif ch > 0 then
       searchInput = searchInput .. unicode.char(ch)
       shopSearch = searchInput
       shopScroll = 0
-      drawBuyItemsFull()
+      drawBuyItemsListOnly()
       drawBuyButtons()
     end
   elseif e=="player_on" or e=="pim" or e=="pim_player_enter" then
