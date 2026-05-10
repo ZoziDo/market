@@ -35,7 +35,7 @@ local searchActive = false
 local searchInput = ""
 local showOnlyAvailable = false
 local shopScroll = 0
-local SCROLL_STEP = 3   -- строк за одно движение колёсика
+local SCROLL_STEP = 1   -- плавный шаг в 1 строку
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
@@ -187,11 +187,7 @@ local function drawBuyStatic()
 end
 
 -- ========== ОБНОВЛЕНИЕ ТОЛЬКО СПИСКА (БЕЗ КНОПОК) ==========
-local function drawBuyItemsListOnly()
-  gpu.setBackground(0x000000)
-  for y = 6, 17 do gpu.fill(2, y, 76, 1, " ") end
-  gpu.fill(2, 22, 76, 1, " ")
-
+local function getFilteredItems()
   local filtered = {}
   for _, item in ipairs(shopItems) do
     local matchesSearch = (shopSearch == "" or string.find(string.lower(item.name), string.lower(shopSearch), 1, true))
@@ -200,7 +196,15 @@ local function drawBuyItemsListOnly()
       table.insert(filtered, item)
     end
   end
+  return filtered
+end
 
+local function drawBuyItemsListOnly()
+  gpu.setBackground(0x000000)
+  for y = 6, 17 do gpu.fill(2, y, 76, 1, " ") end
+  gpu.fill(2, 22, 76, 1, " ")
+
+  local filtered = getFilteredItems()
   filteredItems = filtered   -- глобальная ссылка для обработчиков
 
   local maxScroll = math.max(0, #filtered - shopPageSize)
@@ -209,7 +213,6 @@ local function drawBuyItemsListOnly()
 
   shopTotalPages = math.max(1, math.ceil(#filtered / shopPageSize))
   if shopPage > shopTotalPages then shopPage = shopTotalPages end
-  -- синхронизация страницы со скроллом
   shopPage = math.floor(shopScroll / shopPageSize) + 1
 
   for i = 1, shopPageSize do
@@ -240,10 +243,18 @@ end
 
 -- ========== ОБНОВЛЕНИЕ ТОЛЬКО КНОПОК ==========
 local function drawBuyButtons()
-  if searchActive then searchButton.text = searchInput .. "_"
-  else searchButton.text = "Поиск..." end
-  if showOnlyAvailable then stockButton.text = "● В наличии"; stockButton.fg = 0x00ff00
-  else stockButton.text = "● В наличии"; stockButton.fg = 0xff0000 end
+  if searchActive then
+    searchButton.text = searchInput .. "_"
+  else
+    searchButton.text = "Поиск..."
+  end
+  if showOnlyAvailable then
+    stockButton.text = "● В наличии"
+    stockButton.fg = 0x00ff00
+  else
+    stockButton.text = "● В наличии"
+    stockButton.fg = 0xff0000
+  end
   drawFlexButton(searchButton)
   drawFlexButton(stockButton)
   drawFlexButton(prevButton)
@@ -265,7 +276,7 @@ local function goToBuy()
   drawBuyButtons()
 end
 
--- ========== ОСТАЛЬНЫЕ ЭКРАНЫ ==========
+-- ========== ОСТАЛЬНЫЕ ЭКРАНЫ (без изменений) ==========
 local function drawShopMenu()
   clear()
   drawCenteredText(4, "МАГАЗИН", 0xff7300)
@@ -566,7 +577,8 @@ while true do
           drawBuyItemsListOnly()
         end
       elseif isButtonClicked(nextButton, x, y) then
-        if filteredItems and shopScroll + shopPageSize < #filteredItems then
+        local filtered = getFilteredItems()
+        if shopScroll + shopPageSize < #filtered then
           shopScroll = shopScroll + shopPageSize
           drawBuyItemsListOnly()
         end
@@ -585,14 +597,13 @@ while true do
     elseif currentScreen == "utility" then
       if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
     end
-  elseif e == "scroll" and currentScreen == "shop_buy" then
+  elseif (e == "scroll" or e == "mouse_scroll") and currentScreen == "shop_buy" then
     local direction = ev[3]
+    local filtered = getFilteredItems()
     if direction > 0 then
       shopScroll = math.max(0, shopScroll - SCROLL_STEP)
     else
-      if filteredItems then
-        shopScroll = math.min(math.max(0, #filteredItems - shopPageSize), shopScroll + SCROLL_STEP)
-      end
+      shopScroll = math.min(math.max(0, #filtered - shopPageSize), shopScroll + SCROLL_STEP)
     end
     drawBuyItemsListOnly()
   elseif e == "key_down" and currentScreen == "shop_buy" and searchActive then
@@ -608,11 +619,13 @@ while true do
       shopSearch = searchInput
       shopScroll = 0
       drawBuyItemsListOnly()
+      drawBuyButtons()   -- чтобы кнопка "Поиск..." обновилась с текстом
     elseif ch > 30 then
       searchInput = searchInput .. unicode.char(ch)
       shopSearch = searchInput
       shopScroll = 0
       drawBuyItemsListOnly()
+      drawBuyButtons()
     end
   elseif e=="player_on" or e=="pim" or e=="pim_player_enter" then
     local playerName = ev[2] or "Игрок"
