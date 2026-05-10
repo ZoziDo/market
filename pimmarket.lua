@@ -35,7 +35,7 @@ local searchActive = false
 local searchInput = ""
 local showOnlyAvailable = false
 local lastScrollTime = 0
-local SCROLL_COOLDOWN = 0.05
+local SCROLL_COOLDOWN = 0.03   -- быстрее реакция
 local shopScroll = 0
 
 -- ========== ЭКРАН ==========
@@ -592,18 +592,26 @@ while true do
     elseif currentScreen == "utility" then
       if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
     end
+    -- === УЛУЧШЕННЫЙ СКРОЛЛ СПИСКА ===
   elseif (e == "scroll" or e == "mouse_scroll" or e == "wheel") and currentScreen == "shop_buy" then
     local now = os.clock()
-    if now - lastScrollTime >= SCROLL_COOLDOWN then
+    if now - lastScrollTime < SCROLL_COOLDOWN then
+      -- анти-спам
+    else
       lastScrollTime = now
-      local direction = ev[3]
-      if tonumber(direction) and tonumber(direction) > 0 then
+      
+      local direction = ev[3] or ev[4] or 0   -- разные версии OC кладут направление в разные места
+      
+      if direction > 0 then
+        -- Скролл вверх (колесо от себя)
         shopScroll = math.max(0, shopScroll - 1)
       else
+        -- Скролл вниз (колесо на себя)
         if filteredItems then
           shopScroll = math.min(math.max(0, #filteredItems - shopPageSize), shopScroll + 1)
         end
       end
+      
       drawBuyItems()
     end
   elseif e == "key_down" and currentScreen == "shop_buy" and searchActive then
