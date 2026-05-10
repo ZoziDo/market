@@ -646,6 +646,7 @@ while true do
         drawBuyItemsListOnly()
       end
     end
+  end  
   elseif e == "key_down" and currentScreen == "shop_buy" and searchActive then
     local ch = ev[3]
     if ch == 13 then
