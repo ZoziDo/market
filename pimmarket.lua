@@ -264,15 +264,6 @@ local function drawBuyItemsListOnly()
   gpu.set(pageX, 21, pageStr)
 end
 
-  -- Индикатор страницы
-  local pageStr = (math.floor(shopScroll/shopPageSize)+1) .. "/" .. shopTotalPages
-  local middleX = math.floor((62 + 70) / 2)
-  local pageX = middleX - math.floor(unicode.len(pageStr) / 2)
-  gpu.setForeground(0xffffff)
-  gpu.fill(middleX - 4, 22, 8, 1, " ")
-  gpu.set(pageX, 21, pageStr)
-end
-
 -- ========== ОБНОВЛЕНИЕ ТОЛЬКО КНОПОК ==========
 local function drawBuyButtons()
   if searchActive then
