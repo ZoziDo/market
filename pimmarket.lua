@@ -593,20 +593,15 @@ while true do
       if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
     end
   elseif e == "scroll" and currentScreen == "shop_buy" then
-    local direction = ev[3]
+    local direction = ev[3]   -- 1 вверх, -1 вниз
     if direction > 0 then
-      if shopPage > 1 then
-        shopPage = shopPage - 1
-        shopScroll = (shopPage - 1) * shopPageSize
-        drawBuyItems()
-      end
+      shopPage = math.max(1, shopPage - 1)
     else
-      if shopPage < shopTotalPages then
-        shopPage = shopPage + 1
-        shopScroll = (shopPage - 1) * shopPageSize
-        drawBuyItems()
-      end
+      shopPage = math.min(shopTotalPages, shopPage + 1)
     end
+    shopScroll = (shopPage - 1) * shopPageSize
+    drawBuyItems()
+  end
   elseif e == "key_down" and currentScreen == "shop_buy" and searchActive then
     local ch = ev[3]
     if ch == 13 then
