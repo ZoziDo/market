@@ -35,7 +35,7 @@ local searchActive = false
 local searchInput = ""
 local showOnlyAvailable = false
 local shopScroll = 0
-local SCROLL_STEP = 3
+local SCROLL_STEP = 1
 
 -- Кеш предметов
 local shopItemsCache = {}
@@ -637,32 +637,36 @@ while true do
     end
   elseif (e == "scroll" or e == "mouse_scroll") and currentScreen == "shop_buy" then
     local now = os.clock()
-    if now - lastScrollTime < SCROLL_DEBOUNCE then
-      -- слишком часто, игнорируем
-    else
+    if now - lastScrollTime >= SCROLL_DEBOUNCE then
       lastScrollTime = now
-      local direction = ev[5]
+      local direction = ev[5] or ev[4] or 0
       local filtered = getFilteredItems()
       local maxScroll = math.max(0, #filtered - shopPageSize)
       local oldScroll = shopScroll
       if direction > 0 then
-        shopScroll = math.max(0, shopScroll - SCROLL_STEP)
+        shopScroll = math.max(0, shopScroll - 1)
       else
-        shopScroll = math.min(maxScroll, shopScroll + SCROLL_STEP)
+        shopScroll = math.min(maxScroll, shopScroll + 1)
       end
       if oldScroll ~= shopScroll then
-        -- Определяем направление скролла и используем gpu.copy
+        -- SCROLL DOWN
         if shopScroll > oldScroll then
-          smoothScrollDown()
-          -- отрисовываем новую нижнюю строку
-          local newIdx = shopScroll + shopPageSize
-          local item = filtered[newIdx]
-          drawSingleRow(17, item, (shopPageSize % 2 == 0))
+          gpu.copy(2, 7, 76, 11, 0, -1)
+          gpu.setBackground(0x000000)
+          gpu.fill(2, 17, 76, 1, " ")
+          local newItem = filtered[shopScroll + shopPageSize]
+          if newItem then
+            drawSingleRow(17, newItem, (shopScroll % 2 == 0))
+          end
+        -- SCROLL UP
         else
-          smoothScrollUp()
-          -- отрисовываем новую верхнюю строку
-          local item = filtered[shopScroll + 1]
-          drawSingleRow(6, item, true)
+          gpu.copy(2, 6, 76, 11, 0, 1)
+          gpu.setBackground(0x000000)
+          gpu.fill(2, 6, 76, 1, " ")
+          local newItem = filtered[shopScroll + 1]
+          if newItem then
+            drawSingleRow(6, newItem, (shopScroll % 2 ~= 0))
+          end
         end
         -- обновляем индикатор страницы
         local pageStr = (math.floor(shopScroll/shopPageSize)+1) .. "/" .. shopTotalPages
