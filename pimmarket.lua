@@ -625,26 +625,28 @@ while true do
     elseif currentScreen == "utility" then
       if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
     end
-  elseif (e == "scroll" or e == "mouse_scroll") and currentScreen == "shop_buy" then
+  elseif e == "mouse_scroll" and currentScreen == "shop_buy" then
     local now = os.clock()
     if now - lastScrollTime >= SCROLL_DEBOUNCE then
       lastScrollTime = now
-      local direction = ev[5] or ev[4] or 0
+  
+      local direction = ev[4] or 0  -- ВАЖНО: только ev[4]
+  
       local filtered = getFilteredItems()
       local maxScroll = math.max(0, #filtered - shopPageSize)
       local oldScroll = shopScroll
-
-      -- Правильное направление: вниз (+), вверх (-)
+  
       if direction > 0 then
         shopScroll = math.min(maxScroll, shopScroll + 1)
       elseif direction < 0 then
         shopScroll = math.max(0, shopScroll - 1)
       end
-
+  
       if oldScroll ~= shopScroll then
         drawBuyItemsListOnly()
       end
     end
+  end
   elseif e == "key_down" and currentScreen == "shop_buy" and searchActive then
     local ch = ev[3]
     if ch == 13 then
