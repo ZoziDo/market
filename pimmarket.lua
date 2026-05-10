@@ -34,9 +34,8 @@ local shopTotalPages = 1
 local searchActive = false
 local searchInput = ""
 local showOnlyAvailable = false
-local lastScrollTime = 0
-local SCROLL_COOLDOWN = 0.05
 local shopScroll = 0
+local SCROLL_STEP = 3   -- строк за одно движение колёсика
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
@@ -126,8 +125,6 @@ local searchButton = {text = "Поиск...", x=3, y=21, xs=20, ys=1, bg=0x33333
 local stockButton   = {text = "● В наличии", x=33, y=21, xs=14, ys=1, bg=0x333333, fg=0x00aaff}
 local prevButton    = {text = "Назад", x=55, y=21, xs=7, ys=1, bg=0x333333, fg=0xffaa00}
 local nextButton    = {text = "Далее", x=70, y=21, xs=7, ys=1, bg=0x333333, fg=0xffaa00}
-local scrollUpButton   = {text = "▲", x=73, y=6, xs=3, ys=1, bg=0x444444, fg=0xffffff}
-local scrollDownButton = {text = "▼", x=73, y=17, xs=3, ys=1, bg=0x444444, fg=0xffffff}
 
 -- Кнопки меню "Магазин"
 local shopMenuButtons = {
@@ -182,10 +179,6 @@ local function drawBuyStatic()
   gpu.setForeground(0x444444)
   gpu.set(3, 5, string.rep("─", 74))
 
-  -- Кнопки скролла
-  drawFlexButton(scrollUpButton)
-  drawFlexButton(scrollDownButton)
-
   -- Нижние статические элементы
   gpu.set(3, 18, string.rep("─", 74))
   drawCenteredText(19, "Категория", 0x888888)
@@ -193,8 +186,8 @@ local function drawBuyStatic()
   drawFlexButton(backButton)
 end
 
--- ========== ДИНАМИЧЕСКОЕ ОБНОВЛЕНИЕ СПИСКА ==========
-local function drawBuyItems()
+-- ========== ОБНОВЛЕНИЕ ТОЛЬКО СПИСКА (БЕЗ КНОПОК) ==========
+local function drawBuyItemsListOnly()
   gpu.setBackground(0x000000)
   for y = 6, 17 do gpu.fill(2, y, 76, 1, " ") end
   gpu.fill(2, 22, 76, 1, " ")
@@ -208,8 +201,7 @@ local function drawBuyItems()
     end
   end
 
-  -- Сохраняем для обработчиков
-  filteredItems = filtered
+  filteredItems = filtered   -- глобальная ссылка для обработчиков
 
   local maxScroll = math.max(0, #filtered - shopPageSize)
   if shopScroll > maxScroll then shopScroll = maxScroll end
@@ -217,6 +209,8 @@ local function drawBuyItems()
 
   shopTotalPages = math.max(1, math.ceil(#filtered / shopPageSize))
   if shopPage > shopTotalPages then shopPage = shopTotalPages end
+  -- синхронизация страницы со скроллом
+  shopPage = math.floor(shopScroll / shopPageSize) + 1
 
   for i = 1, shopPageSize do
     local idx = shopScroll + i
@@ -235,13 +229,17 @@ local function drawBuyItems()
   end
   gpu.setBackground(0x000000)
 
+  -- Индикатор страницы между кнопками
   local pageStr = (math.floor(shopScroll/shopPageSize)+1) .. "/" .. shopTotalPages
   local middleX = math.floor((62 + 70) / 2)
   local pageX = middleX - math.floor(unicode.len(pageStr) / 2)
   gpu.setForeground(0xffffff)
   gpu.fill(middleX - 4, 22, 8, 1, " ")
   gpu.set(pageX, 21, pageStr)
+end
 
+-- ========== ОБНОВЛЕНИЕ ТОЛЬКО КНОПОК ==========
+local function drawBuyButtons()
   if searchActive then searchButton.text = searchInput .. "_"
   else searchButton.text = "Поиск..." end
   if showOnlyAvailable then stockButton.text = "● В наличии"; stockButton.fg = 0x00ff00
@@ -263,7 +261,8 @@ local function goToBuy()
   shopScroll = 0
   loadShopItems()
   drawBuyStatic()
-  drawBuyItems()
+  drawBuyItemsListOnly()
+  drawBuyButtons()
 end
 
 -- ========== ОСТАЛЬНЫЕ ЭКРАНЫ ==========
@@ -555,34 +554,28 @@ while true do
       elseif isButtonClicked(searchButton, x, y) then
         searchActive = true
         searchInput = shopSearch
-        drawBuyItems()
+        drawBuyButtons()
       elseif isButtonClicked(stockButton, x, y) then
         showOnlyAvailable = not showOnlyAvailable
         shopScroll = 0
-        drawBuyItems()
+        drawBuyItemsListOnly()
+        drawBuyButtons()
       elseif isButtonClicked(prevButton, x, y) then
         if shopScroll > 0 then
           shopScroll = math.max(0, shopScroll - shopPageSize)
-          drawBuyItems()
+          drawBuyItemsListOnly()
         end
       elseif isButtonClicked(nextButton, x, y) then
         if filteredItems and shopScroll + shopPageSize < #filteredItems then
           shopScroll = shopScroll + shopPageSize
-          drawBuyItems()
+          drawBuyItemsListOnly()
         end
-      elseif isButtonClicked(scrollUpButton, x, y) then
-        shopScroll = math.max(0, shopScroll - 1)
-        drawBuyItems()
-      elseif isButtonClicked(scrollDownButton, x, y) then
-        if filteredItems then
-          shopScroll = math.min(math.max(0, #filteredItems - shopPageSize), shopScroll + 1)
-        end
-        drawBuyItems()
       elseif searchActive then
         shopSearch = searchInput
         searchActive = false
         shopScroll = 0
-        drawBuyItems()
+        drawBuyItemsListOnly()
+        drawBuyButtons()
       end
     elseif currentScreen == "shop_sell" or currentScreen == "shop_bundle" then
       if isButtonClicked(backButton, x, y) then
@@ -593,32 +586,33 @@ while true do
       if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
     end
   elseif e == "scroll" and currentScreen == "shop_buy" then
-    local direction = ev[3]   -- 1 вверх, -1 вниз
+    local direction = ev[3]
     if direction > 0 then
-      shopPage = math.max(1, shopPage - 1)
+      shopScroll = math.max(0, shopScroll - SCROLL_STEP)
     else
-      shopPage = math.min(shopTotalPages, shopPage + 1)
+      if filteredItems then
+        shopScroll = math.min(math.max(0, #filteredItems - shopPageSize), shopScroll + SCROLL_STEP)
+      end
     end
-    shopScroll = (shopPage - 1) * shopPageSize
-    drawBuyItems()
-
+    drawBuyItemsListOnly()
   elseif e == "key_down" and currentScreen == "shop_buy" and searchActive then
     local ch = ev[3]
     if ch == 13 then
       shopSearch = searchInput
       searchActive = false
       shopScroll = 0
-      drawBuyItems()
+      drawBuyItemsListOnly()
+      drawBuyButtons()
     elseif ch == 8 then
       searchInput = string.sub(searchInput, 1, -2)
       shopSearch = searchInput
       shopScroll = 0
-      drawBuyItems()
+      drawBuyItemsListOnly()
     elseif ch > 30 then
       searchInput = searchInput .. unicode.char(ch)
       shopSearch = searchInput
       shopScroll = 0
-      drawBuyItems()
+      drawBuyItemsListOnly()
     end
   elseif e=="player_on" or e=="pim" or e=="pim_player_enter" then
     local playerName = ev[2] or "Игрок"
