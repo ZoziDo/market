@@ -662,7 +662,7 @@ while true do
     currentScreen = "welcome"
     drawWelcomeScreen()
 
-  elseif e=="modem_message" then
+    elseif e=="modem_message" then
     local sender = ev[3]
     local data = ev[6]
     if sender == serverAddress then
@@ -691,7 +691,7 @@ while true do
       end
     end
 
-  -- ==================== СКРОЛЛ КЛАВИШАМИ ====================
+  -- ==================== СКРОЛЛ СТРЕЛКАМИ ====================
   elseif e == "key_down" and currentScreen == "shop_buy" then
     if ev[3] == 200 then        -- Стрелка Вверх
       shopScroll = math.max(0, shopScroll - 1)
@@ -703,3 +703,4 @@ while true do
       drawBuyItems()
     end
   end
+end   -- ← ЭТОТ end ЗАКРЫВАЕТ while true do
