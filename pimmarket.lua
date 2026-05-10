@@ -37,6 +37,7 @@ local showOnlyAvailable = false
 local lastScrollTime = 0
 local SCROLL_COOLDOWN = 0.03   -- быстрее реакция
 local shopScroll = 0
+local filteredItems = {}   -- Добавь эту строку
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
@@ -592,21 +593,20 @@ while true do
     elseif currentScreen == "utility" then
       if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
     end
-    -- === УЛУЧШЕННЫЙ СКРОЛЛ СПИСКА ===
-  elseif (e == "scroll" or e == "mouse_scroll" or e == "wheel") and currentScreen == "shop_buy" then
+    -- ==================== СКРОЛЛ СПИСКА ====================
+  elseif (e == "scroll" or e == "mouse_scroll" or e == "wheel" or e == "mouse_wheel") and currentScreen == "shop_buy" then
     local now = os.clock()
-    if now - lastScrollTime < SCROLL_COOLDOWN then
-      -- анти-спам
-    else
+    if now - lastScrollTime >= SCROLL_COOLDOWN then
       lastScrollTime = now
       
-      local direction = ev[3] or ev[4] or 0   -- разные версии OC кладут направление в разные места
+      -- Разные версии OC кладут направление в разные места
+      local scrollDir = ev[3] or ev[4] or ev[5] or 0
       
-      if direction > 0 then
-        -- Скролл вверх (колесо от себя)
+      if scrollDir > 0 then
+        -- Колесо вверх (от себя)
         shopScroll = math.max(0, shopScroll - 1)
       else
-        -- Скролл вниз (колесо на себя)
+        -- Колесо вниз (на себя)
         if filteredItems then
           shopScroll = math.min(math.max(0, #filteredItems - shopPageSize), shopScroll + 1)
         end
