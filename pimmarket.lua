@@ -35,6 +35,12 @@ local searchActive = false
 local searchInput = ""
 local showOnlyAvailable = false
 
+-- Новые переменные для скролла (от Grok)
+local listScroll = 1
+local visibleRows = 12
+local selectedIndex = 0        -- глобальный индекс выбранного предмета в filteredItems
+local filteredItems = {}
+
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
 gpu.setBackground(0x000000)
@@ -198,9 +204,11 @@ local function drawBuyStatic()
 end
 
 -- ========== ОТРИСОВКА ОДНОЙ СТРОКИ СПИСКА ==========
-local function drawSingleRow(y, item, isOdd)
+local function drawSingleRow(y, item, isSelected, isOdd)
   if not item then return end
-  if isOdd then
+  if isSelected then
+    gpu.setBackground(0x334455)
+  elseif isOdd then
     gpu.setBackground(0x111111)
   else
     gpu.setBackground(0x1a1a1a)
@@ -214,35 +222,51 @@ local function drawSingleRow(y, item, isOdd)
   gpu.setBackground(0x000000)
 end
 
--- ========== ОБНОВЛЕНИЕ СПИСКА (БЕЗ СКРОЛЛА) ==========
+-- ========== ФУНКЦИЯ СКРОЛЛБАРА (от Grok) ==========
+local function drawScrollBar()
+  local total = #filteredItems
+  if total <= visibleRows then
+    gpu.setBackground(0x000000)
+    gpu.fill(78, 6, 2, visibleRows, " ")
+    return
+  end
+
+  local barHeight = math.max(2, math.floor(visibleRows * visibleRows / total))
+  local barPos = math.floor((listScroll - 1) * (visibleRows - barHeight) / (total - visibleRows)) + 1
+
+  gpu.setBackground(0x222222)
+  gpu.fill(78, 6, 2, visibleRows, " ")           -- фон скроллбара
+
+  gpu.setBackground(0x00aaff)                     -- цвет ползунка
+  gpu.fill(78, 5 + barPos, 2, barHeight, "█")
+end
+
+-- ========== ОБНОВЛЕНИЕ СПИСКА (НОВОЕ) ==========
 local function drawBuyItemsList()
   local filtered = getFilteredItems()
   filteredItems = filtered
 
-  shopTotalPages = math.max(1, math.ceil(#filtered / shopPageSize))
-  if shopPage > shopTotalPages then shopPage = shopTotalPages end
+  local maxScroll = math.max(1, #filtered - visibleRows + 1)
+  listScroll = math.max(1, math.min(listScroll, maxScroll))
 
-  local start = (shopPage - 1) * shopPageSize + 1
-  local finish = math.min(start + shopPageSize - 1, #filtered)
-
-  -- Очищаем область списка
+  -- Очищаем область списка + место под скроллбар
   gpu.setBackground(0x000000)
-  for y = 6, 17 do gpu.fill(2, y, 76, 1, " ") end
+  gpu.fill(2, 6, 78, visibleRows, " ")   -- 78 чтобы оставить место под скроллбар
 
-  for i = start, finish do
-    local item = filtered[i]
-    local y = 5 + (i - start)  -- 6..17
-    local isOdd = (i % 2 == 1)
-    drawSingleRow(y, item, isOdd)
+  for i = 1, visibleRows do
+    local itemIndex = listScroll + i - 1
+    local item = filtered[itemIndex]
+    if not item then break end
+
+    local y = 5 + i
+    local isSelected = (itemIndex == selectedIndex)
+    local isOdd = (itemIndex % 2 == 1)
+
+    drawSingleRow(y, item, isSelected, isOdd)
   end
 
-  -- Индикатор страницы
-  local pageStr = shopPage .. "/" .. shopTotalPages
-  local middleX = math.floor((62 + 70) / 2)
-  local pageX = middleX - math.floor(unicode.len(pageStr) / 2)
-  gpu.setForeground(0xffffff)
-  gpu.fill(middleX - 4, 22, 8, 1, " ")
-  gpu.set(pageX, 21, pageStr)
+  -- === СКРОЛЛБАР ===
+  drawScrollBar()
 end
 
 -- ========== ОБНОВЛЕНИЕ ТОЛЬКО КНОПОК ==========
@@ -269,7 +293,8 @@ end
 -- ========== ИНИЦИАЛИЗАЦИЯ ПОКУПКИ ==========
 local function goToBuy()
   currentScreen = "shop_buy"
-  shopPage = 1
+  listScroll = 1
+  selectedIndex = 0
   shopSearch = ""
   searchActive = false
   searchInput = ""
@@ -563,8 +588,20 @@ while true do
       end
       if isButtonClicked(backButton, x, y) then goBackToMenu() end
     elseif currentScreen == "shop_buy" then
+      -- Клик по области списка (строки 6-17)
+      if y >= 6 and y <= 17 and x >= 2 and x <= 77 then
+        local relativeRow = y - 5
+        local clickedIndex = listScroll + relativeRow - 1
+        if filteredItems[clickedIndex] then
+          selectedIndex = clickedIndex
+          drawBuyItemsList()
+        end
+      end
+
+      -- Обработка кнопок
       if isButtonClicked(backButton, x, y) then
         currentScreen = "shop"
+        selectedIndex = 0
         drawShopMenu()
       elseif isButtonClicked(searchButton, x, y) then
         searchActive = true
@@ -572,23 +609,19 @@ while true do
         drawBuyButtons()
       elseif isButtonClicked(stockButton, x, y) then
         showOnlyAvailable = not showOnlyAvailable
-        shopPage = 1
+        listScroll = 1
+        selectedIndex = 0
         drawBuyItemsList()
         drawBuyButtons()
       elseif isButtonClicked(prevButton, x, y) then
-        if shopPage > 1 then
-          shopPage = shopPage - 1
-          drawBuyItemsList()
-        end
+        -- оставлено для совместимости, можно не использовать
       elseif isButtonClicked(nextButton, x, y) then
-        if shopPage < shopTotalPages then
-          shopPage = shopPage + 1
-          drawBuyItemsList()
-        end
+        -- оставлено для совместимости
       elseif searchActive then
         shopSearch = searchInput
         searchActive = false
-        shopPage = 1
+        listScroll = 1
+        selectedIndex = 0
         drawBuyItemsList()
         drawBuyButtons()
       end
@@ -600,24 +633,35 @@ while true do
     elseif currentScreen == "utility" then
       if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
     end
+  elseif e == "scroll" and currentScreen == "shop_buy" then
+    local direction = ev[4]        -- >0 = вверх, <0 = вниз
+    if direction > 0 then
+      listScroll = listScroll - 1
+    else
+      listScroll = listScroll + 1
+    end
+    drawBuyItemsList()
   elseif e == "key_down" and currentScreen == "shop_buy" and searchActive then
     local ch = ev[3]
     if ch == 13 then
       shopSearch = searchInput
       searchActive = false
-      shopPage = 1
+      listScroll = 1
+      selectedIndex = 0
       drawBuyItemsList()
       drawBuyButtons()
     elseif ch == 8 then
       searchInput = unicode.sub(searchInput, 1, -2)
       shopSearch = searchInput
-      shopPage = 1
+      listScroll = 1
+      selectedIndex = 0
       drawBuyItemsList()
       drawBuyButtons()
     elseif ch > 0 then
       searchInput = searchInput .. unicode.char(ch)
       shopSearch = searchInput
-      shopPage = 1
+      listScroll = 1
+      selectedIndex = 0
       drawBuyItemsList()
       drawBuyButtons()
     end
