@@ -35,7 +35,7 @@ local searchActive = false
 local searchInput = ""
 local showOnlyAvailable = false
 local shopScroll = 0
-local SCROLL_STEP = 1   -- плавный шаг в 1 строку
+local SCROLL_STEP = 3   -- плавный шаг в 1 строку
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
@@ -598,12 +598,16 @@ while true do
       if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
     end
   elseif (e == "scroll" or e == "mouse_scroll") and currentScreen == "shop_buy" then
-    local direction = ev[3]
+    local rawDir = ev[3]
+    local direction = tonumber(rawDir) or 0
+    if direction == 0 then return end
+    -- Плавный скролл: накапливаем движения
     local filtered = getFilteredItems()
+    local maxScroll = math.max(0, #filtered - shopPageSize)
     if direction > 0 then
       shopScroll = math.max(0, shopScroll - SCROLL_STEP)
     else
-      shopScroll = math.min(math.max(0, #filtered - shopPageSize), shopScroll + SCROLL_STEP)
+      shopScroll = math.min(maxScroll, shopScroll + SCROLL_STEP)
     end
     drawBuyItemsListOnly()
   elseif e == "key_down" and currentScreen == "shop_buy" and searchActive then
