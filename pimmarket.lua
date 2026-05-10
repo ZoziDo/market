@@ -597,19 +597,18 @@ while true do
     elseif currentScreen == "utility" then
       if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
     end
-  elseif (e == "scroll" or e == "mouse_scroll") and currentScreen == "shop_buy" then
-    local rawDir = ev[3]
-    local direction = tonumber(rawDir) or 0
-    if direction == 0 then return end
-    -- Плавный скролл: накапливаем движения
+    elseif (e == "scroll" or e == "mouse_scroll") and currentScreen == "shop_buy" then
+    local direction = ev[5]   -- правильный индекс для скролла
     local filtered = getFilteredItems()
-    local maxScroll = math.max(0, #filtered - shopPageSize)
+    local oldScroll = shopScroll
     if direction > 0 then
       shopScroll = math.max(0, shopScroll - SCROLL_STEP)
     else
-      shopScroll = math.min(maxScroll, shopScroll + SCROLL_STEP)
+      shopScroll = math.min(math.max(0, #filtered - shopPageSize), shopScroll + SCROLL_STEP)
     end
-    drawBuyItemsListOnly()
+    if oldScroll ~= shopScroll then
+      drawBuyItemsListOnly()   -- перерисовываем только при изменении
+    end
   elseif e == "key_down" and currentScreen == "shop_buy" and searchActive then
     local ch = ev[3]
     if ch == 13 then
@@ -624,7 +623,7 @@ while true do
       shopScroll = 0
       drawBuyItemsListOnly()
       drawBuyButtons()   -- чтобы кнопка "Поиск..." обновилась с текстом
-    elseif ch > 30 then
+    elseif ch > 0 then
       searchInput = searchInput .. unicode.char(ch)
       shopSearch = searchInput
       shopScroll = 0
