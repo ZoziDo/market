@@ -43,7 +43,7 @@ local CACHE_TTL = 5   -- секунд
 
 -- Дебаунс скролла
 local lastScrollTime = 0
-local SCROLL_DEBOUNCE = 0.03
+local SCROLL_DEBOUNCE = 0.08
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
@@ -227,35 +227,42 @@ end
 
 -- ========== ОБНОВЛЕНИЕ ТОЛЬКО СПИСКА ==========
 local function drawBuyItemsListOnly()
-  -- Проверка кеша
-  if os.clock() - lastCacheTime > CACHE_TTL then
+  local now = os.clock()
+  if now - lastCacheTime > CACHE_TTL then
     loadShopItems()
   end
-
+  
   local filtered = getFilteredItems()
-  filteredItems = filtered
-
   local maxScroll = math.max(0, #filtered - shopPageSize)
+  
   if shopScroll > maxScroll then shopScroll = maxScroll end
   if shopScroll < 0 then shopScroll = 0 end
-
+  
   shopTotalPages = math.max(1, math.ceil(#filtered / shopPageSize))
-  if shopPage > shopTotalPages then shopPage = shopTotalPages end
   shopPage = math.floor(shopScroll / shopPageSize) + 1
-
-  -- Очищаем область списка
+  
+  -- Очищаем только область списка
   gpu.setBackground(0x000000)
-  for y = 6, 17 do gpu.fill(2, y, 76, 1, " ") end
-
-  -- Отрисовка строк с правильным цветом по индексу
+  gpu.fill(2, 6, 76, 12, " ")   -- 12 строк вместо цикла
+  
+  -- Рисуем только видимые строки
   for i = 1, shopPageSize do
     local idx = shopScroll + i
     local item = filtered[idx]
-    if not item then break end  -- защита
+    if not item then break end
     local y = 5 + i
-    local isOdd = (idx % 2 == 1)   -- цвет зависит от реального индекса
+    local isOdd = (idx % 2 == 1)
     drawSingleRow(y, item, isOdd)
   end
+  
+  -- Индикатор страницы
+  local pageStr = shopPage .. "/" .. shopTotalPages
+  local middleX = math.floor((62 + 70) / 2)
+  local pageX = middleX - math.floor(unicode.len(pageStr) / 2)
+  gpu.setForeground(0xffffff)
+  gpu.fill(middleX - 4, 22, 8, 1, " ")
+  gpu.set(pageX, 21, pageStr)
+end
 
   -- Индикатор страницы
   local pageStr = (math.floor(shopScroll/shopPageSize)+1) .. "/" .. shopTotalPages
@@ -625,28 +632,29 @@ while true do
       if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
     end
   elseif (e == "scroll" or e == "mouse_scroll") and currentScreen == "shop_buy" then
-    local now = os.clock()
-    if now - lastScrollTime >= SCROLL_DEBOUNCE then
-      lastScrollTime = now
-
-      local direction = ev[5] or 0   -- Самое важное исправление, по совету Grok
-
-      print("🔄 SCROLL → dir =", direction, " | x=", ev[3], "y=", ev[4])
-
-      local filtered = getFilteredItems()
-      local maxScroll = math.max(0, #filtered - shopPageSize)
-      local oldScroll = shopScroll
-
-      if direction > 0 then
-        shopScroll = math.min(maxScroll, shopScroll + SCROLL_STEP)
-      elseif direction < 0 then
-        shopScroll = math.max(0, shopScroll - SCROLL_STEP)
-      end
-
-      if oldScroll ~= shopScroll then
-        drawBuyItemsListOnly()
-      end
+  local now = os.clock()
+  if now - lastScrollTime >= SCROLL_DEBOUNCE then
+    lastScrollTime = now
+    
+    local direction = ev[5] or 0
+    
+    print("🔄 SCROLL → dir =", direction, " | x=", ev[3], "y=", ev[4])
+    
+    local filtered = getFilteredItems()
+    local maxScroll = math.max(0, #filtered - shopPageSize)
+    local oldScroll = shopScroll
+    
+    if direction > 0 then
+      shopScroll = math.min(maxScroll, shopScroll + SCROLL_STEP)
+    elseif direction < 0 then
+      shopScroll = math.max(0, shopScroll - SCROLL_STEP)
     end
+    
+    if oldScroll ~= shopScroll then
+      drawBuyItemsListOnly()
+    end
+  end
+end
   elseif e == "key_down" and currentScreen == "shop_buy" and searchActive then
     local ch = ev[3]
     if ch == 13 then
