@@ -35,7 +35,7 @@ local searchActive = false
 local searchInput = ""
 local showOnlyAvailable = false
 local shopScroll = 0
-local SCROLL_STEP = 3   -- плавный шаг в 1 строку
+local SCROLL_STEP = 3
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
@@ -244,7 +244,8 @@ end
 -- ========== ОБНОВЛЕНИЕ ТОЛЬКО КНОПОК ==========
 local function drawBuyButtons()
   if searchActive then
-    searchButton.text = searchInput .. "_"
+    local displayText = unicode.sub(searchInput, -16)
+    searchButton.text = displayText .. "_"
   else
     searchButton.text = "Поиск..."
   end
@@ -276,7 +277,7 @@ local function goToBuy()
   drawBuyButtons()
 end
 
--- ========== ОСТАЛЬНЫЕ ЭКРАНЫ (без изменений) ==========
+-- ========== ОСТАЛЬНЫЕ ЭКРАНЫ ==========
 local function drawShopMenu()
   clear()
   drawCenteredText(4, "МАГАЗИН", 0xff7300)
@@ -597,8 +598,8 @@ while true do
     elseif currentScreen == "utility" then
       if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
     end
-    elseif (e == "scroll" or e == "mouse_scroll") and currentScreen == "shop_buy" then
-    local direction = ev[5]   -- правильный индекс для скролла
+  elseif (e == "scroll" or e == "mouse_scroll") and currentScreen == "shop_buy" then
+    local direction = ev[5]
     local filtered = getFilteredItems()
     local oldScroll = shopScroll
     if direction > 0 then
@@ -607,7 +608,7 @@ while true do
       shopScroll = math.min(math.max(0, #filtered - shopPageSize), shopScroll + SCROLL_STEP)
     end
     if oldScroll ~= shopScroll then
-      drawBuyItemsListOnly()   -- перерисовываем только при изменении
+      drawBuyItemsListOnly()
     end
   elseif e == "key_down" and currentScreen == "shop_buy" and searchActive then
     local ch = ev[3]
@@ -618,11 +619,11 @@ while true do
       drawBuyItemsListOnly()
       drawBuyButtons()
     elseif ch == 8 then
-      searchInput = string.sub(searchInput, 1, -2)
+      searchInput = unicode.sub(searchInput, 1, -2)
       shopSearch = searchInput
       shopScroll = 0
       drawBuyItemsListOnly()
-      drawBuyButtons()   -- чтобы кнопка "Поиск..." обновилась с текстом
+      drawBuyButtons()
     elseif ch > 0 then
       searchInput = searchInput .. unicode.char(ch)
       shopSearch = searchInput
