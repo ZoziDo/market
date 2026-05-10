@@ -35,7 +35,7 @@ local searchActive = false
 local searchInput = ""
 local showOnlyAvailable = false
 local shopScroll = 0
-local SCROLL_STEP = 1
+local SCROLL_STEP = 3
 
 -- Кеш предметов
 local shopItemsCache = {}
@@ -635,124 +635,65 @@ while true do
     elseif currentScreen == "utility" then
       if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
     end
-  -- ======== СКРОЛЛ ========
-elseif (e == "scroll" or e == "mouse_scroll") and currentScreen == "shop_buy" then
-  local now = os.clock()
-
-  if now - lastScrollTime >= SCROLL_DEBOUNCE then
-    lastScrollTime = now
-
-    local direction = ev[5] or ev[4] or 0
-    local filtered = getFilteredItems()
-    local maxScroll = math.max(0, #filtered - shopPageSize)
-
-    local oldScroll = shopScroll
-
-    -- ВНИЗ
-    if direction > 0 then
-      if shopScroll < maxScroll then
-        shopScroll = shopScroll + 1
-      end
-
-    -- ВВЕРХ
-    elseif direction < 0 then
-      if shopScroll > 0 then
-        shopScroll = shopScroll - 1
-      end
-    end
-
-    -- если скролл изменился
-    if oldScroll ~= shopScroll then
-
-      -- ===== СКРОЛЛ ВНИЗ =====
-      if shopScroll > oldScroll then
-
-        -- двигаем всё вверх
-        gpu.copy(2, 7, 76, 10, 0, -1)
-
-        -- очищаем нижнюю строку
-        gpu.setBackground(0x000000)
-        gpu.fill(2, 17, 76, 1, " ")
-
-        -- новый нижний элемент
-        local newItem = filtered[shopScroll + shopPageSize]
-
-        if newItem then
-          drawSingleRow(
-            17,
-            newItem,
-            ((shopScroll + shopPageSize) % 2 == 1)
-          )
-        end
-
-      -- ===== СКРОЛЛ ВВЕРХ =====
+  elseif (e == "scroll" or e == "mouse_scroll") and currentScreen == "shop_buy" then
+    local now = os.clock()
+    if now - lastScrollTime < SCROLL_DEBOUNCE then
+      -- слишком часто, игнорируем
+    else
+      lastScrollTime = now
+      local direction = ev[5]
+      local filtered = getFilteredItems()
+      local maxScroll = math.max(0, #filtered - shopPageSize)
+      local oldScroll = shopScroll
+      if direction > 0 then
+        shopScroll = math.max(0, shopScroll - SCROLL_STEP)
       else
-
-        -- двигаем всё вниз
-        gpu.copy(2, 6, 76, 10, 0, 1)
-
-        -- очищаем верхнюю строку
-        gpu.setBackground(0x000000)
-        gpu.fill(2, 6, 76, 1, " ")
-
-        -- новый верхний элемент
-        local newItem = filtered[shopScroll + 1]
-
-        if newItem then
-          drawSingleRow(
-            6,
-            newItem,
-            ((shopScroll + 1) % 2 == 1)
-          )
-        end
+        shopScroll = math.min(maxScroll, shopScroll + SCROLL_STEP)
       end
-
-      -- ===== ОБНОВЛЕНИЕ СТРАНИЦ =====
-      shopPage = math.floor(shopScroll / shopPageSize) + 1
-      shopTotalPages = math.max(1, math.ceil(#filtered / shopPageSize))
-
-      local pageStr = shopPage .. "/" .. shopTotalPages
-
-      gpu.setBackground(0x000000)
-      gpu.fill(60, 21, 10, 1, " ")
-
-      gpu.setForeground(0xffffff)
-      gpu.set(63, 21, pageStr)
+      if oldScroll ~= shopScroll then
+        -- Определяем направление скролла и используем gpu.copy
+        if shopScroll > oldScroll then
+          smoothScrollDown()
+          -- отрисовываем новую нижнюю строку
+          local newIdx = shopScroll + shopPageSize
+          local item = filtered[newIdx]
+          drawSingleRow(17, item, (shopPageSize % 2 == 0))
+        else
+          smoothScrollUp()
+          -- отрисовываем новую верхнюю строку
+          local item = filtered[shopScroll + 1]
+          drawSingleRow(6, item, true)
+        end
+        -- обновляем индикатор страницы
+        local pageStr = (math.floor(shopScroll/shopPageSize)+1) .. "/" .. shopTotalPages
+        local middleX = math.floor((62 + 70) / 2)
+        local pageX = middleX - math.floor(unicode.len(pageStr) / 2)
+        gpu.setForeground(0xffffff)
+        gpu.fill(middleX - 4, 22, 8, 1, " ")
+        gpu.set(pageX, 21, pageStr)
+      end
     end
-  end
-elseif e == "key_down" and currentScreen == "shop_buy" and searchActive then
-  local char = ev[3]
-  local code = ev[4]
-
-  -- ENTER
-  if code == 28 then
-    shopSearch = searchInput
-    searchActive = false
-    shopScroll = 0
-    drawBuyItemsListOnly()
-    drawBuyButtons()
-
-  -- BACKSPACE
-  elseif code == 14 then
-    searchInput = unicode.sub(searchInput, 1, -2)
-    shopSearch = searchInput
-    shopScroll = 0
-    drawBuyItemsListOnly()
-    drawBuyButtons()
-
-  -- ESC
-  elseif code == 1 then
-    searchActive = false
-    drawBuyButtons()
-
-  -- обычные символы
-  elseif char >= 32 and char <= 126 then
-    searchInput = searchInput .. unicode.char(char)
-    shopSearch = searchInput
-    shopScroll = 0
-    drawBuyItemsListOnly()
-    drawBuyButtons()
-  end
+  elseif e == "key_down" and currentScreen == "shop_buy" and searchActive then
+    local ch = ev[3]
+    if ch == 13 then
+      shopSearch = searchInput
+      searchActive = false
+      shopScroll = 0
+      drawBuyItemsListOnly()
+      drawBuyButtons()
+    elseif ch == 8 then
+      searchInput = unicode.sub(searchInput, 1, -2)
+      shopSearch = searchInput
+      shopScroll = 0
+      drawBuyItemsListOnly()
+      drawBuyButtons()
+    elseif ch > 0 then
+      searchInput = searchInput .. unicode.char(ch)
+      shopSearch = searchInput
+      shopScroll = 0
+      drawBuyItemsListOnly()
+      drawBuyButtons()
+    end
   elseif e=="player_on" or e=="pim" or e=="pim_player_enter" then
     local playerName = ev[2] or "Игрок"
     currentPlayer = playerName:match("^%s*(.-)%s*$") or playerName
