@@ -34,16 +34,6 @@ local shopTotalPages = 1
 local searchActive = false
 local searchInput = ""
 local showOnlyAvailable = false
-local shopScroll = 0
-local SCROLL_STEP = 1
-
--- Кеш предметов
-local lastCacheTime = 0
-local CACHE_TTL = 5   -- секунд
-
--- Дебаунс скролла
-local lastScrollTime = 0
-local SCROLL_DEBOUNCE = 0.03
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
@@ -142,25 +132,21 @@ local shopMenuButtons = {
 }
 
 -- ========== ЗАГРУЗКА ПРЕДМЕТОВ ИЗ ME ==========
--- (исправлено: не обнуляем shopItems при неудаче)
 local function loadShopItems()
   if component.isAvailable("me_interface") then
     local me = component.me_interface
     local rawItems = me.getItemsInNetwork()
-    if #rawItems > 0 then
-      shopItems = {}
-      for _, item in ipairs(rawItems) do
-        if item and item.size and item.size > 0 then
-          table.insert(shopItems, {
-            name = item.label or item.name or "???",
-            qty = item.size,
-            price = 0.0
-          })
-        end
+    shopItems = {}
+    for _, item in ipairs(rawItems) do
+      if item and item.size and item.size > 0 then
+        table.insert(shopItems, {
+          name = item.label or item.name or "???",
+          qty = item.size,
+          price = 0.0
+        })
       end
-      table.sort(shopItems, function(a,b) return a.name < b.name end)
-      lastCacheTime = os.clock()
     end
+    table.sort(shopItems, function(a,b) return a.name < b.name end)
   end
 end
 
@@ -228,40 +214,30 @@ local function drawSingleRow(y, item, isOdd)
   gpu.setBackground(0x000000)
 end
 
--- ========== ОБНОВЛЕНИЕ ТОЛЬКО СПИСКА ==========
-local function drawBuyItemsListOnly()
-  -- Проверка кеша
-  if os.clock() - lastCacheTime > CACHE_TTL then
-    loadShopItems()
-  end
-
+-- ========== ОБНОВЛЕНИЕ СПИСКА (БЕЗ СКРОЛЛА) ==========
+local function drawBuyItemsList()
   local filtered = getFilteredItems()
   filteredItems = filtered
 
-  local maxScroll = math.max(0, #filtered - shopPageSize)
-  if shopScroll > maxScroll then shopScroll = maxScroll end
-  if shopScroll < 0 then shopScroll = 0 end
-
   shopTotalPages = math.max(1, math.ceil(#filtered / shopPageSize))
   if shopPage > shopTotalPages then shopPage = shopTotalPages end
-  shopPage = math.floor(shopScroll / shopPageSize) + 1
+
+  local start = (shopPage - 1) * shopPageSize + 1
+  local finish = math.min(start + shopPageSize - 1, #filtered)
 
   -- Очищаем область списка
   gpu.setBackground(0x000000)
   for y = 6, 17 do gpu.fill(2, y, 76, 1, " ") end
 
-  -- Отрисовка строк с правильным цветом по индексу
-  for i = 1, shopPageSize do
-    local idx = shopScroll + i
-    local item = filtered[idx]
-    if not item then break end  -- защита
-    local y = 5 + i
-    local isOdd = (idx % 2 == 1)   -- цвет зависит от реального индекса
+  for i = start, finish do
+    local item = filtered[i]
+    local y = 5 + (i - start)  -- 6..17
+    local isOdd = (i % 2 == 1)
     drawSingleRow(y, item, isOdd)
   end
 
   -- Индикатор страницы
-  local pageStr = (math.floor(shopScroll/shopPageSize)+1) .. "/" .. shopTotalPages
+  local pageStr = shopPage .. "/" .. shopTotalPages
   local middleX = math.floor((62 + 70) / 2)
   local pageX = middleX - math.floor(unicode.len(pageStr) / 2)
   gpu.setForeground(0xffffff)
@@ -298,10 +274,9 @@ local function goToBuy()
   searchActive = false
   searchInput = ""
   showOnlyAvailable = false
-  shopScroll = 0
   loadShopItems()
   drawBuyStatic()
-  drawBuyItemsListOnly()
+  drawBuyItemsList()
   drawBuyButtons()
 end
 
@@ -597,25 +572,24 @@ while true do
         drawBuyButtons()
       elseif isButtonClicked(stockButton, x, y) then
         showOnlyAvailable = not showOnlyAvailable
-        shopScroll = 0
-        drawBuyItemsListOnly()
+        shopPage = 1
+        drawBuyItemsList()
         drawBuyButtons()
       elseif isButtonClicked(prevButton, x, y) then
-        if shopScroll > 0 then
-          shopScroll = math.max(0, shopScroll - shopPageSize)
-          drawBuyItemsListOnly()
+        if shopPage > 1 then
+          shopPage = shopPage - 1
+          drawBuyItemsList()
         end
       elseif isButtonClicked(nextButton, x, y) then
-        local filtered = getFilteredItems()
-        if shopScroll + shopPageSize < #filtered then
-          shopScroll = shopScroll + shopPageSize
-          drawBuyItemsListOnly()
+        if shopPage < shopTotalPages then
+          shopPage = shopPage + 1
+          drawBuyItemsList()
         end
       elseif searchActive then
         shopSearch = searchInput
         searchActive = false
-        shopScroll = 0
-        drawBuyItemsListOnly()
+        shopPage = 1
+        drawBuyItemsList()
         drawBuyButtons()
       end
     elseif currentScreen == "shop_sell" or currentScreen == "shop_bundle" then
@@ -626,50 +600,25 @@ while true do
     elseif currentScreen == "utility" then
       if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
     end
-  elseif (e == "scroll" or e == "mouse_scroll") and currentScreen == "shop_buy" then
-    local now = os.clock()
-    if now - lastScrollTime >= SCROLL_DEBOUNCE then
-      lastScrollTime = now
-
-      local direction = ev[5] or 0   -- Самое важное исправление, по совету Grok
-
-      print("🔄 SCROLL → dir =", direction, " | x=", ev[3], "y=", ev[4])
-
-      local filtered = getFilteredItems()
-      if #filtered == 0 then return end  -- нечего скроллить
-
-      local maxScroll = math.max(0, #filtered - shopPageSize)
-      local oldScroll = shopScroll
-
-      if direction > 0 then
-        shopScroll = math.min(maxScroll, shopScroll + SCROLL_STEP)
-      elseif direction < 0 then
-        shopScroll = math.max(0, shopScroll - SCROLL_STEP)
-      end
-
-      if oldScroll ~= shopScroll then
-        drawBuyItemsListOnly()
-      end
-    end
   elseif e == "key_down" and currentScreen == "shop_buy" and searchActive then
     local ch = ev[3]
     if ch == 13 then
       shopSearch = searchInput
       searchActive = false
-      shopScroll = 0
-      drawBuyItemsListOnly()
+      shopPage = 1
+      drawBuyItemsList()
       drawBuyButtons()
     elseif ch == 8 then
       searchInput = unicode.sub(searchInput, 1, -2)
       shopSearch = searchInput
-      shopScroll = 0
-      drawBuyItemsListOnly()
+      shopPage = 1
+      drawBuyItemsList()
       drawBuyButtons()
     elseif ch > 0 then
       searchInput = searchInput .. unicode.char(ch)
       shopSearch = searchInput
-      shopScroll = 0
-      drawBuyItemsListOnly()
+      shopPage = 1
+      drawBuyItemsList()
       drawBuyButtons()
     end
   elseif e=="player_on" or e=="pim" or e=="pim_player_enter" then
