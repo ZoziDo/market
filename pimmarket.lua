@@ -655,12 +655,13 @@ while true do
       modem.send(serverAddress,0xffef,serialization.serialize({op="enter", name=currentPlayer}))
     end
 
-  elseif e=="player_off" or e=="pim_player_leave" then
+    elseif e=="player_off" or e=="pim_player_leave" then
     currentPlayer = nil
     currentToken = nil
     alreadyAuthorized = false
     currentScreen = "welcome"
     drawWelcomeScreen()
+
   elseif e=="modem_message" then
     local sender = ev[3]
     local data = ev[6]
@@ -689,5 +690,16 @@ while true do
         end
       end
     end
+
+  -- ==================== СКРОЛЛ КЛАВИШАМИ ====================
+  elseif e == "key_down" and currentScreen == "shop_buy" then
+    if ev[3] == 200 then        -- Стрелка Вверх
+      shopScroll = math.max(0, shopScroll - 1)
+      drawBuyItems()
+    elseif ev[3] == 208 then    -- Стрелка Вниз
+      if filteredItems then
+        shopScroll = math.min(math.max(0, #filteredItems - shopPageSize), shopScroll + 1)
+      end
+      drawBuyItems()
+    end
   end
-end
