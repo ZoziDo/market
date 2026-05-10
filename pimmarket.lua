@@ -651,7 +651,7 @@ while true do
       if oldScroll ~= shopScroll then
         -- SCROLL DOWN
         if shopScroll > oldScroll then
-          gpu.copy(2, 7, 76, 11, 0, -1)
+          gpu.copy(2, 7, 76, 10, 0, -1)
           gpu.setBackground(0x000000)
           gpu.fill(2, 17, 76, 1, " ")
           local newItem = filtered[shopScroll + shopPageSize]
@@ -660,7 +660,7 @@ while true do
           end
         -- SCROLL UP
         else
-          gpu.copy(2, 6, 76, 11, 0, 1)
+          gpu.copy(2, 6, 76, 10, 0, 1)
           gpu.setBackground(0x000000)
           gpu.fill(2, 6, 76, 1, " ")
           local newItem = filtered[shopScroll + 1]
@@ -673,31 +673,43 @@ while true do
         local middleX = math.floor((62 + 70) / 2)
         local pageX = middleX - math.floor(unicode.len(pageStr) / 2)
         gpu.setForeground(0xffffff)
-        gpu.fill(middleX - 4, 22, 8, 1, " ")
+        gpu.fill(middleX - 4, 21, 8, 1, " ")
         gpu.set(pageX, 21, pageStr)
       end
     end
-  elseif e == "key_down" and currentScreen == "shop_buy" and searchActive then
-    local ch = ev[3]
-    if ch == 13 then
-      shopSearch = searchInput
-      searchActive = false
-      shopScroll = 0
-      drawBuyItemsListOnly()
-      drawBuyButtons()
-    elseif ch == 8 then
-      searchInput = unicode.sub(searchInput, 1, -2)
-      shopSearch = searchInput
-      shopScroll = 0
-      drawBuyItemsListOnly()
-      drawBuyButtons()
-    elseif ch > 0 then
-      searchInput = searchInput .. unicode.char(ch)
-      shopSearch = searchInput
-      shopScroll = 0
-      drawBuyItemsListOnly()
-      drawBuyButtons()
-    end
+elseif e == "key_down" and currentScreen == "shop_buy" and searchActive then
+  local char = ev[3]
+  local code = ev[4]
+
+  -- ENTER
+  if code == 28 then
+    shopSearch = searchInput
+    searchActive = false
+    shopScroll = 0
+    drawBuyItemsListOnly()
+    drawBuyButtons()
+
+  -- BACKSPACE
+  elseif code == 14 then
+    searchInput = unicode.sub(searchInput, 1, -2)
+    shopSearch = searchInput
+    shopScroll = 0
+    drawBuyItemsListOnly()
+    drawBuyButtons()
+
+  -- ESC
+  elseif code == 1 then
+    searchActive = false
+    drawBuyButtons()
+
+  -- обычные символы
+  elseif char >= 32 and char <= 126 then
+    searchInput = searchInput .. unicode.char(char)
+    shopSearch = searchInput
+    shopScroll = 0
+    drawBuyItemsListOnly()
+    drawBuyButtons()
+  end
   elseif e=="player_on" or e=="pim" or e=="pim_player_enter" then
     local playerName = ev[2] or "Игрок"
     currentPlayer = playerName:match("^%s*(.-)%s*$") or playerName
