@@ -592,26 +592,19 @@ while true do
     elseif currentScreen == "utility" then
       if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
     end
-  elseif (e == "scroll" or e == "mouse_scroll" or e == "wheel") and currentScreen == "shop_buy" then
-    local now = os.clock()
-    if now - lastScrollTime >= SCROLL_COOLDOWN then
-      lastScrollTime = now
-      local direction = ev[3]
-      -- Страничный скролл (как в первой рабочей версии)
-      if tonumber(direction) and tonumber(direction) > 0 then
-        -- Крутим вверх: предыдущая страница
-        if shopPage > 1 then
-          shopPage = shopPage - 1
-          shopScroll = (shopPage - 1) * shopPageSize
-          drawBuyItems()
-        end
-      else
-        -- Крутим вниз: следующая страница
-        if shopPage < shopTotalPages then
-          shopPage = shopPage + 1
-          shopScroll = (shopPage - 1) * shopPageSize
-          drawBuyItems()
-        end
+  elseif e == "scroll" and currentScreen == "shop_buy" then
+    local direction = ev[3]
+    if direction > 0 then
+      if shopPage > 1 then
+        shopPage = shopPage - 1
+        shopScroll = (shopPage - 1) * shopPageSize
+        drawBuyItems()
+      end
+    else
+      if shopPage < shopTotalPages then
+        shopPage = shopPage + 1
+        shopScroll = (shopPage - 1) * shopPageSize
+        drawBuyItems()
       end
     end
   elseif e == "key_down" and currentScreen == "shop_buy" and searchActive then
