@@ -35,9 +35,8 @@ local searchActive = false
 local searchInput = ""
 local showOnlyAvailable = false
 local lastScrollTime = 0
-local SCROLL_COOLDOWN = 0.03   -- быстрее реакция
+local SCROLL_COOLDOWN = 0.05
 local shopScroll = 0
-local filteredItems = {}   -- Добавь эту строку
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
@@ -593,26 +592,27 @@ while true do
     elseif currentScreen == "utility" then
       if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
     end
-    -- ==================== СКРОЛЛ СПИСКА ====================
-  elseif (e == "scroll" or e == "mouse_scroll" or e == "wheel" or e == "mouse_wheel") and currentScreen == "shop_buy" then
+  elseif (e == "scroll" or e == "mouse_scroll" or e == "wheel") and currentScreen == "shop_buy" then
     local now = os.clock()
     if now - lastScrollTime >= SCROLL_COOLDOWN then
       lastScrollTime = now
-      
-      -- Разные версии OC кладут направление в разные места
-      local scrollDir = ev[3] or ev[4] or ev[5] or 0
-      
-      if scrollDir > 0 then
-        -- Колесо вверх (от себя)
-        shopScroll = math.max(0, shopScroll - 1)
+      local direction = ev[3]
+      -- Страничный скролл (как в первой рабочей версии)
+      if tonumber(direction) and tonumber(direction) > 0 then
+        -- Крутим вверх: предыдущая страница
+        if shopPage > 1 then
+          shopPage = shopPage - 1
+          shopScroll = (shopPage - 1) * shopPageSize
+          drawBuyItems()
+        end
       else
-        -- Колесо вниз (на себя)
-        if filteredItems then
-          shopScroll = math.min(math.max(0, #filteredItems - shopPageSize), shopScroll + 1)
+        -- Крутим вниз: следующая страница
+        if shopPage < shopTotalPages then
+          shopPage = shopPage + 1
+          shopScroll = (shopPage - 1) * shopPageSize
+          drawBuyItems()
         end
       end
-      
-      drawBuyItems()
     end
   elseif e == "key_down" and currentScreen == "shop_buy" and searchActive then
     local ch = ev[3]
@@ -655,14 +655,13 @@ while true do
       modem.send(serverAddress,0xffef,serialization.serialize({op="enter", name=currentPlayer}))
     end
 
-    elseif e=="player_off" or e=="pim_player_leave" then
+  elseif e=="player_off" or e=="pim_player_leave" then
     currentPlayer = nil
     currentToken = nil
     alreadyAuthorized = false
     currentScreen = "welcome"
     drawWelcomeScreen()
-
-    elseif e=="modem_message" then
+  elseif e=="modem_message" then
     local sender = ev[3]
     local data = ev[6]
     if sender == serverAddress then
@@ -690,17 +689,5 @@ while true do
         end
       end
     end
-
-  -- ==================== СКРОЛЛ СТРЕЛКАМИ ====================
-  elseif e == "key_down" and currentScreen == "shop_buy" then
-    if ev[3] == 200 then        -- Стрелка Вверх
-      shopScroll = math.max(0, shopScroll - 1)
-      drawBuyItems()
-    elseif ev[3] == 208 then    -- Стрелка Вниз
-      if filteredItems then
-        shopScroll = math.min(math.max(0, #filteredItems - shopPageSize), shopScroll + 1)
-      end
-      drawBuyItems()
-    end
   end
-end   -- ← ЭТОТ end ЗАКРЫВАЕТ while true do
+end
