@@ -38,13 +38,12 @@ local shopScroll = 0
 local SCROLL_STEP = 1   -- шаг скролла
 
 -- Кеш предметов
-local shopItemsCache = {}
 local lastCacheTime = 0
 local CACHE_TTL = 5   -- секунд
 
 -- Дебаунс скролла
 local lastScrollTime = 0
-local SCROLL_DEBOUNCE = 0.05
+local SCROLL_DEBOUNCE = 0.03
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
@@ -521,9 +520,6 @@ while true do
   local ev = {event.pull(0.5)}
   local e = ev[1]
 
-  -- ОТЛАДКА: вывод всех событий
-  print("EVENT:", e, "dir=", ev[4] or ev[5])
-
   if currentScreen == "auth" then
     if os.clock() - authStartTime >= AUTH_TIMEOUT then
       currentScreen = "menu"
@@ -632,21 +628,25 @@ while true do
     local now = os.clock()
     if now - lastScrollTime >= SCROLL_DEBOUNCE then
       lastScrollTime = now
-      local direction = ev[4] or ev[5] or 0
-      if type(direction) ~= "number" then direction = 0 end
+
+      local direction = ev[5] or 0   -- Самое важное исправление, по совету Grok
+
+      print("🔄 SCROLL → dir =", direction, " | x=", ev[3], "y=", ev[4])
+
       local filtered = getFilteredItems()
       local maxScroll = math.max(0, #filtered - shopPageSize)
       local oldScroll = shopScroll
+
       if direction > 0 then
-        shopScroll = math.min(maxScroll, shopScroll + 1)
+        shopScroll = math.min(maxScroll, shopScroll + SCROLL_STEP)
       elseif direction < 0 then
-        shopScroll = math.max(0, shopScroll - 1)
+        shopScroll = math.max(0, shopScroll - SCROLL_STEP)
       end
+
       if oldScroll ~= shopScroll then
         drawBuyItemsListOnly()
       end
     end
-  end  
   elseif e == "key_down" and currentScreen == "shop_buy" and searchActive then
     local ch = ev[3]
     if ch == 13 then
