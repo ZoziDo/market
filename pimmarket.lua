@@ -35,7 +35,7 @@ local searchActive = false
 local searchInput = ""
 local showOnlyAvailable = false
 local shopScroll = 0
-local SCROLL_STEP = 1   -- шаг скролла
+local SCROLL_STEP = 1
 
 -- Кеш предметов
 local lastCacheTime = 0
@@ -43,7 +43,7 @@ local CACHE_TTL = 5   -- секунд
 
 -- Дебаунс скролла
 local lastScrollTime = 0
-local SCROLL_DEBOUNCE = 0.08
+local SCROLL_DEBOUNCE = 0.03
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
@@ -142,23 +142,26 @@ local shopMenuButtons = {
 }
 
 -- ========== ЗАГРУЗКА ПРЕДМЕТОВ ИЗ ME ==========
+-- (исправлено: не обнуляем shopItems при неудаче)
 local function loadShopItems()
   if component.isAvailable("me_interface") then
     local me = component.me_interface
     local rawItems = me.getItemsInNetwork()
-    shopItems = {}
-    for _, item in ipairs(rawItems) do
-      if item and item.size and item.size > 0 then
-        table.insert(shopItems, {
-          name = item.label or item.name or "???",
-          qty = item.size,
-          price = 0.0
-        })
+    if #rawItems > 0 then
+      shopItems = {}
+      for _, item in ipairs(rawItems) do
+        if item and item.size and item.size > 0 then
+          table.insert(shopItems, {
+            name = item.label or item.name or "???",
+            qty = item.size,
+            price = 0.0
+          })
+        end
       end
+      table.sort(shopItems, function(a,b) return a.name < b.name end)
+      lastCacheTime = os.clock()
     end
-    table.sort(shopItems, function(a,b) return a.name < b.name end)
   end
-  lastCacheTime = os.clock()
 end
 
 -- ========== ПОЛУЧЕНИЕ ОТФИЛЬТРОВАННОГО СПИСКА ==========
@@ -227,36 +230,38 @@ end
 
 -- ========== ОБНОВЛЕНИЕ ТОЛЬКО СПИСКА ==========
 local function drawBuyItemsListOnly()
-  local now = os.clock()
-  if now - lastCacheTime > CACHE_TTL then
+  -- Проверка кеша
+  if os.clock() - lastCacheTime > CACHE_TTL then
     loadShopItems()
   end
-  
+
   local filtered = getFilteredItems()
+  filteredItems = filtered
+
   local maxScroll = math.max(0, #filtered - shopPageSize)
-  
   if shopScroll > maxScroll then shopScroll = maxScroll end
   if shopScroll < 0 then shopScroll = 0 end
-  
+
   shopTotalPages = math.max(1, math.ceil(#filtered / shopPageSize))
+  if shopPage > shopTotalPages then shopPage = shopTotalPages end
   shopPage = math.floor(shopScroll / shopPageSize) + 1
-  
-  -- Очищаем только область списка
+
+  -- Очищаем область списка
   gpu.setBackground(0x000000)
-  gpu.fill(2, 6, 76, 12, " ")   -- 12 строк вместо цикла
-  
-  -- Рисуем только видимые строки
+  for y = 6, 17 do gpu.fill(2, y, 76, 1, " ") end
+
+  -- Отрисовка строк с правильным цветом по индексу
   for i = 1, shopPageSize do
     local idx = shopScroll + i
     local item = filtered[idx]
-    if not item then break end
+    if not item then break end  -- защита
     local y = 5 + i
-    local isOdd = (idx % 2 == 1)
+    local isOdd = (idx % 2 == 1)   -- цвет зависит от реального индекса
     drawSingleRow(y, item, isOdd)
   end
-  
+
   -- Индикатор страницы
-  local pageStr = shopPage .. "/" .. shopTotalPages
+  local pageStr = (math.floor(shopScroll/shopPageSize)+1) .. "/" .. shopTotalPages
   local middleX = math.floor((62 + 70) / 2)
   local pageX = middleX - math.floor(unicode.len(pageStr) / 2)
   gpu.setForeground(0xffffff)
@@ -267,7 +272,6 @@ end
 -- ========== ОБНОВЛЕНИЕ ТОЛЬКО КНОПОК ==========
 local function drawBuyButtons()
   if searchActive then
-    -- ограничение длины текста на кнопке поиска
     local displayText = unicode.sub(searchInput, -16)
     searchButton.text = displayText .. "_"
   else
@@ -623,29 +627,30 @@ while true do
       if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
     end
   elseif (e == "scroll" or e == "mouse_scroll") and currentScreen == "shop_buy" then
-  local now = os.clock()
-  if now - lastScrollTime >= SCROLL_DEBOUNCE then
-    lastScrollTime = now
-    
-    local direction = ev[5] or 0
-    
-    print("🔄 SCROLL → dir =", direction, " | x=", ev[3], "y=", ev[4])
-    
-    local filtered = getFilteredItems()
-    local maxScroll = math.max(0, #filtered - shopPageSize)
-    local oldScroll = shopScroll
-    
-    if direction > 0 then
-      shopScroll = math.min(maxScroll, shopScroll + SCROLL_STEP)
-    elseif direction < 0 then
-      shopScroll = math.max(0, shopScroll - SCROLL_STEP)
+    local now = os.clock()
+    if now - lastScrollTime >= SCROLL_DEBOUNCE then
+      lastScrollTime = now
+
+      local direction = ev[5] or 0   -- Самое важное исправление, по совету Grok
+
+      print("🔄 SCROLL → dir =", direction, " | x=", ev[3], "y=", ev[4])
+
+      local filtered = getFilteredItems()
+      if #filtered == 0 then return end  -- нечего скроллить
+
+      local maxScroll = math.max(0, #filtered - shopPageSize)
+      local oldScroll = shopScroll
+
+      if direction > 0 then
+        shopScroll = math.min(maxScroll, shopScroll + SCROLL_STEP)
+      elseif direction < 0 then
+        shopScroll = math.max(0, shopScroll - SCROLL_STEP)
+      end
+
+      if oldScroll ~= shopScroll then
+        drawBuyItemsListOnly()
+      end
     end
-    
-    if oldScroll ~= shopScroll then
-      drawBuyItemsListOnly()
-    end
-  end
-end
   elseif e == "key_down" and currentScreen == "shop_buy" and searchActive then
     local ch = ev[3]
     if ch == 13 then
