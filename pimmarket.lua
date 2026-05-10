@@ -35,7 +35,7 @@ local searchActive = false
 local searchInput = ""
 local showOnlyAvailable = false
 local shopScroll = 0
-local SCROLL_STEP = 1
+local SCROLL_STEP = 1   -- шаг скролла
 
 -- Кеш предметов
 local shopItemsCache = {}
@@ -163,7 +163,6 @@ local function loadShopItems()
 end
 
 -- ========== ПОЛУЧЕНИЕ ОТФИЛЬТРОВАННОГО СПИСКА ==========
--- ВАЖНО: эта функция теперь определена ДО её использования
 local function getFilteredItems()
   local filtered = {}
   for _, item in ipairs(shopItems) do
@@ -210,21 +209,6 @@ local function drawBuyStatic()
   drawFlexButton(backButton)
 end
 
--- ========== ПЛАВНЫЙ СКРОЛЛ С ИСПОЛЬЗОВАНИЕМ GPU.COPY ==========
-local function smoothScrollUp()
-  gpu.copy(2, 7, 76, 10, 0, -1)  -- сдвиг вверх
-  -- стираем верхнюю строку
-  gpu.setBackground(0x000000)
-  gpu.fill(2, 6, 76, 1, " ")
-end
-
-local function smoothScrollDown()
-  gpu.copy(2, 6, 76, 10, 0, 1)   -- сдвиг вниз
-  -- стираем нижнюю строку
-  gpu.setBackground(0x000000)
-  gpu.fill(2, 17, 76, 1, " ")
-end
-
 -- ========== ОТРИСОВКА ОДНОЙ СТРОКИ СПИСКА ==========
 local function drawSingleRow(y, item, isOdd)
   if not item then return end
@@ -260,12 +244,18 @@ local function drawBuyItemsListOnly()
   if shopPage > shopTotalPages then shopPage = shopTotalPages end
   shopPage = math.floor(shopScroll / shopPageSize) + 1
 
-  -- Полная перерисовка списка (только при входе или изменении фильтра)
-  -- В дальнейшем скролл будет обновляться через smoothScroll + drawSingleRow
+  -- Очищаем область списка
+  gpu.setBackground(0x000000)
+  for y = 6, 17 do gpu.fill(2, y, 76, 1, " ") end
+
+  -- Отрисовка строк с правильным цветом по индексу
   for i = 1, shopPageSize do
     local idx = shopScroll + i
     local item = filtered[idx]
-    drawSingleRow(5 + i, item, (i % 2 == 1))
+    if not item then break end  -- защита
+    local y = 5 + i
+    local isOdd = (idx % 2 == 1)   -- цвет зависит от реального индекса
+    drawSingleRow(y, item, isOdd)
   end
 
   -- Индикатор страницы
@@ -643,38 +633,16 @@ while true do
       local filtered = getFilteredItems()
       local maxScroll = math.max(0, #filtered - shopPageSize)
       local oldScroll = shopScroll
+
+      -- Правильное направление: вниз (+), вверх (-)
       if direction > 0 then
-        shopScroll = math.max(0, shopScroll - 1)
-      else
         shopScroll = math.min(maxScroll, shopScroll + 1)
+      elseif direction < 0 then
+        shopScroll = math.max(0, shopScroll - 1)
       end
+
       if oldScroll ~= shopScroll then
-        -- SCROLL DOWN
-        if shopScroll > oldScroll then
-          gpu.copy(2, 7, 76, 11, 0, -1)
-          gpu.setBackground(0x000000)
-          gpu.fill(2, 17, 76, 1, " ")
-          local newItem = filtered[shopScroll + shopPageSize]
-          if newItem then
-            drawSingleRow(17, newItem, (shopScroll % 2 == 0))
-          end
-        -- SCROLL UP
-        else
-          gpu.copy(2, 6, 76, 11, 0, 1)
-          gpu.setBackground(0x000000)
-          gpu.fill(2, 6, 76, 1, " ")
-          local newItem = filtered[shopScroll + 1]
-          if newItem then
-            drawSingleRow(6, newItem, (shopScroll % 2 ~= 0))
-          end
-        end
-        -- обновляем индикатор страницы
-        local pageStr = (math.floor(shopScroll/shopPageSize)+1) .. "/" .. shopTotalPages
-        local middleX = math.floor((62 + 70) / 2)
-        local pageX = middleX - math.floor(unicode.len(pageStr) / 2)
-        gpu.setForeground(0xffffff)
-        gpu.fill(middleX - 4, 22, 8, 1, " ")
-        gpu.set(pageX, 21, pageStr)
+        drawBuyItemsListOnly()
       end
     end
   elseif e == "key_down" and currentScreen == "shop_buy" and searchActive then
