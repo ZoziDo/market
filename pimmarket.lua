@@ -1142,6 +1142,7 @@ while true do
       elseif y == 10 and x >= 28 and x <= 48 then -- Весь инвентарь
         drawCenteredText(15, "Сканирование инвентаря...", 0xffaa00)
         os.sleep(0.6)
+        debugPlayerInventory()
         foundAmount = scanPlayerInventory(sellConfirmItem.name)
         if foundAmount > 0 then drawSellFinalConfirm() else
           drawCenteredText(15, "Предмет не найден!", 0xff0000); os.sleep(1.5); drawSellScanScreen()
