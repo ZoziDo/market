@@ -100,7 +100,6 @@ local showSellPopup = false
 
 -- Переменные репорта
 local reportInput = ""
-local reportActive = false
 local lastReportTime = nil
 
 -- ========== ЭКРАН ==========
@@ -196,9 +195,19 @@ local shopMenuButtons = {
 
 -- ==================== ОТПРАВКА В TELEGRAM ====================
 local function sendToTelegram(message)
-  local botToken = "8898934085:AAFlDLiWi9HiDqZLsRMnXwRnlwK7-aUPJYE" -- замени на свой
-  local chatId = "-1003932869786"     -- замени на свой
-  local url = "https://api.telegram.org/bot" .. botToken .. "/sendMessage?chat_id=" .. chatId .. "&text=" .. require("sensor").urlEncode(message)
+  local botToken = "YOUR_BOT_TOKEN"
+  local chatId = "YOUR_CHAT_ID"
+  local function urlEncode(str)
+    if str then
+      str = string.gsub(str, "\n", "\r\n")
+      str = string.gsub(str, "([^%w %-%_%.%~])", function(c)
+        return string.format("%%%02X", string.byte(c))
+      end)
+      str = string.gsub(str, " ", "+")
+    end
+    return str
+  end
+  local url = "https://api.telegram.org/bot" .. botToken .. "/sendMessage?chat_id=" .. chatId .. "&text=" .. urlEncode(message)
   if component.isAvailable("internet") then
     local success, result = pcall(function()
       local internet = require("internet")
@@ -732,9 +741,9 @@ local function performSell()
   gpu.setBackground(0x000000)
   gpu.fill(1, 17, 80, 1, " ")
   if realExtracted > 0 then
-    drawCenteredText(17, "Успешно! +" .. string.format("%.2f", value) .. " " .. currencyName, 0x00ff88)
+    drawCenteredText(17, "Успешно! +" .. string.format("%.2f", value) .. " " .. currencyName .. " ", 0x00ff88)
   else
-    drawCenteredText(17, "Не удалось изъять предметы!", 0xff0000)
+    drawCenteredText(17, "Не удалось изъять предметы! ", 0xff0000)
   end
   os.sleep(2.5)
 
@@ -767,10 +776,7 @@ local function drawReportScreen()
   gpu.setBackground(0x222222)
   gpu.fill(10, 9, 60, 3, " ")
   gpu.setForeground(0xffffff)
-  if reportActive then
-    local d = unicode.sub(reportInput, -39) .. "_"
-    gpu.set(11, 10, d)
-  elseif reportInput ~= "" then
+  if reportInput ~= "" then
     gpu.set(11, 10, unicode.sub(reportInput, -39))
   else
     gpu.setForeground(0x888888)
@@ -985,7 +991,6 @@ end
 local function goToReport()
   currentScreen = "report"
   reportInput = ""
-  reportActive = false
   drawReportScreen()
 end
 
@@ -1311,13 +1316,11 @@ while true do
   elseif e == "key_down" and currentScreen == "report" and canSendReport() then
     local ch = ev[3]
     if ch == 13 then
-      reportActive = false
       drawReportScreen()
     elseif ch == 8 then
       reportInput = unicode.sub(reportInput, 1, -2)
       drawReportScreen()
-    elseif ch > 0 then
-      reportActive = true
+    elseif ch >= 32 then
       reportInput = reportInput .. unicode.char(ch)
       drawReportScreen()
     end
@@ -1342,7 +1345,7 @@ while true do
       hoveredIndex = 0
       drawBuyItemsList()
       drawBuyButtons()
-    elseif ch > 0 then
+    elseif ch >= 32 then
       searchInput = searchInput .. unicode.char(ch)
       shopSearch = searchInput
       listScroll = 1
