@@ -380,17 +380,17 @@ local function drawBuyButtons()
   end
 
   -- Кнопка фильтра
-  if currentShopMode == "buy" then
-    -- Раздел "Покупка": кнопка "Все" / "Vanilla"
+  if currentShopMode == "sell" then
+    -- Раздел "Пополнение": кнопка "Все" / "Vanilla"
     if buyFilterMode == "all" then
       filterButton.text = "Все"
-      filterButton.fg = 0x00aaff   -- голубой
+      filterButton.fg = 0x00aaff
     else
       filterButton.text = "Vanilla"
-      filterButton.fg = 0xffaa00   -- оранжевый
+      filterButton.fg = 0xffaa00
     end
   else
-    -- Раздел "Пополнение": кнопка "В наличии"
+    -- Раздел "Покупка": кнопка "В наличии"
     if showOnlyAvailable then
       filterButton.text = "● В наличии"
       filterButton.fg = 0x00ff00
@@ -836,8 +836,8 @@ while true do
         searchInput = shopSearch
         drawBuyButtons()
       elseif isButtonClicked(filterButton, x, y) then
-        if currentShopMode == "buy" then
-          -- Переключаем фильтр "Все" / "Vanilla"
+        if currentShopMode == "sell" then
+          -- Переключаем фильтр "Все" / "Vanilla" для пополнения
           if buyFilterMode == "all" then
             buyFilterMode = "vanilla"
           else
@@ -850,7 +850,7 @@ while true do
           drawBuyItemsList()
           drawBuyButtons()
         else
-          -- Режим пополнения: фильтр "В наличии"
+          -- Режим покупки: фильтр "В наличии"
           showOnlyAvailable = not showOnlyAvailable
           listScroll = 1
           selectedIndex = 0
