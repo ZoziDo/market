@@ -239,35 +239,30 @@ end
 -- ========== НОВЫЙ СКРОЛЛБАР (ВПЛОТНУЮ) ==========
 local function drawScrollBar()
   local total = #filteredItems
-  local barX = 78   -- начинается сразу после последней колонки (77)
-  local barY = 6    -- синхронизировано с началом списка
+  local barX = 78
+  local barY = 6
   local barHeight = 12
 
-  -- Очищаем область скроллбара
+  -- Очистка области скроллбара
   gpu.setBackground(0x000000)
   gpu.fill(barX, barY, 2, barHeight, " ")
 
-  -- Если элементов мало, скроллбар не рисуем
   if total <= visibleRows then return end
 
-  -- Фон скроллбара (тёмный, как на картинке)
+  -- Фон скроллбара
   gpu.setBackground(0x111111)
   gpu.fill(barX, barY, 2, barHeight, " ")
 
-  -- Стрелки
-  gpu.setForeground(0xFFFFFF)
-  gpu.setBackground(0x222222)
-  gpu.set(barX, barY, "▲")
-  gpu.set(barX, barY + barHeight - 1, "▼")
-
-  -- Размеры ползунка
+  -- Ползунок (синий)
   local thumbHeight = math.max(2, math.floor(barHeight * visibleRows / total))
   local maxPos = barHeight - thumbHeight
   local thumbPos = math.floor((listScroll - 1) * maxPos / (total - visibleRows)) + 1
 
-  -- Ползунок (синий)
+  -- Ограничиваем позицию, чтобы не вылезал за пределы
+  thumbPos = math.min(thumbPos, maxPos + 1)
+
   gpu.setBackground(0x00aaff)
-  gpu.fill(barX, barY + thumbPos, 2, thumbHeight, " ")
+  gpu.fill(barX, barY + thumbPos - 1, 2, thumbHeight, " ")   -- сдвиг -1 исправляет выход
 
   gpu.setBackground(0x000000)
 end
