@@ -39,8 +39,8 @@ local searchInput = ""
 local showOnlyAvailable = false
 local currentShopMode = "buy"   -- "buy" или "sell"
 
--- Фильтр для раздела покупки ("all" / "vanilla")
-local buyFilterMode = "all"
+-- Фильтр для раздела пополнения ("all" / "vanilla")
+local buyFilterMode = "vanilla" -- ИЗМЕНЕНО НА "vanilla", так как в пополнении по умолчанию показываем Vanilla
 
 -- Скролл и выделение
 local listScroll = 1
@@ -143,7 +143,7 @@ end
 
 -- Кнопки панели (текст и цвет динамические)
 local searchButton = {text = "Поиск...", x=3, y=21, xs=20, ys=1, bg=0x333333, fg=0x00aaff}
-local filterButton  = {text = "Все", x=33, y=21, xs=14, ys=1, bg=0x333333, fg=0x00aaff}
+local filterButton  = {text = "В наличии", x=33, y=21, xs=14, ys=1, bg=0x333333, fg=0x00aaff} -- Текст по умолчанию для режима покупки
 local nextButton    = {text = "Далее", x=70, y=21, xs=7, ys=1, bg=0x333333, fg=0x888888}
 
 -- Кнопки меню "Магазин"
@@ -188,15 +188,15 @@ local function getFilteredItems()
   for _, item in ipairs(shopItems) do
     local matchesSearch = (shopSearch == "" or string.find(string.lower(item.name), string.lower(shopSearch), 1, true))
 
-    -- Фильтр "В наличии" для пополнения
+    -- Фильтр "В наличии" для покупки
     local matchesAvailability = true
-    if currentShopMode == "sell" then
+    if currentShopMode == "buy" then
       matchesAvailability = (not showOnlyAvailable) or (item.qty > 0)
     end
 
-    -- Фильтр "Vanilla" для покупки
+    -- Фильтр "Vanilla" для пополнения (currentShopMode == "sell")
     local matchesVanilla = true
-    if currentShopMode == "buy" and buyFilterMode == "vanilla" then
+    if currentShopMode == "sell" and buyFilterMode == "vanilla" then
       matchesVanilla = false
       for _, vname in ipairs(vanillaItems) do
         if item.name == vname then
@@ -408,7 +408,24 @@ local function drawBuyButtons()
   end
 
   drawFlexButton(searchButton)
-  drawFlexButton(filterButton)
+  -- Ручное центрирование для filterButton, так как стандартная функция drawFlexButton
+  -- использует xs из определения кнопки, которое не меняется.
+  -- Здесь мы пересчитываем позицию текста для текущего содержимого.
+  local filterBg = filterButton.bg
+  local filterX = filterButton.x
+  local filterY = filterButton.y
+  local filterXs = 14 -- фиксированная ширина кнопки "Все"/"Vanilla"
+  local filterYs = filterButton.ys
+  local filterText = filterButton.text
+  local filterFg = filterButton.fg
+  gpu.setBackground(filterBg)
+  gpu.fill(filterX, filterY, filterXs, filterYs, " ")
+  gpu.setForeground(filterFg)
+  local filterTextX = filterX + math.floor((filterXs - unicode.len(filterText)) / 2)
+  local filterTextY = filterY + math.floor((filterYs - 1) / 2)
+  gpu.set(filterTextX, filterTextY, filterText)
+  gpu.setBackground(0x000000)
+
   drawFlexButton(nextButton)
 end
 
@@ -542,7 +559,7 @@ local function goToBuy()
   searchActive = false
   searchInput = ""
   showOnlyAvailable = false
-  buyFilterMode = "all"
+  buyFilterMode = "vanilla" -- Установлено для консистентности, хотя в покупке не используется
   loadBuyItems()
   drawBuyStatic()
   drawBuyItemsList()
@@ -561,6 +578,7 @@ local function goToSell()
   searchActive = false
   searchInput = ""
   showOnlyAvailable = false
+  buyFilterMode = "vanilla" -- Устанавливаем "vanilla" при открытии пополнения
   loadSellItems()
   drawBuyStatic()
   drawBuyItemsList()
