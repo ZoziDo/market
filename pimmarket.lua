@@ -45,26 +45,9 @@ local selectedItem = nil
 local horizontalScroll = 1
 local maxItemWidth = 0
 
--- Переменные для экрана выбора количества
-local quantity = 1
-local maxQuantity = 0
-local quantityInput = "1"   -- строковое представление
-
--- Кнопки цифровой клавиатуры
-local numButtons = {}
-for i = 1, 9 do
-  local col = (i - 1) % 3
-  local row = math.floor((i - 1) / 3)
-  numButtons[i] = {text = tostring(i), x = 24 + col * 7, y = 9 + row, xs = 5, ys = 1, bg = 0x333333, fg = 0xffffff}
-end
--- Нижний ряд: Backspace, 0, Enter
-numButtons[10] = {text = "<", x = 24, y = 12, xs = 5, ys = 1, bg = 0x333333, fg = 0xffffff}   -- backspace
-numButtons[11] = {text = "0", x = 31, y = 12, xs = 5, ys = 1, bg = 0x333333, fg = 0xffffff}
-numButtons[12] = {text = "=", x = 38, y = 12, xs = 5, ys = 1, bg = 0x333333, fg = 0xffffff}   -- подтверждение
-
--- Кнопки навигации в количестве
-local quantityBackButton = {text = "Назад", x = 20, y = 23, xs = 10, ys = 1, bg = 0x333333, fg = 0xff7300}
-local buyButton = {text = "Купить", x = 50, y = 23, xs = 10, ys = 1, bg = 0x333333, fg = 0x00ff88}
+-- Переменные экрана покупки
+local purchaseQuantity = 1
+local purchaseItem = nil
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
@@ -371,9 +354,11 @@ local function drawBuyButtons()
   drawFlexButton(nextButton)
 end
 
--- ========== ЭКРАН ВЫБОРА КОЛИЧЕСТВА ==========
-local function drawQuantityScreen(item)
+-- ========== ЭКРАН ПОКУПКИ (ТОЧНАЯ КОПИЯ С ИЗОБРАЖЕНИЯ) ==========
+local function drawPurchaseScreen()
+  currentScreen = "purchase"
   clear()
+
   -- Баланс
   local balanceText = "Баланс: " .. string.format("%.2f Ресов $ | ", playerBalance)
   gpu.setForeground(0x00ff88)
@@ -381,73 +366,88 @@ local function drawQuantityScreen(item)
   gpu.setForeground(0xff7300)
   gpu.set(3 + unicode.len(balanceText), 1, string.format("%.2f Эмов *", playerBalance))
 
-  -- Информация о предмете
-  local nameLine = "Имя предмета: " .. item.name .. "    Доступно: " .. item.qty
+  -- Имя предмета
+  gpu.setForeground(0x00ff88)
+  gpu.set(3, 3, "Имя предмета: ")
   gpu.setForeground(0xffffff)
-  gpu.set(3, 3, nameLine)
+  gpu.set(18, 3, purchaseItem.name)
 
-  local price = item.price or 0.0
-  local total = string.format("%.2f", price * quantity)
-  local priceStr = string.format("%.2f", price)
-  local sumLine = "На сумму: " .. total .. "    Цена: " .. priceStr
-  gpu.set(3, 4, sumLine)
+  -- Доступно
+  gpu.setForeground(0x00ff88)
+  gpu.set(55, 3, "Доступно: ")
+  gpu.setForeground(0xffffff)
+  gpu.set(66, 3, tostring(purchaseItem.qty))
 
-  local qtyLine = "Кол-во: " .. quantity
-  gpu.set(3, 6, qtyLine)
+  -- На сумму
+  local total = (purchaseItem.price or 0.0) * purchaseQuantity
+  gpu.setForeground(0x00ff88)
+  gpu.set(3, 5, "На сумму: ")
+  gpu.setForeground(0xff0000)
+  gpu.set(14, 5, string.format("%.2f", total))
 
-  -- Цифровые кнопки
-  for _, btn in ipairs(numButtons) do
-    drawFlexButton(btn)
+  -- Цена
+  gpu.setForeground(0x00ff88)
+  gpu.set(55, 5, "Цена: ")
+  gpu.setForeground(0x00ff88)
+  gpu.set(62, 5, string.format("%.2f", purchaseItem.price or 0.0))
+
+  -- Кол-во
+  gpu.setForeground(0x00ff88)
+  gpu.set(3, 7, "Кол-во: ")
+  gpu.setForeground(0xffffff)
+  gpu.set(12, 7, tostring(purchaseQuantity))
+
+  -- ========== ЦИФРОВАЯ КЛАВИАТУРА ==========
+  local keys = {
+    {"1","2","3"},
+    {"4","5","6"},
+    {"7","8","9"},
+    {"<","0","C"}
+  }
+
+  local startX = 32
+  local startY = 9
+  local btnW = 5
+  local btnH = 3
+  local spacing = 2
+
+  for row = 1, 4 do
+    for col = 1, 3 do
+      local x = startX + (col-1)*(btnW + spacing)
+      local y = startY + (row-1)*(btnH + 1)
+      local text = keys[row][col]
+
+      gpu.setBackground(0x222222)
+      gpu.fill(x, y, btnW, btnH, " ")
+      gpu.setForeground(0xffaa00)
+
+      local tx = x + math.floor((btnW - unicode.len(text)) / 2)
+      local ty = y + 1
+      gpu.set(tx, ty, text)
+    end
   end
 
-  -- Кнопки навигации
-  drawFlexButton(quantityBackButton)
-  drawFlexButton(buyButton)
+  -- Кнопки Назад и Купить
+  local backBtn = {x=18, y=22, xs=16, ys=2, text="Назад", bg=0x333333, fg=0xffaa00}
+  local buyBtn  = {x=46, y=22, xs=16, ys=2, text="Купить", bg=0x333333, fg=0x00ff88}
+
+  drawFlexButton(backBtn)
+  drawFlexButton(buyBtn)
 end
 
--- Обработка ввода с цифровых кнопок
-local function handleQuantityButtonClick(btnText)
-  if btnText == "<" then
-    -- удалить последний символ
-    if #quantityInput > 1 then
-      quantityInput = string.sub(quantityInput, 1, -2)
-    else
-      quantityInput = "1"
-    end
-  elseif btnText == "=" then
-    -- подтвердить ввод (ничего не делаем, можно использовать для покупки)
-  else
-    -- цифра
-    if quantityInput == "1" and btnText ~= "0" then
-      quantityInput = btnText
-    else
-      quantityInput = quantityInput .. btnText
-    end
-    -- ограничение по максимальному количеству
-    local num = tonumber(quantityInput) or 1
-    if num > maxQuantity then
-      quantityInput = tostring(maxQuantity)
-    end
-  end
-  quantity = tonumber(quantityInput) or 1
-  if quantity > maxQuantity then quantity = maxQuantity end
-  drawQuantityScreen(selectedItem)
-end
-
--- Переход к экрану количества
-local function goToQuantity(item)
+-- ========== ПЕРЕХОД В ЭКРАН ПОКУПКИ ==========
+local function goToPurchase(item)
   if not item then return end
-  currentScreen = "buy_quantity"
-  selectedItem = item
-  maxQuantity = item.qty
-  quantity = 1
-  quantityInput = "1"
-  drawQuantityScreen(item)
+  purchaseItem = item
+  purchaseQuantity = 1
+  drawPurchaseScreen()
 end
 
--- Функция покупки (заглушка)
+-- Заглушка покупки
 local function performPurchase()
-  -- здесь будет логика покупки
+  -- Здесь будет логика отправки purchaseQuantity на сервер
+  drawCenteredText(20, "Покупка выполняется...", 0x00ff88)
+  os.sleep(1)
   currentScreen = "shop_buy"
   selectedItem = nil
   selectedIndex = 0
@@ -753,7 +753,7 @@ while true do
         drawBuyButtons()
       elseif isButtonClicked(nextButton, x, y) then
         if selectedItem then
-          goToQuantity(selectedItem)
+          goToPurchase(selectedItem)
         end
       elseif searchActive then
         shopSearch = searchInput
@@ -766,23 +766,55 @@ while true do
         drawBuyButtons()
       end
 
-    elseif currentScreen == "buy_quantity" then
-      -- Цифровые кнопки
-      for _, btn in ipairs(numButtons) do
-        if isButtonClicked(btn, x, y) then
-          handleQuantityButtonClick(btn.text)
-          break
-        end
-      end
-      -- Кнопки навигации
-      if isButtonClicked(quantityBackButton, x, y) then
+    elseif currentScreen == "purchase" then
+      -- Кнопка Назад
+      if (y >= 22 and y <= 23) and (x >= 18 and x <= 33) then
         currentScreen = "shop_buy"
-        selectedItem = nil
         drawBuyStatic()
         drawBuyItemsList()
         drawBuyButtons()
-      elseif isButtonClicked(buyButton, x, y) then
+      end
+
+      -- Кнопка Купить
+      if (y >= 22 and y <= 23) and (x >= 46 and x <= 61) then
         performPurchase()
+      end
+
+      -- Обработка цифровой клавиатуры
+      local startX = 32
+      local startY = 9
+      local btnW = 5
+      local btnH = 3
+      local spacing = 2
+
+      local keys = {
+        {"1","2","3"},
+        {"4","5","6"},
+        {"7","8","9"},
+        {"<","0","C"}
+      }
+
+      for row = 1, 4 do
+        for col = 1, 3 do
+          local bx = startX + (col-1)*(btnW + spacing)
+          local by = startY + (row-1)*(btnH + 1)
+          if x >= bx and x < bx+btnW and y >= by and y < by+btnH then
+            local key = keys[row][col]
+
+            if key == "C" then
+              purchaseQuantity = 1
+            elseif key == "<" then
+              purchaseQuantity = math.floor(purchaseQuantity / 10)
+              if purchaseQuantity < 1 then purchaseQuantity = 1 end
+            elseif tonumber(key) then
+              purchaseQuantity = purchaseQuantity * 10 + tonumber(key)
+              if purchaseQuantity > purchaseItem.qty then purchaseQuantity = purchaseItem.qty end
+            end
+
+            drawPurchaseScreen()
+            break
+          end
+        end
       end
 
     elseif currentScreen == "menu" then
