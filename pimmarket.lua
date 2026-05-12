@@ -320,11 +320,9 @@ local function getFilteredItems()
   end
   maxItemWidth = 0
   for _, item in ipairs(filtered) do
-    local len = unicode.len(item.name)
+    local len = unicode.len(item.displayName or item.name or "")
     if len > maxItemWidth then maxItemWidth = len end
   end
-  return filtered
-end
 
 -- ========== СТАТИЧЕСКАЯ ЧАСТЬ ПОКУПКИ ==========
 local function drawBuyStatic()
