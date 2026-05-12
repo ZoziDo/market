@@ -9,12 +9,19 @@ local keyboard = require("keyboard")
 local shopData = dofile("/home/shop_items.lua")
 local sellItems = shopData.sellItems
 local vanillaItems = shopData.vanillaItems or {}
+-- Таблица цен для покупки (из внешнего файла)
+local buyPrices = {}
+if shopData.buyItems then
+  for _, item in ipairs(shopData.buyItems) do
+    buyPrices[item.internalName or item.name] = item.price
+  end
+end
 
 local modem = component.modem
 local pimList = {}
 for addr in component.list("pim") do table.insert(pimList, addr) end
 local pimAddr = pimList[1]
-local PUSH_DIRECTION = "down"   -- направление в ME-интерфейс
+local PUSH_DIRECTION = "down"
 
 -- ==================== ITEM SELECTOR ====================
 local selector = nil
@@ -49,7 +56,10 @@ modem.open(0xffef)
 modem.open(0xfffe)
 
 local serverAddress = "535305a9-37c9-4645-b7c4-46204187ee7b"
-local currentPlayer, currentToken, playerBalance = nil, nil, 0.0
+local currentPlayer, currentToken = nil, nil
+-- Раздельные балансы
+local resBalance = 0.0   -- Ресы $
+local emBalance = 0.0    -- Эмы *
 local playerTransactions = 0
 local playerRegDate = ""
 local currentScreen = "welcome"
@@ -86,6 +96,7 @@ local purchaseItem = nil
 
 local sellConfirmItem = nil
 local foundAmount = 0
+local showSellPopup = false   -- флаг модального окна продажи
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
@@ -186,10 +197,12 @@ local function loadBuyItems()
   shopItems = {}
   for _, item in ipairs(rawItems) do
     if item and item.size and item.size > 0 then
+      local name = item.label or item.name or "???"
+      local price = buyPrices[item.name] or 0.0  -- используем цену из внешнего файла
       table.insert(shopItems, {
-        name = item.label or item.name or "???",
+        name = name,
         qty = item.size,
-        price = 0.0
+        price = price
       })
     end
   end
@@ -212,8 +225,6 @@ end
 local function scanPlayerInventory(targetName)
     if not pimAddr then return 0 end
     local total = 0
-    print("Сканируем: '" .. targetName .. "' (PIM, слоты 1-36)")
-
     for slot = 1, 36 do
         local stack = component.invoke(pimAddr, "getStackInSlot", slot)
         if stack then
@@ -227,9 +238,6 @@ local function scanPlayerInventory(targetName)
             end
         end
     end
-
-    print("Найдено: " .. total)
-
     if currentToken then
         modem.send(serverAddress, 0xffef, serialization.serialize({
             op = "scan_report",
@@ -239,7 +247,6 @@ local function scanPlayerInventory(targetName)
             found = total
         }))
     end
-
     return total
 end
 
@@ -247,7 +254,6 @@ end
 local function extractToME(targetName, amount)
     if not pimAddr or amount <= 0 then return 0 end
     local extracted = 0
-
     for slot = 1, 36 do
         if extracted >= amount then break end
         local stack = component.invoke(pimAddr, "getStackInSlot", slot)
@@ -262,16 +268,12 @@ local function extractToME(targetName, amount)
                         local moved = component.invoke(pimAddr, "pushItem", PUSH_DIRECTION, slot, toTake)
                         if type(moved) == "number" and moved > 0 then
                             extracted = extracted + moved
-                        else
-                            print("Не удалось переместить из слота " .. slot)
                         end
                     end
                 end
             end
         end
     end
-
-    print("Изъято: " .. extracted .. " / " .. amount .. " " .. targetName)
     return extracted
 end
 
@@ -306,14 +308,15 @@ local function getFilteredItems()
   return filtered
 end
 
--- ========== СТАТИЧЕСКАЯ ЧАСТЬ ПОКУПКИ ==========
+-- ========== СТАТИЧЕСКАЯ ЧАСТЬ ПОКУПКИ/ПОПОЛНЕНИЯ ==========
 local function drawBuyStatic()
   clear()
-  local balanceText = "Баланс: " .. string.format("%.2f Ресов $ | ", playerBalance)
+  local resText = "Баланс: " .. string.format("%.2f Ресов $ | ", resBalance)
+  local emText = string.format("%.2f Эмов *", emBalance)
   gpu.setForeground(0x00ff88)
-  gpu.set(3, 1, balanceText)
+  gpu.set(3, 1, resText)
   gpu.setForeground(0xff7300)
-  gpu.set(3 + unicode.len(balanceText), 1, string.format("%.2f Эмов *", playerBalance))
+  gpu.set(3 + unicode.len(resText), 1, emText)
 
   if currentShopMode == "buy" then
     gpu.setForeground(0xff7300)
@@ -333,7 +336,6 @@ local function drawBuyStatic()
 
   gpu.setForeground(0x444444)
   gpu.set(3, 5, string.rep("─", 74))
-
   gpu.set(3, 18, string.rep("─", 74))
   drawCenteredText(19, "Категория", 0x888888)
   gpu.set(3, 23, string.rep("─", 74))
@@ -371,23 +373,17 @@ local function drawScrollBar()
   local barX = 78
   local barY = 6
   local barHeight = 12
-
   gpu.setBackground(0x000000)
   gpu.fill(barX, barY, 2, barHeight, " ")
-
   if total <= visibleRows then return end
-
   gpu.setBackground(0x111111)
   gpu.fill(barX, barY, 2, barHeight, " ")
-
   local thumbHeight = math.max(2, math.floor(barHeight * visibleRows / total))
   local maxPos = barHeight - thumbHeight
   local thumbPos = math.floor((listScroll - 1) * maxPos / (total - visibleRows)) + 1
   thumbPos = math.min(thumbPos, maxPos + 1)
-
   gpu.setBackground(0x00aaff)
   gpu.fill(barX, barY + thumbPos - 1, 2, thumbHeight, " ")
-
   gpu.setBackground(0x000000)
 end
 
@@ -395,13 +391,10 @@ end
 local function drawBuyItemsList()
   local filtered = getFilteredItems()
   filteredItems = filtered
-
   local maxScroll = math.max(1, #filtered - visibleRows + 1)
   listScroll = math.max(1, math.min(listScroll, maxScroll))
-
   gpu.setBackground(0x000000)
   gpu.fill(2, 6, 78, visibleRows, " ")
-
   for i = 1, visibleRows do
     local itemIndex = listScroll + i - 1
     local item = filtered[itemIndex]
@@ -411,7 +404,6 @@ local function drawBuyItemsList()
     local isHovered = (itemIndex == hoveredIndex)
     drawSingleRow(y, item, isHovered, isSelected, itemIndex)
   end
-
   drawScrollBar()
 end
 
@@ -420,11 +412,9 @@ local function smoothScroll(steps)
   local filtered = filteredItems
   local total = #filtered
   local maxScroll = math.max(1, total - visibleRows + 1)
-
   local newScroll = listScroll + steps
   newScroll = math.max(1, math.min(newScroll, maxScroll))
   if newScroll == listScroll then return end
-
   if math.abs(steps) == 1 and total > visibleRows then
     if steps > 0 then
       gpu.copy(2, 7, 76, visibleRows - 1, 0, -1)
@@ -447,7 +437,6 @@ local function smoothScroll(steps)
     drawBuyItemsList()
     return
   end
-
   listScroll = newScroll
   drawScrollBar()
 end
@@ -460,7 +449,6 @@ local function drawBuyButtons()
   else
     searchButton.text = "Поиск..."
   end
-
   if currentShopMode == "sell" then
     if buyFilterMode == "all" then
       filterButton.text = "Все"
@@ -478,15 +466,12 @@ local function drawBuyButtons()
       filterButton.fg = 0xff0000
     end
   end
-
   if selectedItem then
     nextButton.fg = 0xffaa00
   else
     nextButton.fg = 0x888888
   end
-
   drawFlexButton(searchButton)
-
   local filterBg = filterButton.bg
   local filterX = filterButton.x
   local filterY = filterButton.y
@@ -501,7 +486,6 @@ local function drawBuyButtons()
   local filterTextY = filterY + math.floor((filterYs - 1) / 2)
   gpu.set(filterTextX, filterTextY, filterText)
   gpu.setBackground(0x000000)
-
   drawFlexButton(nextButton)
 end
 
@@ -509,12 +493,12 @@ end
 local function drawPurchaseScreen()
   currentScreen = "purchase"
   clear()
-
-  local balanceText = "Баланс: " .. string.format("%.2f Ресов $ | ", playerBalance)
+  local resText = "Баланс: " .. string.format("%.2f Ресов $ | ", resBalance)
+  local emText = string.format("%.2f Эмов *", emBalance)
   gpu.setForeground(0x00ff88)
-  gpu.set(3, 1, balanceText)
+  gpu.set(3, 1, resText)
   gpu.setForeground(0xff7300)
-  gpu.set(3 + unicode.len(balanceText), 1, string.format("%.2f Эмов *", playerBalance))
+  gpu.set(3 + unicode.len(resText), 1, emText)
 
   gpu.setForeground(0x00ff88)
   gpu.set(3, 3, "Имя предмета: ")
@@ -548,13 +532,11 @@ local function drawPurchaseScreen()
     {"7","8","9"},
     {"<","0","C"}
   }
-
   local startX = 34
   local startY = 11
   local btnW = 3
   local btnH = 1
   local spacing = 2
-
   for row = 1, 4 do
     for col = 1, 3 do
       local x = startX + (col-1)*(btnW + spacing)
@@ -568,10 +550,8 @@ local function drawPurchaseScreen()
       gpu.set(tx, ty, text)
     end
   end
-
   local backBtn = {x = 18, y = 23, xs = 10, ys = 1, text = "Назад", bg = 0x333333, fg = 0xff7300}
   local buyBtn  = {x = 50, y = 23, xs = 10, ys = 1, text = "Купить", bg = 0x333333, fg = 0x00ff88}
-
   drawFlexButton(backBtn)
   drawFlexButton(buyBtn)
 end
@@ -600,12 +580,12 @@ end
 local function drawSellScanScreen()
   currentScreen = "sell_scan"
   clear()
-
-  local balanceText = "Баланс: " .. string.format("%.2f Ресов $ | ", playerBalance)
+  local resText = "Баланс: " .. string.format("%.2f Ресов $ | ", resBalance)
+  local emText = string.format("%.2f Эмов *", emBalance)
   gpu.setForeground(0x00ff88)
-  gpu.set(3, 1, balanceText)
+  gpu.set(3, 1, resText)
   gpu.setForeground(0xff7300)
-  gpu.set(3 + unicode.len(balanceText), 1, string.format("%.2f Эмов *", playerBalance))
+  gpu.set(3 + unicode.len(resText), 1, emText)
 
   gpu.setForeground(0x00ff88)
   gpu.set(3, 3, "Имя предмета: ")
@@ -618,70 +598,91 @@ local function drawSellScanScreen()
   gpu.set(62, 3, string.format("%.0f", sellConfirmItem.price))
 
   gpu.setForeground(0x00ff88)
-  gpu.set(3, 4, "Можно продать: ")
+  gpu.set(3, 5, "Можно продать: ")   -- был y=4, сдвинули на 5
   gpu.setForeground(0xffffff)
-  gpu.set(18, 4, tostring(sellConfirmItem.qty))
+  gpu.set(18, 5, tostring(sellConfirmItem.qty))
 
+  -- Сдвинутый вниз текст и кнопки
   gpu.setForeground(0xffaa00)
   local scanText = "Сканировать на наличие предмета:"
   local scanX = math.floor((80 - unicode.len(scanText)) / 2)
-  gpu.set(scanX, 6, scanText)
+  gpu.set(scanX, 11, scanText)   -- было 6
 
-  local slotBtn = {x=28, y=8, xs=20, ys=1, text="1 слот", bg=0x333333, fg=0xaaaaaa}
-  local allBtn  = {x=28, y=10, xs=20, ys=1, text="Весь инвентарь", bg=0x333333, fg=0x00ff88}
-
+  local slotBtn = {x=28, y=13, xs=20, ys=1, text="1 слот", bg=0x333333, fg=0xaaaaaa}
+  local allBtn  = {x=28, y=15, xs=20, ys=1, text="Весь инвентарь", bg=0x333333, fg=0x00ff88}
   drawFlexButton(slotBtn)
   drawFlexButton(allBtn)
   drawFlexButton(backButton)
+
+  -- Если активно модальное окно, рисуем его поверх
+  if showSellPopup and sellConfirmItem then
+    drawSellPopup()
+  end
 end
 
--- ========== ФИНАЛЬНОЕ ОКНО ПОДТВЕРЖДЕНИЯ ==========
-local function drawSellFinalConfirm()
-  currentScreen = "sell_confirm"
-  clear()
+-- ========== МОДАЛЬНОЕ ОКНО ПОДТВЕРЖДЕНИЯ ПРОДАЖИ ==========
+local function drawSellPopup()
+  local popupWidth = 34
+  local popupHeight = 6
+  local popupX = math.floor((80 - popupWidth) / 2)
+  local popupY = 7
 
-  local balanceText = "Баланс: " .. string.format("%.2f Ресов $ | ", playerBalance)
-  gpu.setForeground(0x00ff88)
-  gpu.set(3, 1, balanceText)
-  gpu.setForeground(0xff7300)
-  gpu.set(3 + unicode.len(balanceText), 1, string.format("%.2f Эмов *", playerBalance))
-
-  gpu.setForeground(0x00ff88)
-  gpu.set(3, 4, "В инвентаре найдено:")
+  -- Затемнение фона под окном (полупрозрачный нет, просто рисуем рамку)
+  gpu.setBackground(0x000000)
   gpu.setForeground(0xffffff)
-  gpu.set(25, 4, foundAmount .. " шт. " .. sellConfirmItem.displayName)
+  -- Рамка
+  gpu.fill(popupX, popupY, popupWidth, popupHeight, " ")
+  gpu.setBackground(0x333333)
+  gpu.fill(popupX+1, popupY+1, popupWidth-2, popupHeight-2, " ")
 
+  local name = sellConfirmItem.displayName
+  local totalFound = foundAmount
+  local value = totalFound * sellConfirmItem.price
+  local currency = (sellConfirmItem.internalName == "npcMoney") and "Эмов" or "$"
+
+  -- Тексты
+  gpu.setForeground(0xffffff)
+  gpu.set(popupX+2, popupY+1, "Подтверждение")
   gpu.setForeground(0xffaa00)
-  gpu.set(3, 6, "Будет изъято: " .. foundAmount .. " шт.")
-
-  local value = foundAmount * sellConfirmItem.price
+  -- Строка "Магазин заберёт: количество"
+  gpu.set(popupX+2, popupY+2, "Магазин заберёт: " .. totalFound)
+  gpu.set(popupX+2, popupY+3, name .. " x" .. totalFound)
   gpu.setForeground(0x00ff88)
-  gpu.set(3, 7, "Пополнение баланса: +" .. string.format("%.2f", value) .. " Эмов")
+  gpu.set(popupX+2, popupY+4, "Вы получите: " .. string.format("%.2f", value) .. " " .. currency)
 
-  local confirmBtn = {x=18, y=12, xs=20, ys=2, text="ПОДТВЕРДИТЬ", bg=0x003300, fg=0x00ff88}
-  local cancelBtn  = {x=45, y=12, xs=15, ys=2, text="ОТМЕНА", bg=0x330000, fg=0xff5555}
-
-  drawFlexButton(confirmBtn)
-  drawFlexButton(cancelBtn)
-  drawFlexButton(backButton)
+  -- Кнопки
+  local yesBtn = {x=popupX+4, y=popupY+5, xs=10, ys=1, text="Да", bg=0x003300, fg=0x00ff88}
+  local noBtn  = {x=popupX+popupWidth-14, y=popupY+5, xs=10, ys=1, text="Отмена", bg=0x330000, fg=0xff5555}
+  drawFlexButton(yesBtn)
+  drawFlexButton(noBtn)
+  -- Сохраняем координаты кнопок для обработки кликов (в глобальной видимости не надо, используем замыкание)
+  -- Для обработки клика нужно знать границы. Зададим как константы внутри обработчика.
 end
 
 local function goToSellConfirm(item)
   if not item then return end
   sellConfirmItem = item
   foundAmount = 0
+  showSellPopup = false
   drawSellScanScreen()
 end
 
 -- ========== ВЫПОЛНЕНИЕ ПРОДАЖИ ==========
 local function performSell()
+  showSellPopup = false
+  drawSellScanScreen()  -- скроем попап
   drawCenteredText(15, "Выполняется пополнение...", 0x00ff88)
   os.sleep(0.6)
 
   local realExtracted = extractToME(sellConfirmItem.internalName, foundAmount)
   local value = realExtracted * sellConfirmItem.price
 
-  playerBalance = playerBalance + value
+  -- Определяем тип валюты
+  if sellConfirmItem.internalName == "npcMoney" then
+    emBalance = emBalance + value
+  else
+    resBalance = resBalance + value
+  end
   playerTransactions = playerTransactions + 1
 
   if currentToken then
@@ -700,10 +701,10 @@ local function performSell()
   else
     drawCenteredText(18, "Не удалось изъять предметы!", 0xff0000)
   end
-
   os.sleep(2.5)
 
   currentScreen = "shop_sell"
+  showSellPopup = false
   drawBuyStatic()
   drawBuyItemsList()
   drawBuyButtons()
@@ -756,11 +757,8 @@ local function drawShopMenu()
   drawFlexButton(backButton)
 end
 
--- Загружаем внешнюю функцию справки
-local drawHelpScreen = dofile("/home/help_screen.lua")(helpPage, gpu, unicode, drawCenteredText, drawFlexButton, backButton)
--- Обратите внимание: helpPage здесь передаётся как копия, функция будет использовать переданное значение, 
--- но мы будем менять глобальную helpPage и перерисовывать экран. Это нормально, т.к. drawHelpScreen вызывается 
--- каждый раз при отрисовке и получает актуальную helpPage.
+-- Загружаем функцию справки из внешнего файла
+local drawHelpScreen = dofile("/home/help_screen.lua")  -- возвращает функцию
 
 local function drawWelcomeScreen()
   gpu.setBackground(0x202020) gpu.fill(1,1,80,25," ")
@@ -791,7 +789,7 @@ local function drawMainMenu()
     local x1 = math.floor((80 - unicode.len(full1))/2)+1
     gpu.setForeground(0xFF00FF) gpu.set(x1,4,pink1)
     gpu.setForeground(0xFFFFFF) gpu.set(x1+unicode.len(pink1),4,white1)
-    local pink2 = "Ваш баланс: " local white2 = string.format("%.2f",playerBalance).." Эмов"
+    local pink2 = "Ресы: " local white2 = string.format("%.2f", resBalance).." $ | Эмы: ".. string.format("%.2f", emBalance).." *"
     local full2 = pink2..white2
     local x2 = math.floor((80 - unicode.len(full2))/2)+1
     gpu.setForeground(0xFF00FF) gpu.set(x2,6,pink2)
@@ -804,27 +802,20 @@ end
 local function drawAccount(data)
   clear()
   drawCenteredText(6, currentPlayer .. ":", 0xFFD700)
-  local balance = data.balance or 0
-  local balancePart1 = string.format("Баланс: %.2f Ресов $ | ", balance)
-  local balancePart2 = string.format("%.2f Эмов *", balance)
-  local balanceFull = balancePart1 .. balancePart2
-  local balanceX = math.floor((80 - unicode.len(balanceFull)) / 2) + 1
+  local res = data.resBalance or resBalance
+  local em = data.emBalance or emBalance
+  local resPart1 = string.format("Баланс Ресов: %.2f $ | ", res)
+  local emPart = string.format("Эмов: %.2f *", em)
+  local full = resPart1 .. emPart
+  local x = math.floor((80 - unicode.len(full)) / 2) + 1
   gpu.setForeground(0x00FF00)
-  gpu.set(balanceX, 8, balancePart1)
+  gpu.set(x, 8, resPart1)
   gpu.setForeground(0xff7300)
-  gpu.set(balanceX + unicode.len(balancePart1), 8, balancePart2)
+  gpu.set(x + unicode.len(resPart1), 8, emPart)
   local transText = "Совершенно транзакций: " .. tostring(data.transactions or 0)
-  local transX = math.floor((80 - unicode.len(transText)) / 2) + 1
-  gpu.setForeground(0x00FF00)
-  gpu.set(transX, 10, "Совершенно транзакций: ")
-  gpu.setForeground(0xFFFFFF)
-  gpu.set(transX + unicode.len("Совершенно транзакций: "), 10, tostring(data.transactions or 0))
+  drawCenteredText(10, transText, 0x00FF00)
   local regText = "Регистрация: " .. (data.regDate or "Неизвестно")
-  local regX = math.floor((80 - unicode.len(regText)) / 2) + 1
-  gpu.setForeground(0x00FF00)
-  gpu.set(regX, 12, "Регистрация: ")
-  gpu.setForeground(0xFFFFFF)
-  gpu.set(regX + unicode.len("Регистрация: "), 12, data.regDate or "Неизвестно")
+  drawCenteredText(12, regText, 0x00FF00)
   drawFlexButton(backButton)
 end
 
@@ -848,7 +839,8 @@ local function retryAccountAfterTokenRefresh()
         local success, msg = pcall(serialization.unserialize, data)
         if success and msg and msg.op == "welcome" and msg.token then
           currentToken = msg.token
-          playerBalance = msg.balance or 0.0
+          emBalance = msg.balance or 0.0
+          resBalance = msg.resBalance or 0.0
           alreadyAuthorized = true
           currentScreen = "account_loading"
           accountRequestTime = os.clock()
@@ -894,7 +886,7 @@ local function goToUtility() currentScreen="utility" clear() drawCenteredText(8,
 local function goToHelp()
   currentScreen = "help"
   helpPage = 1
-  drawHelpScreen(helpPage, gpu, unicode, drawCenteredText, drawFlexButton, backButton)  -- вызываем с актуальным helpPage
+  drawHelpScreen(helpPage, gpu, unicode, drawCenteredText, drawFlexButton, backButton)
 end
 local function goBackToMenu() currentScreen="menu" drawMainMenu() end
 
@@ -923,6 +915,24 @@ while true do
 
   if e == "touch" then
     local x, y = ev[3], ev[4]
+
+    -- Обработка модального окна продажи (поверх всего)
+    if showSellPopup and currentScreen == "sell_scan" then
+      local popupWidth = 34
+      local popupHeight = 6
+      local popupX = math.floor((80 - popupWidth) / 2)
+      local popupY = 7
+      -- Проверяем клик по кнопкам попапа
+      local yesBtn = {x=popupX+4, y=popupY+5, xs=10, ys=1}
+      local noBtn = {x=popupX+popupWidth-14, y=popupY+5, xs=10, ys=1}
+      if isButtonClicked(yesBtn, x, y) then
+        performSell()
+      elseif isButtonClicked(noBtn, x, y) or not (x >= popupX and x < popupX+popupWidth and y >= popupY and y < popupY+popupHeight) then
+        showSellPopup = false
+        drawSellScanScreen()
+      end
+      goto continue  -- пропускаем остальную обработку
+    end
 
     if currentScreen == "shop_buy" or currentScreen == "shop_sell" then
       if y >= 6 and y <= 17 and x >= 2 and x <= 77 then
@@ -1030,14 +1040,12 @@ while true do
       local btnW = 3
       local btnH = 1
       local spacing = 2
-
       local keys = {
         {"1","2","3"},
         {"4","5","6"},
         {"7","8","9"},
         {"<","0","C"}
       }
-
       for row = 1, 4 do
         for col = 1, 3 do
           local bx = startX + (col-1)*(btnW + spacing)
@@ -1050,34 +1058,38 @@ while true do
       end
 
     elseif currentScreen == "sell_scan" then
+      -- Здесь попап уже обработан выше, если showSellPopup активно, но сюда не попадём (goto continue)
       if isButtonClicked(backButton, x, y) then
         currentScreen = "shop_sell"
+        showSellPopup = false
         drawBuyStatic()
         drawBuyItemsList()
         drawBuyButtons()
-      elseif y == 8 and x >= 28 and x <= 48 then
-        drawCenteredText(15, "Сканирование...", 0xffaa00)
+      elseif y == 13 and x >= 28 and x <= 48 then  -- "1 слот" (сдвинуто)
+        drawCenteredText(17, "Сканирование...", 0xffaa00)
         os.sleep(0.4)
         foundAmount = scanPlayerInventory(sellConfirmItem.internalName)
-        if foundAmount > 0 then drawSellFinalConfirm() else
-          drawCenteredText(15, "Предмет не найден!", 0xff0000); os.sleep(1.2); drawSellScanScreen()
+        if foundAmount > 0 then
+          showSellPopup = true
+          drawSellScanScreen()  -- перерисует с попапом
+        else
+          drawCenteredText(17, "Предмет не найден!", 0xff0000)
+          os.sleep(1.2)
+          drawSellScanScreen()
         end
-      elseif y == 10 and x >= 28 and x <= 48 then
-        drawCenteredText(15, "Сканирование инвентаря...", 0xffaa00)
+      elseif y == 15 and x >= 28 and x <= 48 then  -- "Весь инвентарь" (сдвинуто)
+        drawCenteredText(17, "Сканирование инвентаря...", 0xffaa00)
         os.sleep(0.6)
         debugPlayerInventory()
         foundAmount = scanPlayerInventory(sellConfirmItem.internalName)
-        if foundAmount > 0 then drawSellFinalConfirm() else
-          drawCenteredText(15, "Предмет не найден!", 0xff0000); os.sleep(1.5); drawSellScanScreen()
+        if foundAmount > 0 then
+          showSellPopup = true
+          drawSellScanScreen()
+        else
+          drawCenteredText(17, "Предмет не найден!", 0xff0000)
+          os.sleep(1.5)
+          drawSellScanScreen()
         end
-      end
-
-    elseif currentScreen == "sell_confirm" then
-      if isButtonClicked(backButton, x, y) or (y >= 12 and y <= 13 and x >= 45 and x <= 60) then
-        currentScreen = "sell_scan"
-        drawSellScanScreen()
-      elseif y >= 12 and y <= 13 and x >= 18 and x <= 38 then
-        performSell()
       end
 
     elseif currentScreen == "menu" then
@@ -1209,7 +1221,8 @@ while true do
         drawMainMenu()
       end
     else
-      playerBalance = 0.0
+      emBalance = 0.0
+      resBalance = 0.0
       currentScreen = "auth"
       authStartTime = os.clock()
       drawAuthScreen()
@@ -1230,7 +1243,8 @@ while true do
       if success and msg then
         if msg.op == "welcome" and msg.token then
           currentToken = msg.token
-          playerBalance = msg.balance or 0.0
+          emBalance = msg.balance or 0.0
+          resBalance = msg.resBalance or 0.0
           playerTransactions = msg.transactions or 0
           playerRegDate = msg.regDate or ""
           alreadyAuthorized = true
@@ -1259,4 +1273,5 @@ while true do
       end
     end
   end
+  ::continue::
 end
