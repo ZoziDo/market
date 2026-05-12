@@ -397,7 +397,7 @@ local function drawPurchaseScreen()
   gpu.setForeground(0xffffff)
   gpu.set(12, 7, tostring(purchaseQuantity))
 
-  -- ========== ЦИФРОВАЯ КЛАВИАТУРА ==========
+  -- ========== ЦИФРОВАЯ КЛАВИАТУРА (маленькие кнопки через drawFlexButton) ==========
   local keys = {
     {"1","2","3"},
     {"4","5","6"},
@@ -405,10 +405,10 @@ local function drawPurchaseScreen()
     {"<","0","C"}
   }
 
-  local startX = 32
+  local startX = 34
   local startY = 9
-  local btnW = 5
-  local btnH = 3
+  local btnW = 3
+  local btnH = 1
   local spacing = 2
 
   for row = 1, 4 do
@@ -417,22 +417,36 @@ local function drawPurchaseScreen()
       local y = startY + (row-1)*(btnH + 1)
       local text = keys[row][col]
 
-      gpu.setBackground(0x222222)
-      gpu.fill(x, y, btnW, btnH, " ")
-      gpu.setForeground(0xffaa00)
-
-      local tx = x + math.floor((btnW - unicode.len(text)) / 2)
-      local ty = y + 1
-      gpu.set(tx, ty, text)
+      local btn = {
+        x = x, xs = btnW,
+        y = y, ys = btnH,
+        text = text,
+        bg = 0x333333,
+        fg = 0xffaa00
+      }
+      drawFlexButton(btn)
     end
   end
 
-  -- Кнопки Назад и Купить
-  local backBtn = {x=18, y=22, xs=16, ys=2, text="Назад", bg=0x333333, fg=0xffaa00}
-  local buyBtn  = {x=46, y=22, xs=16, ys=2, text="Купить", bg=0x333333, fg=0x00ff88}
+  -- Кнопки Назад и Купить (как кнопка "Назад" в аккаунте)
+  local backBtn = {x = 18, y = 23, xs = 10, ys = 1, text = "Назад", bg = 0x333333, fg = 0xff7300}
+  local buyBtn  = {x = 50, y = 23, xs = 10, ys = 1, text = "Купить", bg = 0x333333, fg = 0x00ff88}
 
   drawFlexButton(backBtn)
   drawFlexButton(buyBtn)
+end
+
+local function handleQuantityButtonClick(btnText)
+  if btnText == "C" then
+    purchaseQuantity = 1
+  elseif btnText == "<" then
+    purchaseQuantity = math.floor(purchaseQuantity / 10)
+    if purchaseQuantity < 1 then purchaseQuantity = 1 end
+  elseif tonumber(btnText) then
+    purchaseQuantity = purchaseQuantity * 10 + tonumber(btnText)
+    if purchaseQuantity > purchaseItem.qty then purchaseQuantity = purchaseItem.qty end
+  end
+  drawPurchaseScreen()
 end
 
 -- ========== ПЕРЕХОД В ЭКРАН ПОКУПКИ ==========
@@ -768,7 +782,7 @@ while true do
 
     elseif currentScreen == "purchase" then
       -- Кнопка Назад
-      if (y >= 22 and y <= 23) and (x >= 18 and x <= 33) then
+      if (y >= 23 and y <= 23) and (x >= 18 and x <= 28) then
         currentScreen = "shop_buy"
         drawBuyStatic()
         drawBuyItemsList()
@@ -776,7 +790,7 @@ while true do
       end
 
       -- Кнопка Купить
-      if (y >= 22 and y <= 23) and (x >= 46 and x <= 61) then
+      if (y >= 23 and y <= 23) and (x >= 50 and x <= 60) then
         performPurchase()
       end
 
@@ -793,25 +807,18 @@ while true do
         {"7","8","9"},
         {"<","0","C"}
       }
+      local startX = 34
+      local startY = 9
+      local btnW = 3
+      local btnH = 1
+      local spacing = 2
 
       for row = 1, 4 do
         for col = 1, 3 do
           local bx = startX + (col-1)*(btnW + spacing)
           local by = startY + (row-1)*(btnH + 1)
           if x >= bx and x < bx+btnW and y >= by and y < by+btnH then
-            local key = keys[row][col]
-
-            if key == "C" then
-              purchaseQuantity = 1
-            elseif key == "<" then
-              purchaseQuantity = math.floor(purchaseQuantity / 10)
-              if purchaseQuantity < 1 then purchaseQuantity = 1 end
-            elseif tonumber(key) then
-              purchaseQuantity = purchaseQuantity * 10 + tonumber(key)
-              if purchaseQuantity > purchaseItem.qty then purchaseQuantity = purchaseItem.qty end
-            end
-
-            drawPurchaseScreen()
+            handleQuantityButtonClick(keys[row][col])
             break
           end
         end
