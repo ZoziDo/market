@@ -26,12 +26,13 @@ local alreadyAuthorized = false
 local helpPage = 1
 local HELP_PAGES = 3
 
--- Переменные магазина
+-- Переменные магазина (общие для покупки и пополнения)
 local shopItems = {}
 local shopSearch = ""
 local searchActive = false
 local searchInput = ""
 local showOnlyAvailable = false
+local currentShopMode = "buy"   -- "buy" или "sell"
 
 -- Скролл и выделение
 local listScroll = 1
@@ -48,6 +49,20 @@ local maxItemWidth = 0
 -- Переменные экрана покупки
 local purchaseQuantity = 1
 local purchaseItem = nil
+
+-- ==================== ТОВАРЫ ДЛЯ ПОПОЛНЕНИЯ ====================
+local sellItems = {
+    {name = "Деньги",          qty = 1308586, price = 1.0},
+    {name = "Железный блок",   qty = 1309081, price = 0.9},
+    {name = "Железный слиток", qty = 1294724, price = 0.1},
+    {name = "Малахит",         qty = 1310720, price = 500},
+    {name = "Осколок души",    qty = 1310720, price = 500},
+    {name = "Свинцовый блок",  qty = 1310709, price = 0.9},
+    {name = "Свинцовый слиток",qty = 1151101, price = 0.1},
+    {name = "Солнечная пыль",  qty = 1310718, price = 75},
+    {name = "Упакованный трофей", qty = 1310642, price = 150},
+    {name = "Чешуя дракона",   qty = 1310719, price = 500},
+}
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
@@ -144,22 +159,32 @@ local shopMenuButtons = {
   bundle = {x=31,xs=20,y=15,ys=3,text="Наборы/Квесты",tx=4,ty=1,bg=0x444444,fg=0x3375cc}
 }
 
--- ========== ЗАГРУЗКА ПРЕДМЕТОВ ИЗ ME ==========
-local function loadShopItems()
-  if component.isAvailable("me_interface") then
-    local me = component.me_interface
-    local rawItems = me.getItemsInNetwork()
-    shopItems = {}
-    for _, item in ipairs(rawItems) do
-      if item and item.size and item.size > 0 then
-        table.insert(shopItems, {
-          name = item.label or item.name or "???",
-          qty = item.size,
-          price = 0.0
-        })
-      end
+-- ==================== ЗАГРУЗКА ПРЕДМЕТОВ ====================
+local function loadBuyItems()
+  if not component.isAvailable("me_interface") then return end
+  local me = component.me_interface
+  local rawItems = me.getItemsInNetwork()
+  shopItems = {}
+  for _, item in ipairs(rawItems) do
+    if item and item.size and item.size > 0 then
+      table.insert(shopItems, {
+        name = item.label or item.name or "???",
+        qty = item.size,
+        price = 0.0
+      })
     end
-    table.sort(shopItems, function(a,b) return a.name < b.name end)
+  end
+  table.sort(shopItems, function(a,b) return a.name < b.name end)
+end
+
+local function loadSellItems()
+  shopItems = {}
+  for _, item in ipairs(sellItems) do
+    table.insert(shopItems, {
+      name = item.name,
+      qty = item.qty,
+      price = item.price
+    })
   end
 end
 
@@ -191,9 +216,14 @@ local function drawBuyStatic()
   gpu.setForeground(0xff7300)
   gpu.set(3 + unicode.len(balanceText), 1, string.format("%.2f Эмов *", playerBalance))
 
-  -- "Магазин продаёт"
-  gpu.setForeground(0xff7300)
-  gpu.set(3, 3, "Магазин продаёт")
+  -- Заголовок (будет заменён динамически)
+  if currentShopMode == "buy" then
+    gpu.setForeground(0xff7300)
+    gpu.set(3, 3, "Магазин продаёт")
+  else
+    gpu.setForeground(0xff7300)
+    gpu.set(3, 3, "Магазин покупает")
+  end
 
   -- Заголовки таблицы (строка 4)
   gpu.setBackground(0x222222)
@@ -354,7 +384,7 @@ local function drawBuyButtons()
   drawFlexButton(nextButton)
 end
 
--- ========== ЭКРАН ПОКУПКИ (ТОЧНАЯ КОПИЯ С ИЗОБРАЖЕНИЯ) ==========
+-- ========== ЭКРАН ПОКУПКИ (ОСТАВЛЕН ДЛЯ ПОКУПКИ) ==========
 local function drawPurchaseScreen()
   currentScreen = "purchase"
   clear()
@@ -397,7 +427,7 @@ local function drawPurchaseScreen()
   gpu.setForeground(0xffffff)
   gpu.set(12, 7, tostring(purchaseQuantity))
 
-  -- ========== ЦИФРОВАЯ КЛАВИАТУРА (маленькие кнопки через drawFlexButton) ==========
+  -- ========== ЦИФРОВАЯ КЛАВИАТУРА ==========
   local keys = {
     {"1","2","3"},
     {"4","5","6"},
@@ -420,12 +450,12 @@ local function drawPurchaseScreen()
       gpu.fill(x, y, btnW, btnH, " ")
       gpu.setForeground(0xffaa00)
       local tx = x + math.floor((btnW - unicode.len(text)) / 2)
-      local ty = y   -- <-- убрали +1, т.к. btnH=1, текст должен быть в той же строке y
+      local ty = y
       gpu.set(tx, ty, text)
     end
   end
 
-  -- Кнопки Назад и Купить (как кнопка "Назад" в аккаунте)
+  -- Кнопки Назад и Купить
   local backBtn = {x = 18, y = 23, xs = 10, ys = 1, text = "Назад", bg = 0x333333, fg = 0xff7300}
   local buyBtn  = {x = 50, y = 23, xs = 10, ys = 1, text = "Купить", bg = 0x333333, fg = 0x00ff88}
 
@@ -446,7 +476,7 @@ local function handleQuantityButtonClick(btnText)
   drawPurchaseScreen()
 end
 
--- ========== ПЕРЕХОД В ЭКРАН ПОКУПКИ ==========
+-- ========== ПЕРЕХОД В ЭКРАН ПОКУПКИ (ДЛЯ ПОКУПКИ И ПОПОЛНЕНИЯ) ==========
 local function goToPurchase(item)
   if not item then return end
   purchaseItem = item
@@ -456,7 +486,6 @@ end
 
 -- Заглушка покупки
 local function performPurchase()
-  -- Здесь будет логика отправки purchaseQuantity на сервер
   drawCenteredText(20, "Покупка выполняется...", 0x00ff88)
   os.sleep(1)
   currentScreen = "shop_buy"
@@ -468,9 +497,10 @@ local function performPurchase()
   drawBuyButtons()
 end
 
--- ========== ИНИЦИАЛИЗАЦИЯ ПОКУПКИ ==========
+-- ========== ИНИЦИАЛИЗАЦИЯ ПОКУПКИ И ПОПОЛНЕНИЯ ==========
 local function goToBuy()
   currentScreen = "shop_buy"
+  currentShopMode = "buy"
   listScroll = 1
   horizontalScroll = 1
   selectedIndex = 0
@@ -480,7 +510,25 @@ local function goToBuy()
   searchActive = false
   searchInput = ""
   showOnlyAvailable = false
-  loadShopItems()
+  loadBuyItems()
+  drawBuyStatic()
+  drawBuyItemsList()
+  drawBuyButtons()
+end
+
+local function goToSell()
+  currentScreen = "shop_sell"
+  currentShopMode = "sell"
+  listScroll = 1
+  horizontalScroll = 1
+  selectedIndex = 0
+  hoveredIndex = 0
+  selectedItem = nil
+  shopSearch = ""
+  searchActive = false
+  searchInput = ""
+  showOnlyAvailable = false
+  loadSellItems()
   drawBuyStatic()
   drawBuyItemsList()
   drawBuyButtons()
@@ -719,7 +767,7 @@ while true do
   if e == "touch" then
     local x, y = ev[3], ev[4]
 
-    if currentScreen == "shop_buy" then
+    if currentScreen == "shop_buy" or currentScreen == "shop_sell" then
       -- Клик по списку
       if y >= 6 and y <= 17 and x >= 2 and x <= 77 then
         local relativeRow = y - 5
@@ -780,7 +828,11 @@ while true do
     elseif currentScreen == "purchase" then
       -- Кнопка Назад
       if (y >= 23 and y <= 23) and (x >= 18 and x <= 28) then
-        currentScreen = "shop_buy"
+        if currentShopMode == "buy" then
+          currentScreen = "shop_buy"
+        else
+          currentScreen = "shop_sell"
+        end
         drawBuyStatic()
         drawBuyItemsList()
         drawBuyButtons()
@@ -792,10 +844,10 @@ while true do
       end
 
       -- Обработка цифровой клавиатуры
-      local startX = 32
-      local startY = 9
-      local btnW = 5
-      local btnH = 3
+      local startX = 34
+      local startY = 11
+      local btnW = 3
+      local btnH = 1
       local spacing = 2
 
       local keys = {
@@ -804,11 +856,6 @@ while true do
         {"7","8","9"},
         {"<","0","C"}
       }
-      local startX = 34
-      local startY = 11
-      local btnW = 3
-      local btnH = 1
-      local spacing = 2
 
       for row = 1, 4 do
         for col = 1, 3 do
@@ -856,11 +903,7 @@ while true do
       for name, btn in pairs(shopMenuButtons) do
         if x>=btn.x and x<btn.x+btn.xs and y>=btn.y and y<btn.y+btn.ys then
           if name == "buy" then goToBuy()
-          elseif name == "sell" then
-            currentScreen = "shop_sell"
-            clear()
-            drawCenteredText(10, "Пополнение (в разработке)", 0xffffff)
-            drawFlexButton(backButton)
+          elseif name == "sell" then goToSell()
           elseif name == "bundle" then
             currentScreen = "shop_bundle"
             clear()
@@ -871,7 +914,7 @@ while true do
         end
       end
       if isButtonClicked(backButton, x, y) then goBackToMenu() end
-    elseif currentScreen == "shop_sell" or currentScreen == "shop_bundle" then
+    elseif currentScreen == "shop_bundle" then
       if isButtonClicked(backButton, x, y) then
         currentScreen = "shop"
         drawShopMenu()
@@ -880,7 +923,7 @@ while true do
       if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
     end
 
-  elseif e == "scroll" and currentScreen == "shop_buy" then
+  elseif e == "scroll" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
     local direction = ev[5]
     local x = ev[3]
     local y = ev[4]
@@ -892,7 +935,7 @@ while true do
       end
     end
 
-  elseif e == "mouse_move" and currentScreen == "shop_buy" then
+  elseif e == "mouse_move" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
     local x, y = ev[3], ev[4]
     if y >= 6 and y <= 17 and x >= 2 and x <= 77 then
       local rel = y - 5
@@ -908,7 +951,7 @@ while true do
       end
     end
 
-  elseif e == "key_down" and currentScreen == "shop_buy" and searchActive then
+  elseif e == "key_down" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") and searchActive then
     local ch = ev[3]
     if ch == 13 then
       shopSearch = searchInput
