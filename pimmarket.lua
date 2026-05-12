@@ -5,6 +5,11 @@ local unicode = require("unicode")
 local serialization = require("serialization")
 local keyboard = require("keyboard")
 
+-- Загружаем внешний файл с предметами
+local shopData = dofile("/home/shop_items.lua")
+local sellItems = shopData.sellItems
+local vanillaItems = shopData.vanillaItems
+
 local modem = component.modem
 local pimList = {}
 for addr in component.list("pim") do table.insert(pimList, addr) end
@@ -34,6 +39,9 @@ local searchInput = ""
 local showOnlyAvailable = false
 local currentShopMode = "buy"   -- "buy" или "sell"
 
+-- Фильтр для раздела покупки ("all" / "vanilla")
+local buyFilterMode = "all"
+
 -- Скролл и выделение
 local listScroll = 1
 local visibleRows = 12
@@ -49,20 +57,6 @@ local maxItemWidth = 0
 -- Переменные экрана покупки
 local purchaseQuantity = 1
 local purchaseItem = nil
-
--- ==================== ТОВАРЫ ДЛЯ ПОПОЛНЕНИЯ ====================
-local sellItems = {
-    {name = "Деньги",          qty = 1308586, price = 1.0},
-    {name = "Железный блок",   qty = 1309081, price = 0.9},
-    {name = "Железный слиток", qty = 1294724, price = 0.1},
-    {name = "Малахит",         qty = 1310720, price = 500},
-    {name = "Осколок души",    qty = 1310720, price = 500},
-    {name = "Свинцовый блок",  qty = 1310709, price = 0.9},
-    {name = "Свинцовый слиток",qty = 1151101, price = 0.1},
-    {name = "Солнечная пыль",  qty = 1310718, price = 75},
-    {name = "Упакованный трофей", qty = 1310642, price = 150},
-    {name = "Чешуя дракона",   qty = 1310719, price = 500},
-}
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
@@ -147,9 +141,9 @@ local function isButtonClicked(btn, x, y)
          x >= btn.x and x < btn.x + btn.xs
 end
 
--- Кнопки панели покупки
+-- Кнопки панели (текст и цвет динамические)
 local searchButton = {text = "Поиск...", x=3, y=21, xs=20, ys=1, bg=0x333333, fg=0x00aaff}
-local stockButton   = {text = "● В наличии", x=33, y=21, xs=14, ys=1, bg=0x333333, fg=0x00aaff}
+local filterButton  = {text = "Все", x=33, y=21, xs=14, ys=1, bg=0x333333, fg=0x00aaff}
 local nextButton    = {text = "Далее", x=70, y=21, xs=7, ys=1, bg=0x333333, fg=0x888888}
 
 -- Кнопки меню "Магазин"
@@ -193,8 +187,26 @@ local function getFilteredItems()
   local filtered = {}
   for _, item in ipairs(shopItems) do
     local matchesSearch = (shopSearch == "" or string.find(string.lower(item.name), string.lower(shopSearch), 1, true))
-    local matchesAvailability = (not showOnlyAvailable) or (item.qty > 0)
-    if matchesSearch and matchesAvailability then
+
+    -- Фильтр "В наличии" для пополнения
+    local matchesAvailability = true
+    if currentShopMode == "sell" then
+      matchesAvailability = (not showOnlyAvailable) or (item.qty > 0)
+    end
+
+    -- Фильтр "Vanilla" для покупки
+    local matchesVanilla = true
+    if currentShopMode == "buy" and buyFilterMode == "vanilla" then
+      matchesVanilla = false
+      for _, vname in ipairs(vanillaItems) do
+        if item.name == vname then
+          matchesVanilla = true
+          break
+        end
+      end
+    end
+
+    if matchesSearch and matchesAvailability and matchesVanilla then
       table.insert(filtered, item)
     end
   end
@@ -216,7 +228,7 @@ local function drawBuyStatic()
   gpu.setForeground(0xff7300)
   gpu.set(3 + unicode.len(balanceText), 1, string.format("%.2f Эмов *", playerBalance))
 
-  -- Заголовок (будет заменён динамически)
+  -- Заголовок
   if currentShopMode == "buy" then
     gpu.setForeground(0xff7300)
     gpu.set(3, 3, "Магазин продаёт")
@@ -359,20 +371,36 @@ end
 
 -- ========== ОБНОВЛЕНИЕ КНОПОК ПОКУПКИ ==========
 local function drawBuyButtons()
+  -- Кнопка поиска
   if searchActive then
     local displayText = unicode.sub(searchInput, -16)
     searchButton.text = displayText .. "_"
   else
     searchButton.text = "Поиск..."
   end
-  if showOnlyAvailable then
-    stockButton.text = "● В наличии"
-    stockButton.fg = 0x00ff00
+
+  -- Кнопка фильтра
+  if currentShopMode == "buy" then
+    -- Раздел "Покупка": кнопка "Все" / "Vanilla"
+    if buyFilterMode == "all" then
+      filterButton.text = "Все"
+      filterButton.fg = 0x00aaff   -- голубой
+    else
+      filterButton.text = "Vanilla"
+      filterButton.fg = 0xffaa00   -- оранжевый
+    end
   else
-    stockButton.text = "● В наличии"
-    stockButton.fg = 0xff0000
+    -- Раздел "Пополнение": кнопка "В наличии"
+    if showOnlyAvailable then
+      filterButton.text = "● В наличии"
+      filterButton.fg = 0x00ff00
+    else
+      filterButton.text = "● В наличии"
+      filterButton.fg = 0xff0000
+    end
   end
 
+  -- Кнопка "Далее"
   if selectedItem then
     nextButton.fg = 0xffaa00
   else
@@ -380,7 +408,7 @@ local function drawBuyButtons()
   end
 
   drawFlexButton(searchButton)
-  drawFlexButton(stockButton)
+  drawFlexButton(filterButton)
   drawFlexButton(nextButton)
 end
 
@@ -476,7 +504,7 @@ local function handleQuantityButtonClick(btnText)
   drawPurchaseScreen()
 end
 
--- ========== ПЕРЕХОД В ЭКРАН ПОКУПКИ (ДЛЯ ПОКУПКИ И ПОПОЛНЕНИЯ) ==========
+-- ========== ПЕРЕХОД В ЭКРАН ПОКУПКИ ==========
 local function goToPurchase(item)
   if not item then return end
   purchaseItem = item
@@ -488,7 +516,11 @@ end
 local function performPurchase()
   drawCenteredText(20, "Покупка выполняется...", 0x00ff88)
   os.sleep(1)
-  currentScreen = "shop_buy"
+  if currentShopMode == "buy" then
+    currentScreen = "shop_buy"
+  else
+    currentScreen = "shop_sell"
+  end
   selectedItem = nil
   selectedIndex = 0
   hoveredIndex = 0
@@ -510,6 +542,7 @@ local function goToBuy()
   searchActive = false
   searchInput = ""
   showOnlyAvailable = false
+  buyFilterMode = "all"
   loadBuyItems()
   drawBuyStatic()
   drawBuyItemsList()
@@ -802,14 +835,30 @@ while true do
         searchActive = true
         searchInput = shopSearch
         drawBuyButtons()
-      elseif isButtonClicked(stockButton, x, y) then
-        showOnlyAvailable = not showOnlyAvailable
-        listScroll = 1
-        selectedIndex = 0
-        selectedItem = nil
-        hoveredIndex = 0
-        drawBuyItemsList()
-        drawBuyButtons()
+      elseif isButtonClicked(filterButton, x, y) then
+        if currentShopMode == "buy" then
+          -- Переключаем фильтр "Все" / "Vanilla"
+          if buyFilterMode == "all" then
+            buyFilterMode = "vanilla"
+          else
+            buyFilterMode = "all"
+          end
+          listScroll = 1
+          selectedIndex = 0
+          selectedItem = nil
+          hoveredIndex = 0
+          drawBuyItemsList()
+          drawBuyButtons()
+        else
+          -- Режим пополнения: фильтр "В наличии"
+          showOnlyAvailable = not showOnlyAvailable
+          listScroll = 1
+          selectedIndex = 0
+          selectedItem = nil
+          hoveredIndex = 0
+          drawBuyItemsList()
+          drawBuyButtons()
+        end
       elseif isButtonClicked(nextButton, x, y) then
         if selectedItem then
           goToPurchase(selectedItem)
