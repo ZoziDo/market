@@ -196,10 +196,12 @@ local function scanPlayerInventory(itemName)
   
   local count = 0
   gpu.setBackground(0x000000)
-  gpu.fill(2, 12, 76, 10, " ")  -- очистка области логов
+  gpu.fill(2, 12, 76, 10, " ")  -- очистка области
 
   gpu.setForeground(0xffaa00)
   gpu.set(3, 12, "=== СКАНИРОВАНИЕ: " .. itemName .. " ===")
+
+  local line = 13
 
   for slot = 1, 44 do
     local stack = pim.getStackInSlot(slot)
@@ -209,21 +211,22 @@ local function scanPlayerInventory(itemName)
       local name        = stack.name or "nil"
       local size        = stack.size or 0
 
-      local y = 13 + math.floor((slot-1)/6)   -- распределяем красиво
-
-      -- Основная проверка
-      local found = false
-      if label == itemName or displayName == itemName or name == itemName then
-        found = true
-      end
+      local found = (label == itemName or displayName == itemName or name == itemName)
 
       if found then
         count = count + size
         gpu.setForeground(0x00ff00)
-        gpu.set(3, y, string.format("Слот %2d: НАЙДЕНО! %s x%d", slot, displayName, size))
+        gpu.set(3, line, string.format("Слот %2d: %s x%d  ✓", slot, displayName:sub(1,35), size))
       else
-        gpu.setForeground(0x666666)
-        gpu.set(3, y, string.format("Слот %2d: %s", slot, displayName:sub(1,45)))
+        gpu.setForeground(0x777777)
+        gpu.set(3, line, string.format("Слот %2d: %s", slot, displayName:sub(1,40)))
+      end
+
+      line = line + 1
+      if line > 22 then 
+        gpu.setForeground(0xffaa00)
+        gpu.set(3, 23, "... и другие слоты ...")
+        break 
       end
     end
   end
@@ -231,7 +234,7 @@ local function scanPlayerInventory(itemName)
   gpu.setForeground(0x00ff88)
   gpu.set(3, 22, string.format("=== ИТОГО НАЙДЕНО: %d шт. ===", count))
   
-  os.sleep(3)   -- время посмотреть результат
+  os.sleep(4)   -- увеличил время, чтобы успеть прочитать
   return count
 end
 
