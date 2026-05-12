@@ -96,7 +96,12 @@ local purchaseItem = nil
 
 local sellConfirmItem = nil
 local foundAmount = 0
-local showSellPopup = false   -- флаг модального окна продажи
+local showSellPopup = false
+
+-- Переменные репорта
+local reportInput = ""
+local reportActive = false
+local lastReportTime = nil
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
@@ -150,7 +155,7 @@ end
 
 local function drawBottomPanel()
   gpu.setForeground(0xcc3342) gpu.set(4,23,"[Помощь]")
-  gpu.setForeground(0x00FF00) gpu.set(32,23,"[Конвертация + / $]")
+  gpu.setForeground(0xcc3342) gpu.set(27,23,"[Сообщить о проблеме]")
   gpu.setForeground(0xcc3342) gpu.set(70,23,"[Отзывы]")
 end
 
@@ -188,6 +193,41 @@ local shopMenuButtons = {
   sell = {x=31,xs=20,y=13,ys=3,text="Пополнение",tx=5,ty=1,bg=0x444444,fg=0x00FF88},
   bundle = {x=31,xs=20,y=17,ys=3,text="Наборы/Квесты",tx=4,ty=1,bg=0x444444,fg=0x00FF88}
 }
+
+-- ==================== ОТПРАВКА В TELEGRAM ====================
+local function sendToTelegram(message)
+  local botToken = "8898934085:AAFlDLiWi9HiDqZLsRMnXwRnlwK7-aUPJYE" -- замени на свой
+  local chatId = "-1003932869786"     -- замени на свой
+  local url = "https://api.telegram.org/bot" .. botToken .. "/sendMessage?chat_id=" .. chatId .. "&text=" .. require("sensor").urlEncode(message)
+  if component.isAvailable("internet") then
+    local success, result = pcall(function()
+      local internet = require("internet")
+      local request = internet.request(url)
+      request:flush()
+      local response = ""
+      while true do
+        local chunk = request:read(1024)
+        if not chunk then break end
+        response = response .. chunk
+      end
+      request:close()
+      return response
+    end)
+    return success
+  end
+end
+
+-- ==================== ПРОВЕРКА СБРОСА РЕПОРТА ====================
+local function canSendReport()
+  if not lastReportTime then return true end
+  local now = os.time()
+  local reportDate = os.date("*t", lastReportTime)
+  local nowDate = os.date("*t", now)
+  if reportDate.day ~= nowDate.day or reportDate.month ~= nowDate.month or reportDate.year ~= nowDate.year then
+    return true
+  end
+  return false
+end
 
 -- ==================== ЗАГРУЗКА ПРЕДМЕТОВ ====================
 local function loadBuyItems()
@@ -585,7 +625,6 @@ local function drawSellPopup()
 
   gpu.setBackground(0x000000)
   gpu.setForeground(0xffffff)
-  -- Рамка
   gpu.fill(popupX, popupY, popupWidth, popupHeight, " ")
   gpu.setBackground(0x333333)
   gpu.fill(popupX+1, popupY+1, popupWidth-2, popupHeight-2, " ")
@@ -603,7 +642,6 @@ local function drawSellPopup()
   gpu.setForeground(0x00ff88)
   gpu.set(popupX+3, popupY+4, "Вы получите: " .. string.format("%.2f", value) .. " " .. currency)
 
-  -- Кнопки внутри окна
   local yesBtn = {x=popupX+5, y=popupY+6, xs=10, ys=1, text="Да", bg=0x004400, fg=0x00ff88}
   local noBtn  = {x=popupX+popupWidth-15, y=popupY+6, xs=10, ys=1, text="Отмена", bg=0x440000, fg=0xff5555}
   drawFlexButton(yesBtn)
@@ -636,7 +674,6 @@ local function drawSellScanScreen()
   gpu.setForeground(0xffffff)
   gpu.set(18, 5, tostring(sellConfirmItem.qty))
 
-  -- Сдвинутый вниз текст и кнопки
   gpu.setForeground(0xffaa00)
   local scanText = "Сканировать на наличие предмета:"
   local scanX = math.floor((80 - unicode.len(scanText)) / 2)
@@ -653,7 +690,6 @@ local function drawSellScanScreen()
   end
 end
 
--- goToSellConfirm после drawSellScanScreen
 local function goToSellConfirm(item)
   if not item then return end
   sellConfirmItem = item
@@ -665,7 +701,7 @@ end
 -- ========== ВЫПОЛНЕНИЕ ПРОДАЖИ ==========
 local function performSell()
   showSellPopup = false
-  drawSellScanScreen()  -- скрываем попап, показываем экран сканирования
+  drawSellScanScreen()
   drawCenteredText(17, "Выполняется пополнение...", 0x00ff88)
   os.sleep(0.6)
 
@@ -707,6 +743,47 @@ local function performSell()
   drawBuyStatic()
   drawBuyItemsList()
   drawBuyButtons()
+end
+
+-- ========== ЭКРАН РЕПОРТА ==========
+local function drawReportScreen()
+  currentScreen = "report"
+  clear()
+
+  drawCenteredText(4, "РЕПОРТ", 0xff7300)
+
+  gpu.setForeground(0xcccccc)
+  local help1 = "Опишите проблему: баг, предложение, жалоба."
+  local helpX = math.floor((80 - unicode.len(help1)) / 2) + 1
+  gpu.set(helpX, 7, help1)
+
+  if not canSendReport() then
+    drawCenteredText(9, "Вы уже отправляли репорт сегодня.", 0xff0000)
+    drawCenteredText(10, "Лимит: 1 сообщение в сутки (сброс в 00:00 МСК).", 0xff0000)
+    drawFlexButton(backButton)
+    return
+  end
+
+  gpu.setBackground(0x222222)
+  gpu.fill(10, 9, 60, 3, " ")
+  gpu.setForeground(0xffffff)
+  if reportActive then
+    local d = unicode.sub(reportInput, -39) .. "_"
+    gpu.set(11, 10, d)
+  elseif reportInput ~= "" then
+    gpu.set(11, 10, unicode.sub(reportInput, -39))
+  else
+    gpu.setForeground(0x888888)
+    gpu.set(11, 10, "Введите текст сообщения...")
+  end
+  gpu.setBackground(0x000000)
+
+  local sendBtn = {x=20, y=14, xs=40, ys=1, text="ОТПРАВИТЬ", bg=0x004400, fg=0x00ff88}
+  drawFlexButton(sendBtn)
+  drawFlexButton(backButton)
+
+  gpu.setForeground(0x888888)
+  drawCenteredText(16, "Ограничение: 1 репорт в сутки (сброс в 00:00 МСК)", 0x888888)
 end
 
 -- ========== ИНИЦИАЛИЗАЦИЯ ПОКУПКИ И ПОПОЛНЕНИЯ ==========
@@ -756,7 +833,6 @@ local function drawShopMenu()
   drawFlexButton(backButton)
 end
 
--- Загружаем функцию справки из внешнего файла
 local drawHelpScreen = dofile("/home/help_screen.lua")
 
 local function drawWelcomeScreen()
@@ -828,7 +904,6 @@ local function drawAccount(data)
   gpu.setForeground(0xff7300)
   gpu.set(x + unicode.len(resPart1), 12, emPart)
 
-  -- Совершенно транзакций: зелёное слово + белая цифра
   local transLabel = "Совершенно транзакций: "
   local transCount = tostring(data.transactions or 0)
   local fullTrans = transLabel .. transCount
@@ -838,7 +913,6 @@ local function drawAccount(data)
   gpu.setForeground(0xFFFFFF)
   gpu.set(transX + unicode.len(transLabel), 13, transCount)
 
-  -- Регистрация: зелёная надпись + белая дата
   local regLabel = "Регистрация: "
   local regDate = data.regDate or "Неизвестно"
   local fullReg = regLabel .. regDate
@@ -857,7 +931,6 @@ local function drawAccountLoading()
   drawFlexButton(backButton)
 end
 
--- Попытка обновления токена
 local function retryAccountAfterTokenRefresh()
   if not currentPlayer then return end
   modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
@@ -909,7 +982,13 @@ local function goToAccount()
   }))
 end
 
--- Переходы
+local function goToReport()
+  currentScreen = "report"
+  reportInput = ""
+  reportActive = false
+  drawReportScreen()
+end
+
 local function goToShop()
   currentScreen = "shop"
   drawShopMenu()
@@ -948,14 +1027,14 @@ while true do
   if e == "touch" then
     local x, y = ev[3], ev[4]
 
-    -- Обработка модального окна продажи (поверх всего)
+    -- Обработка модального окна продажи
     if showSellPopup and currentScreen == "sell_scan" then
-      local popupWidth = 38
-      local popupHeight = 7
+      local popupWidth = 40
+      local popupHeight = 9
       local popupX = math.floor((80 - popupWidth) / 2)
       local popupY = 6
-      local yesBtn = {x=popupX+5, y=popupY+5, xs=10, ys=1}
-      local noBtn = {x=popupX+popupWidth-15, y=popupY+5, xs=10, ys=1}
+      local yesBtn = {x=popupX+5, y=popupY+6, xs=10, ys=1}
+      local noBtn = {x=popupX+popupWidth-15, y=popupY+6, xs=10, ys=1}
       if isButtonClicked(yesBtn, x, y) then
         performSell()
       elseif isButtonClicked(noBtn, x, y) then
@@ -1098,7 +1177,7 @@ while true do
         drawBuyStatic()
         drawBuyItemsList()
         drawBuyButtons()
-      elseif y == 13 and x >= 28 and x <= 48 then  -- "1 слот"
+      elseif y == 13 and x >= 30 and x <= 50 then
         drawCenteredText(17, "Сканирование...", 0xffaa00)
         os.sleep(0.4)
         foundAmount = scanPlayerInventory(sellConfirmItem.internalName)
@@ -1110,10 +1189,9 @@ while true do
           os.sleep(1.2)
           drawSellScanScreen()
         end
-      elseif y == 15 and x >= 28 and x <= 48 then  -- "Весь инвентарь"
+      elseif y == 15 and x >= 30 and x <= 50 then
         drawCenteredText(17, "Сканирование инвентаря...", 0xffaa00)
         os.sleep(0.6)
-        -- debugPlayerInventory()  -- убрано, чтобы не мелькал отладочный вывод
         foundAmount = scanPlayerInventory(sellConfirmItem.internalName)
         if foundAmount > 0 then
           showSellPopup = true
@@ -1135,17 +1213,16 @@ while true do
         end
       end
       if y == 23 then
-        if x >= 4 and x <= 13 then goToHelp() end
+        if x >= 4 and x <= 13 then goToHelp()
+        elseif x >= 27 and x <= 52 then goToReport() end
       end
     elseif currentScreen == "help" then
       local pageStr = "⟵  " .. helpPage .. "  ⟶"
       local pageX = math.floor((80 - unicode.len(pageStr)) / 2) + 1
       if y == 20 then
-        -- Левая стрелка (область 5 символов)
         if x >= pageX and x < pageX + 5 and helpPage > 1 then
           helpPage = helpPage - 1
           drawHelpScreen(helpPage, gpu, unicode, drawCenteredText, drawFlexButton, backButton)
-        -- Правая стрелка (область 5 символов)
         elseif x >= pageX + unicode.len(pageStr) - 5 and x < pageX + unicode.len(pageStr) and helpPage < HELP_PAGES then
           helpPage = helpPage + 1
           drawHelpScreen(helpPage, gpu, unicode, drawCenteredText, drawFlexButton, backButton)
@@ -1179,7 +1256,28 @@ while true do
         drawShopMenu()
       end
     elseif currentScreen == "utility" then
-      if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
+      if isButtonClicked(backButton, x, y) then goBackToMenu() end
+    elseif currentScreen == "report" then
+      if isButtonClicked(backButton, x, y) then
+        goBackToMenu()
+      elseif canSendReport() then
+        local sendBtn = {x=20, y=14, xs=40, ys=1}
+        if isButtonClicked(sendBtn, x, y) and reportInput ~= "" then
+          local dateStr = os.date("%d.%m.%Y %H:%M:%S")
+          local message = "Игрок: " .. currentPlayer .. "\nДата: " .. dateStr .. "\nСообщение: " .. reportInput
+          local ok = sendToTelegram(message)
+          if ok then
+            lastReportTime = os.time()
+            drawCenteredText(18, "Сообщение успешно отправлено! Ожидайте ответа.", 0x00ff88)
+            os.sleep(2)
+            goBackToMenu()
+          else
+            drawCenteredText(18, "Ошибка отправки. Проверьте интернет.", 0xff0000)
+            os.sleep(1.5)
+            drawReportScreen()
+          end
+        end
+      end
     end
 
   elseif e == "scroll" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
@@ -1208,6 +1306,20 @@ while true do
         hoveredIndex = 0
         drawBuyItemsList()
       end
+    end
+
+  elseif e == "key_down" and currentScreen == "report" and canSendReport() then
+    local ch = ev[3]
+    if ch == 13 then
+      reportActive = false
+      drawReportScreen()
+    elseif ch == 8 then
+      reportInput = unicode.sub(reportInput, 1, -2)
+      drawReportScreen()
+    elseif ch > 0 then
+      reportActive = true
+      reportInput = reportInput .. unicode.char(ch)
+      drawReportScreen()
     end
 
   elseif e == "key_down" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") and searchActive then
