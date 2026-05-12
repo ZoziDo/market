@@ -29,6 +29,19 @@ if not selector then
     end
 end
 
+local function debugPlayerInventory()
+    if not selector then return end
+    local slots = selector.getSlots() or {}
+    print("=== СОДЕРЖИМОЕ ИНВЕНТАРЯ ===")
+    for _, slot in ipairs(slots) do
+        local stack = selector.getSlot(slot)
+        if stack and stack.qty and stack.qty > 0 then
+            print(string.format("Слот %2d | %3d шт. | %s | %s", 
+                slot, stack.qty, stack.label or "???", stack.name or "нет имени"))
+        end
+    end
+end
+
 modem.open(0xffef)
 modem.open(0xfffe)
 
