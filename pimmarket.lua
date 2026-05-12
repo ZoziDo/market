@@ -138,9 +138,9 @@ end
 
 -- Кнопки главного меню
 local menuButtons = {
-  shop = {x=31,xs=20,y=8,ys=3,text="Магазин",tx=6,ty=1,bg=0x444444,fg=0x3375cc},
-  util = {x=31,xs=20,y=12,ys=3,text="Полезности",tx=5,ty=1,bg=0x444444,fg=0x3375cc},
-  account = {x=31,xs=20,y=16,ys=3,text="Аккаунт",tx=6,ty=1,bg=0x444444,fg=0x3375cc}
+  shop = {x=31,xs=20,y=9,ys=3,text="Магазин",tx=6,ty=1,bg=0x444444,fg=0x3375cc},
+  util = {x=31,xs=20,y=13,ys=3,text="Полезности",tx=5,ty=1,bg=0x444444,fg=0x3375cc},
+  account = {x=31,xs=20,y=17,ys=3,text="Аккаунт",tx=6,ty=1,bg=0x444444,fg=0x3375cc}
 }
 local function drawButton(btn)
   gpu.setBackground(btn.bg) gpu.fill(btn.x,btn.y,btn.xs,btn.ys," ")
@@ -184,9 +184,9 @@ local filterButton  = {text = "В наличии", x=33, y=21, xs=14, ys=1, bg=0
 local nextButton    = {text = "Далее", x=70, y=21, xs=7, ys=1, bg=0x333333, fg=0x888888}
 
 local shopMenuButtons = {
-  shop = {x=31,xs=20,y=10,ys=3,text="Магазин",tx=6,ty=1,bg=0x444444,fg=0x3375cc},
-  util = {x=31,xs=20,y=14,ys=3,text="Полезности",tx=5,ty=1,bg=0x444444,fg=0x3375cc},
-  account = {x=31,xs=20,y=18,ys=3,text="Аккаунт",tx=6,ty=1,bg=0x444444,fg=0x3375cc}
+  buy = {x=31,xs=20,y=7,ys=3,text="Покупка",tx=6,ty=1,bg=0x444444,fg=0x3375cc},
+  sell = {x=31,xs=20,y=11,ys=3,text="Пополнение",tx=5,ty=1,bg=0x444444,fg=0x3375cc},
+  bundle = {x=31,xs=20,y=15,ys=3,text="Наборы/Квесты",tx=4,ty=1,bg=0x444444,fg=0x3375cc}
 }
 
 -- ==================== ЗАГРУЗКА ПРЕДМЕТОВ ====================
@@ -692,13 +692,13 @@ local function performSell()
     }))
   end
 
-  -- Выводим результат
-  clear()
   local currencyName = (sellConfirmItem.internalName == "npcMoney") and "Эмов" or "Ресов"
+  gpu.setBackground(0x000000)
+  gpu.fill(1, 17, 80, 1, " ")
   if realExtracted > 0 then
-    drawCenteredText(15, "Успешно! +" .. string.format("%.2f", value) .. " " .. currencyName, 0x00ff88)
+    drawCenteredText(17, "Успешно! +" .. string.format("%.2f", value) .. " " .. currencyName, 0x00ff88)
   else
-    drawCenteredText(15, "Не удалось изъять предметы!", 0xff0000)
+    drawCenteredText(17, "Не удалось изъять предметы!", 0xff0000)
   end
   os.sleep(2.5)
 
