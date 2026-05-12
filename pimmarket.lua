@@ -189,35 +189,45 @@ end
 -- ==================== РАБОТА С ИНВЕНТАРЁМ И ME ====================
 local function scanPlayerInventory(itemName)
   if not pim then 
-    print("PIM не найден!")
+    drawCenteredText(15, "ОШИБКА: PIM не найден!", 0xff0000)
+    os.sleep(1)
     return 0 
   end
   
   local count = 0
-  print("=== Сканирование инвентаря для: " .. itemName .. " ===") -- отладка
+  
+  -- Очищаем область для отладки
+  gpu.setBackground(0x000000)
+  gpu.fill(2, 12, 76, 8, " ")  -- область для логов
+  
+  gpu.setForeground(0xffaa00)
+  gpu.set(3, 12, "=== СКАНИРОВАНИЕ: " .. itemName .. " ===")
   
   for slot = 1, 44 do
     local stack = pim.getStackInSlot(slot)
     if stack then
-      local label = stack.label or ""
-      local displayName = stack.displayName or ""
-      local internalName = stack.name or ""
+      local label = stack.label or "nil"
+      local display = stack.displayName or "nil"
+      local name = stack.name or "nil"
+      local size = stack.size or 0
       
-      -- Отладка — что именно лежит в слоте
-      if label == itemName or displayName == itemName or internalName == itemName then
-        count = count + (stack.size or 0)
-        print(string.format("Слот %d: НАЙДЕНО! %s x%d", slot, label, stack.size))
+      local y = 13 + (slot % 8)  -- распределяем по экрану
+      
+      if label == itemName or display == itemName or name == itemName then
+        count = count + size
+        gpu.setForeground(0x00ff00)
+        gpu.set(3, y, string.format("Слот %2d: НАЙДЕНО! %s x%d", slot, label, size))
       else
-        -- Показываем, что реально лежит (для отладки)
-        if slot <= 9 or slot % 5 == 0 then -- показываем не все слоты, чтобы не спамило
-          print(string.format("Слот %d: label='%s' | display='%s' | name='%s'", 
-                slot, label, displayName, internalName))
-        end
+        gpu.setForeground(0x888888)
+        gpu.set(3, y, string.format("Слот %2d: %s", slot, label:sub(1,40)))
       end
     end
   end
   
-  print("Итого найдено: " .. count)
+  gpu.setForeground(0x00ff88)
+  gpu.set(3, 22, "=== ИТОГО НАЙДЕНО: " .. count .. " шт. ===")
+  
+  os.sleep(2.5)  -- даём время посмотреть результат
   return count
 end
 
