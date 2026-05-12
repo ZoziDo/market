@@ -196,16 +196,12 @@ local function scanPlayerInventory(itemName)
   
   local count = 0
   gpu.setBackground(0x000000)
-  gpu.fill(2, 12, 76, 11, " ")   -- очищаем большую область
+  gpu.fill(2, 12, 76, 11, " ")
 
   gpu.setForeground(0xffaa00)
   gpu.set(3, 12, "=== СКАНИРОВАНИЕ: " .. itemName .. " ===")
 
-  local leftCol = 3
-  local rightCol = 42   -- вторая колонка (где были красные квадраты)
-
-  local leftLine = 14
-  local rightLine = 14
+  local line = 14
 
   for slot = 1, 44 do
     local stack = pim.getStackInSlot(slot)
@@ -215,40 +211,28 @@ local function scanPlayerInventory(itemName)
       local name        = stack.name or "nil"
       local size        = stack.size or 0
 
+      -- Основная проверка
       local found = (label == itemName or displayName == itemName or name == itemName)
 
       if found then
         count = count + size
         gpu.setForeground(0x00ff00)
-        local text = string.format("Слот %2d: %s x%d  ✓", slot, displayName:sub(1,25), size)
-        
-        if leftLine <= 22 then
-          gpu.set(leftCol, leftLine, text)
-          leftLine = leftLine + 1
-        else
-          gpu.set(rightCol, rightLine, text)
-          rightLine = rightLine + 1
-        end
+        gpu.set(3, line, string.format("Слот %2d: НАЙДЕНО! %s x%d", slot, displayName, size))
       else
-        gpu.setForeground(0x666666)
-        local text = string.format("Слот %2d: %s", slot, displayName:sub(1,28))
-        
-        if leftLine <= 22 then
-          gpu.set(leftCol, leftLine, text)
-          leftLine = leftLine + 1
-        elseif rightLine <= 22 then
-          gpu.set(rightCol, rightLine, text)
-          rightLine = rightLine + 1
-        end
+        gpu.setForeground(0x888888)
+        gpu.set(3, line, string.format("Слот %2d: label=%s | display=%s | name=%s", 
+              slot, label:sub(1,20), displayName:sub(1,20), name:sub(1,20)))
       end
+
+      line = line + 1
+      if line > 23 then break end
     end
   end
 
-  -- Итог
   gpu.setForeground(0x00ff88)
   gpu.set(3, 23, string.format("=== ИТОГО НАЙДЕНО: %d шт. ===", count))
   
-  os.sleep(4.5)   -- время посмотреть результат
+  os.sleep(5)
   return count
 end
 
