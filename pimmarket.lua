@@ -195,8 +195,9 @@ local shopMenuButtons = {
 
 -- ==================== ОТПРАВКА В TELEGRAM ====================
 local function sendToTelegram(message)
-  local botToken = "YOUR_BOT_TOKEN"
-  local chatId = "YOUR_CHAT_ID"
+  local botToken = "8898934085:AAFlDLiWi9HiDqZLsRMnXwRnlwK7-aUPJYE"
+  local chatId = "-1003932869786"
+  
   local function urlEncode(str)
     if str then
       str = string.gsub(str, "\n", "\r\n")
@@ -207,23 +208,39 @@ local function sendToTelegram(message)
     end
     return str
   end
-  local url = "https://api.telegram.org/bot" .. botToken .. "/sendMessage?chat_id=" .. chatId .. "&text=" .. urlEncode(message)
+  
+  local body = "chat_id=" .. chatId .. "&text=" .. urlEncode(message)
+  
   if component.isAvailable("internet") then
     local success, result = pcall(function()
       local internet = require("internet")
-      local request = internet.request(url)
-      request:flush()
+      local conn = internet.open("api.telegram.org", 443)
+      if not conn then error("Не удалось открыть соединение") end
+      
+      local request = "POST /bot" .. botToken .. "/sendMessage HTTP/1.1\r\n"
+      request = request .. "Host: api.telegram.org\r\n"
+      request = request .. "Content-Type: application/x-www-form-urlencoded\r\n"
+      request = request .. "Content-Length: " .. tostring(#body) .. "\r\n"
+      request = request .. "Connection: close\r\n"
+      request = request .. "\r\n"
+      request = request .. body
+      
+      conn:write(request)
+      conn:flush()
+      
       local response = ""
       while true do
-        local chunk = request:read(1024)
+        local chunk = conn:read(1024)
         if not chunk then break end
         response = response .. chunk
       end
-      request:close()
-      return response
+      conn:close()
+      
+      return response:find("200 OK") ~= nil
     end)
-    return success
+    return success and result
   end
+  return false
 end
 
 -- ==================== ПРОВЕРКА СБРОСА РЕПОРТА ====================
