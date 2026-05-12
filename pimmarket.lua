@@ -45,6 +45,27 @@ local selectedItem = nil
 local horizontalScroll = 1
 local maxItemWidth = 0
 
+-- Переменные для экрана выбора количества
+local quantity = 1
+local maxQuantity = 0
+local quantityInput = "1"   -- строковое представление
+
+-- Кнопки цифровой клавиатуры
+local numButtons = {}
+for i = 1, 9 do
+  local col = (i - 1) % 3
+  local row = math.floor((i - 1) / 3)
+  numButtons[i] = {text = tostring(i), x = 24 + col * 7, y = 9 + row, xs = 5, ys = 1, bg = 0x333333, fg = 0xffffff}
+end
+-- Нижний ряд: Backspace, 0, Enter
+numButtons[10] = {text = "<", x = 24, y = 12, xs = 5, ys = 1, bg = 0x333333, fg = 0xffffff}   -- backspace
+numButtons[11] = {text = "0", x = 31, y = 12, xs = 5, ys = 1, bg = 0x333333, fg = 0xffffff}
+numButtons[12] = {text = "=", x = 38, y = 12, xs = 5, ys = 1, bg = 0x333333, fg = 0xffffff}   -- подтверждение
+
+-- Кнопки навигации в количестве
+local quantityBackButton = {text = "Назад", x = 20, y = 23, xs = 10, ys = 1, bg = 0x333333, fg = 0xff7300}
+local buyButton = {text = "Купить", x = 50, y = 23, xs = 10, ys = 1, bg = 0x333333, fg = 0x00ff88}
+
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
 gpu.setBackground(0x000000)
@@ -236,33 +257,28 @@ local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
   gpu.setBackground(0x000000)
 end
 
--- ========== НОВЫЙ СКРОЛЛБАР (ВПЛОТНУЮ) ==========
+-- ========== СКРОЛЛБАР ==========
 local function drawScrollBar()
   local total = #filteredItems
   local barX = 78
   local barY = 6
   local barHeight = 12
 
-  -- Очистка области скроллбара
   gpu.setBackground(0x000000)
   gpu.fill(barX, barY, 2, barHeight, " ")
 
   if total <= visibleRows then return end
 
-  -- Фон скроллбара
   gpu.setBackground(0x111111)
   gpu.fill(barX, barY, 2, barHeight, " ")
 
-  -- Ползунок (синий)
   local thumbHeight = math.max(2, math.floor(barHeight * visibleRows / total))
   local maxPos = barHeight - thumbHeight
   local thumbPos = math.floor((listScroll - 1) * maxPos / (total - visibleRows)) + 1
-
-  -- Ограничиваем позицию, чтобы не вылезал за пределы
   thumbPos = math.min(thumbPos, maxPos + 1)
 
   gpu.setBackground(0x00aaff)
-  gpu.fill(barX, barY + thumbPos - 1, 2, thumbHeight, " ")   -- сдвиг -1 исправляет выход
+  gpu.fill(barX, barY + thumbPos - 1, 2, thumbHeight, " ")
 
   gpu.setBackground(0x000000)
 end
@@ -276,17 +292,15 @@ local function drawBuyItemsList()
   listScroll = math.max(1, math.min(listScroll, maxScroll))
 
   gpu.setBackground(0x000000)
-  gpu.fill(2, 6, 78, visibleRows, " ")  -- 78, чтобы и список и скроллбар попали в очистку
+  gpu.fill(2, 6, 78, visibleRows, " ")
 
   for i = 1, visibleRows do
     local itemIndex = listScroll + i - 1
     local item = filtered[itemIndex]
     if not item then break end
-
     local y = 5 + i
     local isSelected = (itemIndex == selectedIndex)
     local isHovered = (itemIndex == hoveredIndex)
-
     drawSingleRow(y, item, isHovered, isSelected, itemIndex)
   end
 
@@ -330,7 +344,7 @@ local function smoothScroll(steps)
   drawScrollBar()
 end
 
--- ========== ОБНОВЛЕНИЕ КНОПОК ==========
+-- ========== ОБНОВЛЕНИЕ КНОПОК ПОКУПКИ ==========
 local function drawBuyButtons()
   if searchActive then
     local displayText = unicode.sub(searchInput, -16)
@@ -357,12 +371,90 @@ local function drawBuyButtons()
   drawFlexButton(nextButton)
 end
 
--- ========== ТЕСТОВАЯ СТРАНИЦА ==========
-local function goToTestPage()
-  currentScreen = "test_page"
+-- ========== ЭКРАН ВЫБОРА КОЛИЧЕСТВА ==========
+local function drawQuantityScreen(item)
   clear()
-  drawCenteredText(12, "Разработке...", 0x00ff88)
-  drawFlexButton(backButton)
+  -- Баланс
+  local balanceText = "Баланс: " .. string.format("%.2f Ресов $ | ", playerBalance)
+  gpu.setForeground(0x00ff88)
+  gpu.set(3, 1, balanceText)
+  gpu.setForeground(0xff7300)
+  gpu.set(3 + unicode.len(balanceText), 1, string.format("%.2f Эмов *", playerBalance))
+
+  -- Информация о предмете
+  local nameLine = "Имя предмета: " .. item.name .. "    Доступно: " .. item.qty
+  gpu.setForeground(0xffffff)
+  gpu.set(3, 3, nameLine)
+
+  local price = item.price or 0.0
+  local total = string.format("%.2f", price * quantity)
+  local priceStr = string.format("%.2f", price)
+  local sumLine = "На сумму: " .. total .. "    Цена: " .. priceStr
+  gpu.set(3, 4, sumLine)
+
+  local qtyLine = "Кол-во: " .. quantity
+  gpu.set(3, 6, qtyLine)
+
+  -- Цифровые кнопки
+  for _, btn in ipairs(numButtons) do
+    drawFlexButton(btn)
+  end
+
+  -- Кнопки навигации
+  drawFlexButton(quantityBackButton)
+  drawFlexButton(buyButton)
+end
+
+-- Обработка ввода с цифровых кнопок
+local function handleQuantityButtonClick(btnText)
+  if btnText == "<" then
+    -- удалить последний символ
+    if #quantityInput > 1 then
+      quantityInput = string.sub(quantityInput, 1, -2)
+    else
+      quantityInput = "1"
+    end
+  elseif btnText == "=" then
+    -- подтвердить ввод (ничего не делаем, можно использовать для покупки)
+  else
+    -- цифра
+    if quantityInput == "1" and btnText ~= "0" then
+      quantityInput = btnText
+    else
+      quantityInput = quantityInput .. btnText
+    end
+    -- ограничение по максимальному количеству
+    local num = tonumber(quantityInput) or 1
+    if num > maxQuantity then
+      quantityInput = tostring(maxQuantity)
+    end
+  end
+  quantity = tonumber(quantityInput) or 1
+  if quantity > maxQuantity then quantity = maxQuantity end
+  drawQuantityScreen(selectedItem)
+end
+
+-- Переход к экрану количества
+local function goToQuantity(item)
+  if not item then return end
+  currentScreen = "buy_quantity"
+  selectedItem = item
+  maxQuantity = item.qty
+  quantity = 1
+  quantityInput = "1"
+  drawQuantityScreen(item)
+end
+
+-- Функция покупки (заглушка)
+local function performPurchase()
+  -- здесь будет логика покупки
+  currentScreen = "shop_buy"
+  selectedItem = nil
+  selectedIndex = 0
+  hoveredIndex = 0
+  drawBuyStatic()
+  drawBuyItemsList()
+  drawBuyButtons()
 end
 
 -- ========== ИНИЦИАЛИЗАЦИЯ ПОКУПКИ ==========
@@ -383,7 +475,7 @@ local function goToBuy()
   drawBuyButtons()
 end
 
--- ========== ОСТАЛЬНЫЕ ЭКРАНЫ (без изменений) ==========
+-- ========== ОСТАЛЬНЫЕ ЭКРАНЫ ==========
 local function drawShopMenu()
   clear()
   drawCenteredText(4, "МАГАЗИН", 0xff7300)
@@ -617,12 +709,10 @@ while true do
     local x, y = ev[3], ev[4]
 
     if currentScreen == "shop_buy" then
-
       -- Клик по списку
       if y >= 6 and y <= 17 and x >= 2 and x <= 77 then
         local relativeRow = y - 5
         local clickedIndex = listScroll + relativeRow - 1
-
         if filteredItems[clickedIndex] then
           selectedIndex = clickedIndex
           selectedItem = filteredItems[clickedIndex]
@@ -632,7 +722,7 @@ while true do
         end
       end
 
-      -- Клик по скроллбару (теперь он на x=78, y=6..17)
+      -- Клик по скроллбару
       if x >= 78 and y >= 6 and y <= 17 then
         local total = #filteredItems
         if total > visibleRows then
@@ -663,7 +753,7 @@ while true do
         drawBuyButtons()
       elseif isButtonClicked(nextButton, x, y) then
         if selectedItem then
-          goToTestPage()
+          goToQuantity(selectedItem)
         end
       elseif searchActive then
         shopSearch = searchInput
@@ -676,14 +766,23 @@ while true do
         drawBuyButtons()
       end
 
-    elseif currentScreen == "test_page" then
-      if isButtonClicked(backButton, x, y) then
+    elseif currentScreen == "buy_quantity" then
+      -- Цифровые кнопки
+      for _, btn in ipairs(numButtons) do
+        if isButtonClicked(btn, x, y) then
+          handleQuantityButtonClick(btn.text)
+          break
+        end
+      end
+      -- Кнопки навигации
+      if isButtonClicked(quantityBackButton, x, y) then
         currentScreen = "shop_buy"
-        selectedIndex = 0
         selectedItem = nil
         drawBuyStatic()
         drawBuyItemsList()
         drawBuyButtons()
+      elseif isButtonClicked(buyButton, x, y) then
+        performPurchase()
       end
 
     elseif currentScreen == "menu" then
