@@ -195,39 +195,43 @@ local function scanPlayerInventory(itemName)
   end
   
   local count = 0
-  
-  -- Очищаем область для отладки
   gpu.setBackground(0x000000)
-  gpu.fill(2, 12, 76, 8, " ")  -- область для логов
-  
+  gpu.fill(2, 12, 76, 10, " ")  -- очистка области логов
+
   gpu.setForeground(0xffaa00)
   gpu.set(3, 12, "=== СКАНИРОВАНИЕ: " .. itemName .. " ===")
-  
+
   for slot = 1, 44 do
     local stack = pim.getStackInSlot(slot)
     if stack then
-      local label = stack.label or "nil"
-      local display = stack.displayName or "nil"
-      local name = stack.name or "nil"
-      local size = stack.size or 0
-      
-      local y = 13 + (slot % 8)  -- распределяем по экрану
-      
-      if label == itemName or display == itemName or name == itemName then
+      local label       = stack.label or "nil"
+      local displayName = stack.displayName or "nil"
+      local name        = stack.name or "nil"
+      local size        = stack.size or 0
+
+      local y = 13 + math.floor((slot-1)/6)   -- распределяем красиво
+
+      -- Основная проверка
+      local found = false
+      if label == itemName or displayName == itemName or name == itemName then
+        found = true
+      end
+
+      if found then
         count = count + size
         gpu.setForeground(0x00ff00)
-        gpu.set(3, y, string.format("Слот %2d: НАЙДЕНО! %s x%d", slot, label, size))
+        gpu.set(3, y, string.format("Слот %2d: НАЙДЕНО! %s x%d", slot, displayName, size))
       else
-        gpu.setForeground(0x888888)
-        gpu.set(3, y, string.format("Слот %2d: %s", slot, label:sub(1,40)))
+        gpu.setForeground(0x666666)
+        gpu.set(3, y, string.format("Слот %2d: %s", slot, displayName:sub(1,45)))
       end
     end
   end
-  
+
   gpu.setForeground(0x00ff88)
-  gpu.set(3, 22, "=== ИТОГО НАЙДЕНО: " .. count .. " шт. ===")
+  gpu.set(3, 22, string.format("=== ИТОГО НАЙДЕНО: %d шт. ===", count))
   
-  os.sleep(2.5)  -- даём время посмотреть результат
+  os.sleep(3)   -- время посмотреть результат
   return count
 end
 
@@ -239,20 +243,19 @@ local function extractToME(itemName, amount)
     if extracted >= amount then break end
     local stack = pim.getStackInSlot(slot)
     if stack then
-      local label = stack.label or ""
+      local label       = stack.label or ""
       local displayName = stack.displayName or ""
-      local internalName = stack.name or ""
+      local name        = stack.name or ""
 
-      if label == itemName or displayName == itemName or internalName == itemName then
+      if label == itemName or displayName == itemName or name == itemName then
         local toTake = math.min(stack.size or 0, amount - extracted)
         if toTake > 0 then
           local success = pim.extractItem(slot, toTake)
+          if success and component.isAvailable("me_interface") then
+            local me = component.me_interface
+            me.exportItem({name = stack.name, damage = stack.damage or 0}, 0, toTake)
+          end
           if success then
-            if component.isAvailable("me_interface") then
-              local me = component.me_interface
-              local itemToExport = {name = stack.name, damage = stack.damage or 0}
-              me.exportItem(itemToExport, 0, toTake)
-            end
             extracted = extracted + toTake
           end
         end
