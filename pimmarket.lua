@@ -188,11 +188,7 @@ end
 
 -- ==================== СКАНИРОВАНИЕ ====================
 local function scanPlayerInventory(itemName)
-  if not pim then 
-    drawCenteredText(15, "PIM не найден!", 0xff0000)
-    os.sleep(1)
-    return 0 
-  end
+  if not pim then return 0 end
   
   local count = 0
   gpu.setBackground(0x000000)
@@ -207,23 +203,19 @@ local function scanPlayerInventory(itemName)
     local stack = pim.getStackInSlot(slot)
     if stack then
       local id = stack.id or ""
-      local display = stack.displayName or stack.label or ""
       local size = stack.size or 1
 
-      local found = false
-      if itemName == "Деньги" and (id == "customnpcs:npcMoney" or display:find("Деньги")) then
-        found = true
-      elseif display == itemName then
-        found = true
-      end
-
-      if found then
+      if itemName == "Деньги" and id == "customnpcs:npcMoney" then
+        count = count + size
+        gpu.setForeground(0x00ff00)
+        gpu.set(3, line, string.format("Слот %2d: НАЙДЕНО! Деньги x%d", slot, size))
+      elseif stack.displayName == itemName or (stack.label or "") == itemName then
         count = count + size
         gpu.setForeground(0x00ff00)
         gpu.set(3, line, string.format("Слот %2d: НАЙДЕНО! %s x%d", slot, itemName, size))
       else
         gpu.setForeground(0x777777)
-        gpu.set(3, line, string.format("Слот %2d: %s", slot, display:sub(1,35)))
+        gpu.set(3, line, string.format("Слот %2d: %s", slot, (stack.displayName or ""):sub(1,35)))
       end
 
       line = line + 1
@@ -245,45 +237,26 @@ local function extractToME(itemName, amount)
 
   for slot = 1, 44 do
     if extracted >= amount then break end
-    
     local stack = pim.getStackInSlot(slot)
-    if not stack then goto continue end
+    if not stack then goto next end
 
     local id = stack.id or ""
-    local display = stack.displayName or stack.label or ""
 
-    local match = false
-    if itemName == "Деньги" and (id == "customnpcs:npcMoney" or display:find("Деньги")) then
-      match = true
-    elseif display == itemName then
-      match = true
-    end
-
-    if match then
+    if itemName == "Деньги" and id == "customnpcs:npcMoney" then
       local toTake = math.min(stack.size or 1, amount - extracted)
       if toTake > 0 then
-        -- Защита от nil
-        local success = false
-        if pim.extractItem then
-          success = pim.extractItem(slot, toTake)
-        end
-        
-        if success and component.isAvailable("me_interface") then
-          local me = component.me_interface
-          if me.exportItem then
-            me.exportItem({name = stack.name, damage = stack.damage or 0}, 0, toTake)
-          end
-        end
-        
+        -- Пробуем разные способы изъятия
+        local success = pim.extractItem and pim.extractItem(slot, toTake)
         if success then
           extracted = extracted + toTake
         end
       end
     end
-    ::continue::
+    ::next::
   end
   return extracted
 end
+
 -- ========== ПОЛУЧЕНИЕ ОТФИЛЬТРОВАННОГО СПИСКА ==========
 local function getFilteredItems()
   local filtered = {}
