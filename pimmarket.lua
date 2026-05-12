@@ -17,14 +17,28 @@ local pim = component.proxy(pimList[1])
 
 -- ==================== ITEM SELECTOR ====================
 local selector = nil
-for addr in component.list("item_selector") do
+
+-- Правильное название компонента
+for addr in component.list("openperipheral_selector") do
     selector = component.proxy(addr)
+    print("Item Selector найден: openperipheral_selector")
     break
 end
+
+if not selector then
+    -- На всякий случай проверяем старое название
+    for addr in component.list("item_selector") do
+        selector = component.proxy(addr)
+        print("Item Selector найден: item_selector")
+        break
+    end
+end
+
 if selector then
-    print("Item Selector успешно подключён")
+    print("✅ Item Selector успешно подключён")
+    print("Адрес: " .. selector.address)
 else
-    print("ОШИБКА: Item Selector не найден!")
+    print("❌ ОШИБКА: Item Selector не найден!")
 end
 
 modem.open(0xffef)
