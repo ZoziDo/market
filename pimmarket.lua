@@ -15,6 +15,10 @@ local pimList = {}
 for addr in component.list("pim") do table.insert(pimList, addr) end
 local pim = component.proxy(pimList[1])
 
+for k,v in pairs(pim) do
+  print(k)
+end
+
 modem.open(0xffef)
 modem.open(0xfffe)
 
@@ -252,7 +256,6 @@ local function extractToME(itemName, amount)
     if extracted >= amount then break end
 
     local stack = pim.getStackInSlot(slot)
-
     if stack then
       local id = stack.id or ""
       local displayName = stack.displayName or ""
@@ -274,16 +277,13 @@ local function extractToME(itemName, amount)
       if found then
         local toTake = math.min(size, amount - extracted)
 
-        for i = 1, toTake do
-          local ok = pcall(function()
-            return pim.extractItem(slot)
-          end)
+        -- ВАЖНО: extractItem(stack, count)
+        local ok, result = pcall(function()
+          return pim.extractItem(stack, toTake)
+        end)
 
-          if ok then
-            extracted = extracted + 1
-          else
-            break
-          end
+        if ok and result then
+          extracted = extracted + toTake
         end
       end
     end
