@@ -186,10 +186,10 @@ local function loadSellItems()
   end
 end
 
--- ==================== СКАНИРОВАНИЕ ИНВЕНТАРЯ ====================
+-- ==================== СКАНИРОВАНИЕ ====================
 local function scanPlayerInventory(itemName)
   if not pim then 
-    drawCenteredText(15, "ОШИБКА: PIM не найден!", 0xff0000)
+    drawCenteredText(15, "PIM не найден!", 0xff0000)
     os.sleep(1)
     return 0 
   end
@@ -206,16 +206,14 @@ local function scanPlayerInventory(itemName)
   for slot = 1, 44 do
     local stack = pim.getStackInSlot(slot)
     if stack then
-      local id          = stack.id or ""
-      local label       = stack.label or ""
-      local displayName = stack.displayName or ""
-      local size        = stack.size or 1
+      local id = stack.id or ""
+      local display = stack.displayName or stack.label or ""
+      local size = stack.size or 1
 
       local found = false
-
-      if itemName == "Деньги" and (id == "customnpcs:npcMoney" or label:find("Деньги")) then
+      if itemName == "Деньги" and (id == "customnpcs:npcMoney" or display:find("Деньги")) then
         found = true
-      elseif label == itemName or displayName == itemName then
+      elseif display == itemName then
         found = true
       end
 
@@ -225,8 +223,7 @@ local function scanPlayerInventory(itemName)
         gpu.set(3, line, string.format("Слот %2d: НАЙДЕНО! %s x%d", slot, itemName, size))
       else
         gpu.setForeground(0x777777)
-        local show = (displayName ~= "" and displayName) or (label ~= "" and label) or id
-        gpu.set(3, line, string.format("Слот %2d: %s", slot, show:sub(1,35)))
+        gpu.set(3, line, string.format("Слот %2d: %s", slot, display:sub(1,35)))
       end
 
       line = line + 1
@@ -241,44 +238,52 @@ local function scanPlayerInventory(itemName)
   return count
 end
 
--- ==================== ИЗЪЯТИЕ В ME ====================
+-- ==================== ИЗЪЯТИЕ ====================
 local function extractToME(itemName, amount)
   if not pim or amount <= 0 then return 0 end
   local extracted = 0
 
   for slot = 1, 44 do
     if extracted >= amount then break end
+    
     local stack = pim.getStackInSlot(slot)
-    if stack then
-      local id = stack.id or ""
-      local label = stack.label or ""
-      local displayName = stack.displayName or ""
+    if not stack then goto continue end
 
-      local match = false
-      if itemName == "Деньги" and (id == "customnpcs:npcMoney" or label:find("Деньги")) then
-        match = true
-      elseif label == itemName or displayName == itemName then
-        match = true
-      end
+    local id = stack.id or ""
+    local display = stack.displayName or stack.label or ""
 
-      if match then
-        local toTake = math.min(stack.size or 1, amount - extracted)
-        if toTake > 0 then
-          local success = pim.extractItem(slot, toTake)
-          if success then
-            if component.isAvailable("me_interface") then
-              local me = component.me_interface
-              me.exportItem({name = stack.name, damage = stack.damage or 0}, 0, toTake)
-            end
-            extracted = extracted + toTake
+    local match = false
+    if itemName == "Деньги" and (id == "customnpcs:npcMoney" or display:find("Деньги")) then
+      match = true
+    elseif display == itemName then
+      match = true
+    end
+
+    if match then
+      local toTake = math.min(stack.size or 1, amount - extracted)
+      if toTake > 0 then
+        -- Защита от nil
+        local success = false
+        if pim.extractItem then
+          success = pim.extractItem(slot, toTake)
+        end
+        
+        if success and component.isAvailable("me_interface") then
+          local me = component.me_interface
+          if me.exportItem then
+            me.exportItem({name = stack.name, damage = stack.damage or 0}, 0, toTake)
           end
+        end
+        
+        if success then
+          extracted = extracted + toTake
         end
       end
     end
+    ::continue::
   end
   return extracted
 end
-
 -- ========== ПОЛУЧЕНИЕ ОТФИЛЬТРОВАННОГО СПИСКА ==========
 local function getFilteredItems()
   local filtered = {}
