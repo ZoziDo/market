@@ -41,7 +41,6 @@ local function getRealTime()
         body = body .. chunk
       end
       conn:close()
-      -- ИСПРАВЛЕННАЯ СТРОКА: %d для цифр, %- для тире
       local match = body:match("(%d+%-%d+%-%d+ %d+:%d+:%d+)")
       if match then
         local year, month, day, time = match:match("(%d+)%-(%d+)%-(%d+) (.+)")
@@ -161,7 +160,33 @@ while true do
       }))
       log("INFO", "Аккаунт отправлен для " .. msg.name)
 
-    elseif msg.op == "buy" or msg.op == "sell" then
+    elseif msg.op == "selector_status" then
+      log("INFO", string.format("Selector status от %s: %s", msg.name or "?", msg.available and "подключён" or "не найден"))
+
+    elseif msg.op == "scan_report" then
+      if not validateSession(msg.name, msg.token) then
+        log("WARN", "Неверный токен для scan_report от " .. (msg.name or "?"))
+        goto continue
+      end
+      log("INFO", string.format("🔍 %s сканирует '%s': найдено %d шт.", msg.name, msg.target, msg.found or 0))
+
+    elseif msg.op == "sell" then
+      if not validateSession(msg.name, msg.token) then
+        log("WARN", "Неверный токен для sell от " .. (msg.name or "?"))
+        goto continue
+      end
+      local player = players[msg.name]
+      if not player then goto continue end
+      local qty = tonumber(msg.qty) or 0
+      local value = tonumber(msg.value) or 0
+      player.balance = (player.balance or 0) + value
+      player.transactions = (player.transactions or 0) + 1
+      sessions[msg.name].lastAction = os.time()
+      saveDB()
+      log("INFO", string.format("💰 %s пополнил баланс: предмет '%s' x%d на сумму %.2f. Новый баланс: %.2f",
+        msg.name, msg.item, qty, value, player.balance))
+
+    elseif msg.op == "buy" then   -- зарезервировано для будущей покупки
       local player = players[msg.name]
       if not player or not validateSession(msg.name, msg.token) then
         log("WARN", "Неверный токен от " .. (msg.name or "?"))
