@@ -196,12 +196,16 @@ local function scanPlayerInventory(itemName)
   
   local count = 0
   gpu.setBackground(0x000000)
-  gpu.fill(2, 12, 76, 10, " ")  -- очистка области
+  gpu.fill(2, 12, 76, 11, " ")   -- очищаем большую область
 
   gpu.setForeground(0xffaa00)
   gpu.set(3, 12, "=== СКАНИРОВАНИЕ: " .. itemName .. " ===")
 
-  local line = 13
+  local leftCol = 3
+  local rightCol = 42   -- вторая колонка (где были красные квадраты)
+
+  local leftLine = 14
+  local rightLine = 14
 
   for slot = 1, 44 do
     local stack = pim.getStackInSlot(slot)
@@ -216,25 +220,35 @@ local function scanPlayerInventory(itemName)
       if found then
         count = count + size
         gpu.setForeground(0x00ff00)
-        gpu.set(3, line, string.format("Слот %2d: %s x%d  ✓", slot, displayName:sub(1,35), size))
+        local text = string.format("Слот %2d: %s x%d  ✓", slot, displayName:sub(1,25), size)
+        
+        if leftLine <= 22 then
+          gpu.set(leftCol, leftLine, text)
+          leftLine = leftLine + 1
+        else
+          gpu.set(rightCol, rightLine, text)
+          rightLine = rightLine + 1
+        end
       else
-        gpu.setForeground(0x777777)
-        gpu.set(3, line, string.format("Слот %2d: %s", slot, displayName:sub(1,40)))
-      end
-
-      line = line + 1
-      if line > 22 then 
-        gpu.setForeground(0xffaa00)
-        gpu.set(3, 23, "... и другие слоты ...")
-        break 
+        gpu.setForeground(0x666666)
+        local text = string.format("Слот %2d: %s", slot, displayName:sub(1,28))
+        
+        if leftLine <= 22 then
+          gpu.set(leftCol, leftLine, text)
+          leftLine = leftLine + 1
+        elseif rightLine <= 22 then
+          gpu.set(rightCol, rightLine, text)
+          rightLine = rightLine + 1
+        end
       end
     end
   end
 
+  -- Итог
   gpu.setForeground(0x00ff88)
-  gpu.set(3, 22, string.format("=== ИТОГО НАЙДЕНО: %d шт. ===", count))
+  gpu.set(3, 23, string.format("=== ИТОГО НАЙДЕНО: %d шт. ===", count))
   
-  os.sleep(4)   -- увеличил время, чтобы успеть прочитать
+  os.sleep(4.5)   -- время посмотреть результат
   return count
 end
 
