@@ -576,7 +576,6 @@ local function goToPurchase(item)
   drawPurchaseScreen()
 end
 
-
 -- ========== МОДАЛЬНОЕ ОКНО ПОДТВЕРЖДЕНИЯ ПРОДАЖИ ==========
 local function drawSellPopup()
   local popupWidth = 34
@@ -584,7 +583,6 @@ local function drawSellPopup()
   local popupX = math.floor((80 - popupWidth) / 2)
   local popupY = 7
 
-  -- Затемнение фона под окном (полупрозрачный нет, просто рисуем рамку)
   gpu.setBackground(0x000000)
   gpu.setForeground(0xffffff)
   -- Рамка
@@ -597,31 +595,18 @@ local function drawSellPopup()
   local value = totalFound * sellConfirmItem.price
   local currency = (sellConfirmItem.internalName == "npcMoney") and "Эмов" or "$"
 
-  -- Тексты
   gpu.setForeground(0xffffff)
   gpu.set(popupX+2, popupY+1, "Подтверждение")
   gpu.setForeground(0xffaa00)
-  -- Строка "Магазин заберёт: количество"
   gpu.set(popupX+2, popupY+2, "Магазин заберёт: " .. totalFound)
   gpu.set(popupX+2, popupY+3, name .. " x" .. totalFound)
   gpu.setForeground(0x00ff88)
   gpu.set(popupX+2, popupY+4, "Вы получите: " .. string.format("%.2f", value) .. " " .. currency)
 
-  -- Кнопки
   local yesBtn = {x=popupX+4, y=popupY+5, xs=10, ys=1, text="Да", bg=0x003300, fg=0x00ff88}
   local noBtn  = {x=popupX+popupWidth-14, y=popupY+5, xs=10, ys=1, text="Отмена", bg=0x330000, fg=0xff5555}
   drawFlexButton(yesBtn)
   drawFlexButton(noBtn)
-  -- Сохраняем координаты кнопок для обработки кликов (в глобальной видимости не надо, используем замыкание)
-  -- Для обработки клика нужно знать границы. Зададим как константы внутри обработчика.
-end
-
-local function goToSellConfirm(item)
-  if not item then return end
-  sellConfirmItem = item
-  foundAmount = 0
-  showSellPopup = false
-  drawSellScanScreen()
 end
 
 -- ========== ЭКРАН СКАНИРОВАНИЯ (ПОПОЛНЕНИЕ) ==========
@@ -646,7 +631,7 @@ local function drawSellScanScreen()
   gpu.set(62, 3, string.format("%.0f", sellConfirmItem.price))
 
   gpu.setForeground(0x00ff88)
-  gpu.set(3, 5, "Можно продать: ")   -- был y=4, сдвинули на 5
+  gpu.set(3, 5, "Можно продать: ")
   gpu.setForeground(0xffffff)
   gpu.set(18, 5, tostring(sellConfirmItem.qty))
 
@@ -654,7 +639,7 @@ local function drawSellScanScreen()
   gpu.setForeground(0xffaa00)
   local scanText = "Сканировать на наличие предмета:"
   local scanX = math.floor((80 - unicode.len(scanText)) / 2)
-  gpu.set(scanX, 11, scanText)   -- было 6
+  gpu.set(scanX, 11, scanText)
 
   local slotBtn = {x=28, y=13, xs=20, ys=1, text="1 слот", bg=0x333333, fg=0xaaaaaa}
   local allBtn  = {x=28, y=15, xs=20, ys=1, text="Весь инвентарь", bg=0x333333, fg=0x00ff88}
@@ -662,23 +647,30 @@ local function drawSellScanScreen()
   drawFlexButton(allBtn)
   drawFlexButton(backButton)
 
-  -- Если активно модальное окно, рисуем его поверх
   if showSellPopup and sellConfirmItem then
     drawSellPopup()
   end
+end
+
+-- goToSellConfirm теперь ПОСЛЕ drawSellScanScreen
+local function goToSellConfirm(item)
+  if not item then return end
+  sellConfirmItem = item
+  foundAmount = 0
+  showSellPopup = false
+  drawSellScanScreen()
 end
 
 -- ========== ВЫПОЛНЕНИЕ ПРОДАЖИ ==========
 local function performSell()
   showSellPopup = false
   drawSellScanScreen()  -- скроем попап
-  drawCenteredText(15, "Выполняется пополнение...", 0x00ff88)
+  drawCenteredText(17, "Выполняется пополнение...", 0x00ff88)
   os.sleep(0.6)
 
   local realExtracted = extractToME(sellConfirmItem.internalName, foundAmount)
   local value = realExtracted * sellConfirmItem.price
 
-  -- Определяем тип валюты
   if sellConfirmItem.internalName == "npcMoney" then
     emBalance = emBalance + value
   else
@@ -697,8 +689,9 @@ local function performSell()
     }))
   end
 
+  local currency = (sellConfirmItem.internalName == "npcMoney") and "Эмов" or "Ресов"
   if realExtracted > 0 then
-    drawCenteredText(18, "Успешно! +" .. string.format("%.2f", value) .. " Эмов", 0x00ff88)
+    drawCenteredText(18, "Успешно! +" .. string.format("%.2f", value) .. " " .. currency, 0x00ff88)
   else
     drawCenteredText(18, "Не удалось изъять предметы!", 0xff0000)
   end
@@ -759,7 +752,7 @@ local function drawShopMenu()
 end
 
 -- Загружаем функцию справки из внешнего файла
-local drawHelpScreen = dofile("/home/help_screen.lua")  -- возвращает функцию
+local drawHelpScreen = dofile("/home/help_screen.lua")
 
 local function drawWelcomeScreen()
   gpu.setBackground(0x202020) gpu.fill(1,1,80,25," ")
@@ -923,16 +916,18 @@ while true do
       local popupHeight = 6
       local popupX = math.floor((80 - popupWidth) / 2)
       local popupY = 7
-      -- Проверяем клик по кнопкам попапа
       local yesBtn = {x=popupX+4, y=popupY+5, xs=10, ys=1}
       local noBtn = {x=popupX+popupWidth-14, y=popupY+5, xs=10, ys=1}
       if isButtonClicked(yesBtn, x, y) then
         performSell()
-      elseif isButtonClicked(noBtn, x, y) or not (x >= popupX and x < popupX+popupWidth and y >= popupY and y < popupY+popupHeight) then
+      elseif isButtonClicked(noBtn, x, y) then
+        showSellPopup = false
+        drawSellScanScreen()
+      elseif not (x >= popupX and x < popupX+popupWidth and y >= popupY and y < popupY+popupHeight) then
         showSellPopup = false
         drawSellScanScreen()
       end
-      goto continue  -- пропускаем остальную обработку
+      goto continue
     end
 
     if currentScreen == "shop_buy" or currentScreen == "shop_sell" then
@@ -1059,26 +1054,25 @@ while true do
       end
 
     elseif currentScreen == "sell_scan" then
-      -- Здесь попап уже обработан выше, если showSellPopup активно, но сюда не попадём (goto continue)
       if isButtonClicked(backButton, x, y) then
         currentScreen = "shop_sell"
         showSellPopup = false
         drawBuyStatic()
         drawBuyItemsList()
         drawBuyButtons()
-      elseif y == 13 and x >= 28 and x <= 48 then  -- "1 слот" (сдвинуто)
+      elseif y == 13 and x >= 28 and x <= 48 then  -- "1 слот"
         drawCenteredText(17, "Сканирование...", 0xffaa00)
         os.sleep(0.4)
         foundAmount = scanPlayerInventory(sellConfirmItem.internalName)
         if foundAmount > 0 then
           showSellPopup = true
-          drawSellScanScreen()  -- перерисует с попапом
+          drawSellScanScreen()
         else
           drawCenteredText(17, "Предмет не найден!", 0xff0000)
           os.sleep(1.2)
           drawSellScanScreen()
         end
-      elseif y == 15 and x >= 28 and x <= 48 then  -- "Весь инвентарь" (сдвинуто)
+      elseif y == 15 and x >= 28 and x <= 48 then  -- "Весь инвентарь"
         drawCenteredText(17, "Сканирование инвентаря...", 0xffaa00)
         os.sleep(0.6)
         debugPlayerInventory()
@@ -1106,13 +1100,15 @@ while true do
         if x >= 4 and x <= 13 then goToHelp() end
       end
     elseif currentScreen == "help" then
-      local pageStr = "⟵ " .. helpPage .. " ⟶"
+      local pageStr = "⟵  " .. helpPage .. "  ⟶"   -- расширенные пробелы
       local pageX = math.floor((80 - unicode.len(pageStr)) / 2) + 1
       if y == 20 then
-        if x >= pageX and x < pageX + 4 and helpPage > 1 then
+        -- Левая стрелка (область 5 символов)
+        if x >= pageX and x < pageX + 5 and helpPage > 1 then
           helpPage = helpPage - 1
           drawHelpScreen(helpPage, gpu, unicode, drawCenteredText, drawFlexButton, backButton)
-        elseif x >= pageX + unicode.len(pageStr) - 4 and x < pageX + unicode.len(pageStr) and helpPage < HELP_PAGES then
+        -- Правая стрелка (область 5 символов)
+        elseif x >= pageX + unicode.len(pageStr) - 5 and x < pageX + unicode.len(pageStr) and helpPage < HELP_PAGES then
           helpPage = helpPage + 1
           drawHelpScreen(helpPage, gpu, unicode, drawCenteredText, drawFlexButton, backButton)
         end
