@@ -193,73 +193,41 @@ end
 -- ==================== СКАНИРОВАНИЕ ====================
 local function scanPlayerInventory(itemName)
   if not pim then return 0 end
-
+  
   local count = 0
-  gpu.setBackground(0x000000)
-  gpu.fill(2, 12, 76, 11, " ")
-
-  gpu.setForeground(0xffaa00)
-  gpu.set(3, 12, "=== СКАНИРОВАНИЕ: " .. itemName .. " ===")
-
-  local line = 14
 
   for slot = 1, 44 do
     local stack = pim.getStackInSlot(slot)
-
     if stack then
       local id = stack.id or ""
-      local displayName = stack.displayName or ""
-      local label = stack.label or ""
-      local size = stack.size or stack.qty or stack.count or 1
+      local display = stack.displayName or stack.label or ""
+      local size = stack.size or 1
 
       local found = false
-
-      if itemName == "Деньги" then
-        if id == "customnpcs:npcMoney" or displayName == "Деньги" or label == "Деньги" then
-          found = true
-        end
-      else
-        if displayName == itemName or label == itemName then
-          found = true
-        end
+      if itemName == "Деньги" and (id == "customnpcs:npcMoney" or display:find("Деньги")) then
+        found = true
+      elseif display == itemName then
+        found = true
       end
 
       if found then
         count = count + size
-        gpu.setForeground(0x00ff00)
-        gpu.set(3, line, string.format("Слот %2d: НАЙДЕНО! %s x%d", slot, itemName, size))
-      else
-        gpu.setForeground(0x777777)
-        gpu.set(3, line, string.format("Слот %2d: %s", slot, displayName:sub(1,35)))
       end
-
-      line = line + 1
-      if line > 23 then break end
     end
   end
-
-  gpu.setForeground(0x00ff88)
-  gpu.set(3, 23, string.format("=== ИТОГО НАЙДЕНО: %d шт. ===", count))
-
-  os.sleep(2.5)
 
   return count
 end
 
 -- ==================== ИЗЪЯТИЕ ====================
 local function extractToME(itemName, amount)
-  if not pim or amount <= 0 then 
-    print("extractToME: нет pim или amount=0")
-    return 0 
-  end
-  
+  if not pim or amount <= 0 then return 0 end
   local extracted = 0
 
   for slot = 1, 44 do
     if extracted >= amount then break end
-    
     local stack = pim.getStackInSlot(slot)
-    if not stack then goto continue end
+    if not stack then goto next end
 
     local id = stack.id or ""
     local display = stack.displayName or stack.label or ""
@@ -274,19 +242,8 @@ local function extractToME(itemName, amount)
     if match then
       local toTake = math.min(stack.size or 1, amount - extracted)
       if toTake > 0 then
-        -- Несколько попыток изъятия
-        local success = false
-        
-        -- Вариант 1 (самый частый)
-        success = pcall(function() return pim.extractItem(slot, toTake) end)
-        
-        -- Вариант 2
-        if not success then
-          success = pcall(function() return pim.extractItem(stack, toTake) end)
-        end
-
+        local success = pim.extractItem and pim.extractItem(slot, toTake)
         if success then
-          -- Отправка в ME
           if component.isAvailable("me_interface") then
             local me = component.me_interface
             pcall(function()
@@ -294,14 +251,11 @@ local function extractToME(itemName, amount)
             end)
           end
           extracted = extracted + toTake
-          print("Изъято " .. toTake .. " из слота " .. slot)
         end
       end
     end
-    ::continue::
+    ::next::
   end
-  
-  print("extractToME итого: " .. extracted)
   return extracted
 end
 
