@@ -642,8 +642,8 @@ local function drawSellScanScreen()
   local scanX = math.floor((80 - unicode.len(scanText)) / 2)
   gpu.set(scanX, 11, scanText)
 
-  local slotBtn = {x=28, y=13, xs=20, ys=1, text="1 слот", bg=0x333333, fg=0xaaaaaa}
-  local allBtn  = {x=28, y=15, xs=20, ys=1, text="Весь инвентарь", bg=0x333333, fg=0x00ff88}
+  local slotBtn = {x=30, y=13, xs=20, ys=1, text="1 слот", bg=0x333333, fg=0xaaaaaa}
+  local allBtn  = {x=30, y=15, xs=20, ys=1, text="Весь инвентарь", bg=0x333333, fg=0x00ff88}
   drawFlexButton(slotBtn)
   drawFlexButton(allBtn)
   drawFlexButton(backButton)
@@ -764,7 +764,7 @@ local function drawWelcomeScreen()
   drawBigTitle()
   gpu.setForeground(0x00FF00)
   drawCenteredText(17, "↓   Встаньте на PIM   ↓", 0x00FF00)
-  drawCenteredText(18, "━━━━━━━━━━━━━━━━━━━━", 0x00FF00)
+  drawCenteredText(18,  "━━━━━━━━━━━━━━━━━━━", 0x00FF00)
   gpu.setForeground(0x414243)
   drawCenteredText(21, "По любым вопросам пишите в Telegram: f0rb4ik", 0x414243)
   gpu.setBackground(0x000000)
