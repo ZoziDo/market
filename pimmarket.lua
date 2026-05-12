@@ -189,7 +189,7 @@ end
 -- ==================== СКАНИРОВАНИЕ ====================
 local function scanPlayerInventory(itemName)
   if not pim then return 0 end
-  
+
   local count = 0
   gpu.setBackground(0x000000)
   gpu.fill(2, 12, 76, 11, " ")
@@ -201,21 +201,32 @@ local function scanPlayerInventory(itemName)
 
   for slot = 1, 44 do
     local stack = pim.getStackInSlot(slot)
+
     if stack then
       local id = stack.id or ""
-      local size = stack.size or 1
+      local displayName = stack.displayName or ""
+      local label = stack.label or ""
+      local size = stack.size or stack.qty or stack.count or 1
 
-      if itemName == "Деньги" and id == "customnpcs:npcMoney" then
-        count = count + size
-        gpu.setForeground(0x00ff00)
-        gpu.set(3, line, string.format("Слот %2d: НАЙДЕНО! Деньги x%d", slot, size))
-      elseif stack.displayName == itemName or (stack.label or "") == itemName then
+      local found = false
+
+      if itemName == "Деньги" then
+        if id == "customnpcs:npcMoney" or displayName == "Деньги" or label == "Деньги" then
+          found = true
+        end
+      else
+        if displayName == itemName or label == itemName then
+          found = true
+        end
+      end
+
+      if found then
         count = count + size
         gpu.setForeground(0x00ff00)
         gpu.set(3, line, string.format("Слот %2d: НАЙДЕНО! %s x%d", slot, itemName, size))
       else
         gpu.setForeground(0x777777)
-        gpu.set(3, line, string.format("Слот %2d: %s", slot, (stack.displayName or ""):sub(1,35)))
+        gpu.set(3, line, string.format("Слот %2d: %s", slot, displayName:sub(1,35)))
       end
 
       line = line + 1
@@ -225,35 +236,59 @@ local function scanPlayerInventory(itemName)
 
   gpu.setForeground(0x00ff88)
   gpu.set(3, 23, string.format("=== ИТОГО НАЙДЕНО: %d шт. ===", count))
-  
-  os.sleep(4)
+
+  os.sleep(2.5)
+
   return count
 end
 
 -- ==================== ИЗЪЯТИЕ ====================
 local function extractToME(itemName, amount)
   if not pim or amount <= 0 then return 0 end
+
   local extracted = 0
 
   for slot = 1, 44 do
     if extracted >= amount then break end
+
     local stack = pim.getStackInSlot(slot)
-    if not stack then goto next end
 
-    local id = stack.id or ""
+    if stack then
+      local id = stack.id or ""
+      local displayName = stack.displayName or ""
+      local label = stack.label or ""
+      local size = stack.size or stack.qty or stack.count or 1
 
-    if itemName == "Деньги" and id == "customnpcs:npcMoney" then
-      local toTake = math.min(stack.size or 1, amount - extracted)
-      if toTake > 0 then
-        -- Пробуем разные способы изъятия
-        local success = pim.extractItem and pim.extractItem(slot, toTake)
-        if success then
-          extracted = extracted + toTake
+      local found = false
+
+      if itemName == "Деньги" then
+        if id == "customnpcs:npcMoney" or displayName == "Деньги" or label == "Деньги" then
+          found = true
+        end
+      else
+        if displayName == itemName or label == itemName then
+          found = true
+        end
+      end
+
+      if found then
+        local toTake = math.min(size, amount - extracted)
+
+        for i = 1, toTake do
+          local ok = pcall(function()
+            return pim.extractItem(slot)
+          end)
+
+          if ok then
+            extracted = extracted + 1
+          else
+            break
+          end
         end
       end
     end
-    ::next::
   end
+
   return extracted
 end
 
@@ -1098,19 +1133,33 @@ while true do
       if isButtonClicked(backButton, x, y) or (y >= 12 and y <= 13 and x >= 45 and x <= 60) then
         currentScreen = "sell_scan"
         drawSellScanScreen()
-      elseif y >= 12 and y <= 13 and x >= 18 and x <= 38 then -- ПОДТВЕРДИТЬ
+      elseif y >= 12 and y <= 13 and x >= 18 and x <= 38 then
         drawCenteredText(15, "Выполняется пополнение...", 0x00ff88)
         os.sleep(0.8)
-
+      
         local realExtracted = extractToME(sellConfirmItem.name, foundAmount)
+      
+        gpu.setForeground(0xffffff)
+        gpu.fill(3, 18, 70, 1, " ")
+        gpu.set(3, 18, "Изъято предметов: " .. tostring(realExtracted))
+      
+        os.sleep(1.5)
+      
         local value = realExtracted * sellConfirmItem.price
-
+      
         playerBalance = playerBalance + value
         playerTransactions = playerTransactions + 1
-
-        drawCenteredText(15, "Успешно! +" .. string.format("%.2f", value) .. " Эмов", 0x00ff88)
-        os.sleep(1.8)
-
+      
+        gpu.fill(3, 20, 70, 1, " ")
+      
+        if realExtracted > 0 then
+          drawCenteredText(20, "Успешно! +" .. string.format("%.2f", value) .. " Эмов", 0x00ff88)
+        else
+          drawCenteredText(20, "Ошибка изъятия!", 0xff0000)
+        end
+      
+        os.sleep(2)
+      
         currentScreen = "shop_sell"
         drawBuyStatic()
         drawBuyItemsList()
