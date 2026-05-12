@@ -186,7 +186,7 @@ local function loadSellItems()
   end
 end
 
--- ==================== РАБОТА С ИНВЕНТАРЁМ И ME ====================
+-- ==================== СКАНИРОВАНИЕ ИНВЕНТАРЯ ====================
 local function scanPlayerInventory(itemName)
   if not pim then 
     drawCenteredText(15, "ОШИБКА: PIM не найден!", 0xff0000)
@@ -207,13 +207,16 @@ local function scanPlayerInventory(itemName)
     local stack = pim.getStackInSlot(slot)
     if stack then
       local id          = stack.id or ""
-      local label       = stack.label or "nil"
-      local displayName = stack.displayName or "nil"
-      local size        = stack.size or 1   -- минимум 1
+      local label       = stack.label or ""
+      local displayName = stack.displayName or ""
+      local size        = stack.size or 1
 
       local found = false
-      if itemName == "Деньги" and id == "customnpcs:npcMoney" then
+
+      -- Специально для Деньги (CustomNPC)
+      if itemName == "Деньги" and (id == "customnpcs:npcMoney" or label:find("Деньги") or displayName:find("Деньги")) then
         found = true
+      -- Для обычных предметов (Minecraft, IC2, GregTech и т.д.)
       elseif label == itemName or displayName == itemName then
         found = true
       end
@@ -221,10 +224,11 @@ local function scanPlayerInventory(itemName)
       if found then
         count = count + size
         gpu.setForeground(0x00ff00)
-        gpu.set(3, line, string.format("Слот %2d: НАЙДЕНО! Деньги x%d", slot, size))
+        gpu.set(3, line, string.format("Слот %2d: НАЙДЕНО! %s x%d", slot, itemName, size))
       else
         gpu.setForeground(0x777777)
-        gpu.set(3, line, string.format("Слот %2d: %s", slot, displayName ~= "nil" and displayName:sub(1,30) or id))
+        local showName = displayName ~= "" and displayName:sub(1,32) or label:sub(1,32)
+        gpu.set(3, line, string.format("Слот %2d: %s", slot, showName))
       end
 
       line = line + 1
@@ -239,6 +243,7 @@ local function scanPlayerInventory(itemName)
   return count
 end
 
+-- ==================== ИЗЪЯТИЕ В ME ====================
 local function extractToME(itemName, amount)
   if not pim or amount <= 0 then return 0 end
   local extracted = 0
@@ -247,8 +252,16 @@ local function extractToME(itemName, amount)
     if extracted >= amount then break end
     local stack = pim.getStackInSlot(slot)
     if stack then
-      local id = stack.id or ""
-      local match = (itemName == "Деньги" and id == "customnpcs:npcMoney")
+      local id          = stack.id or ""
+      local label       = stack.label or ""
+      local displayName = stack.displayName or ""
+
+      local match = false
+      if itemName == "Деньги" and (id == "customnpcs:npcMoney" or label:find("Деньги") or displayName:find("Деньги")) then
+        match = true
+      elseif label == itemName or displayName == itemName then
+        match = true
+      end
 
       if match then
         local toTake = math.min(stack.size or 1, amount - extracted)
