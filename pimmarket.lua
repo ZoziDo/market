@@ -406,7 +406,7 @@ local function drawPurchaseScreen()
   }
 
   local startX = 34
-  local startY = 9
+  local startY = 11
   local btnW = 3
   local btnH = 1
   local spacing = 2
@@ -416,15 +416,12 @@ local function drawPurchaseScreen()
       local x = startX + (col-1)*(btnW + spacing)
       local y = startY + (row-1)*(btnH + 1)
       local text = keys[row][col]
-
-      local btn = {
-        x = x, xs = btnW,
-        y = y, ys = btnH,
-        text = text,
-        bg = 0x333333,
-        fg = 0xffaa00
-      }
-      drawFlexButton(btn)
+      gpu.setBackground(0x222222)
+      gpu.fill(x, y, btnW, btnH, " ")
+      gpu.setForeground(0xffaa00)
+      local tx = x + math.floor((btnW - unicode.len(text)) / 2)
+      local ty = y   -- <-- убрали +1, т.к. btnH=1, текст должен быть в той же строке y
+      gpu.set(tx, ty, text)
     end
   end
 
@@ -808,7 +805,7 @@ while true do
         {"<","0","C"}
       }
       local startX = 34
-      local startY = 9
+      local startY = 11
       local btnW = 3
       local btnH = 1
       local spacing = 2
