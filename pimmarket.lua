@@ -209,7 +209,7 @@ local function scanPlayerInventory(itemName)
       local id          = stack.id or ""
       local label       = stack.label or "nil"
       local displayName = stack.displayName or "nil"
-      local size        = stack.size or 1   -- ← Важно! Если size = 0, берём 1 по умолчанию
+      local size        = stack.size or 1   -- минимум 1
 
       local found = false
       if itemName == "Деньги" and id == "customnpcs:npcMoney" then
@@ -221,7 +221,7 @@ local function scanPlayerInventory(itemName)
       if found then
         count = count + size
         gpu.setForeground(0x00ff00)
-        gpu.set(3, line, string.format("Слот %2d: НАЙДЕНО! %s x%d", slot, displayName ~= "nil" and displayName or "Деньги", size))
+        gpu.set(3, line, string.format("Слот %2d: НАЙДЕНО! Деньги x%d", slot, size))
       else
         gpu.setForeground(0x777777)
         gpu.set(3, line, string.format("Слот %2d: %s", slot, displayName ~= "nil" and displayName:sub(1,30) or id))
@@ -248,25 +248,19 @@ local function extractToME(itemName, amount)
     local stack = pim.getStackInSlot(slot)
     if stack then
       local id = stack.id or ""
-      local label = stack.label or ""
-      local displayName = stack.displayName or ""
-
-      local match = false
-      if itemName == "Деньги" and id == "customnpcs:npcMoney" then
-        match = true
-      elseif label == itemName or displayName == itemName then
-        match = true
-      end
+      local match = (itemName == "Деньги" and id == "customnpcs:npcMoney")
 
       if match then
-        local toTake = math.min(stack.size or 0, amount - extracted)
+        local toTake = math.min(stack.size or 1, amount - extracted)
         if toTake > 0 then
           local success = pim.extractItem(slot, toTake)
-          if success and component.isAvailable("me_interface") then
-            local me = component.me_interface
-            me.exportItem({name = stack.name, damage = stack.damage or 0}, 0, toTake)
+          if success then
+            if component.isAvailable("me_interface") then
+              local me = component.me_interface
+              me.exportItem({name = stack.name, damage = stack.damage or 0}, 0, toTake)
+            end
+            extracted = extracted + toTake
           end
-          if success then extracted = extracted + toTake end
         end
       end
     end
