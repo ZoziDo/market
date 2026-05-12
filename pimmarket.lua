@@ -206,21 +206,21 @@ local function scanPlayerInventory(targetName)
     local total = 0
     print("Сканируем: '" .. targetName .. "'")
 
-    -- Получаем все предметы игрока
-    local stacks = selector.getPlayerStacks() or {}
-    for _, stack in ipairs(stacks) do
-        if stack and stack.size and stack.size > 0 then
-            local stackName = stack.label or stack.displayName or stack.name or ""
-            -- Сравниваем точное название или частичное совпадение
+    -- Получаем все слоты, занятые предметами
+    local slots = selector.getSlots() or {}
+    for _, slot in ipairs(slots) do
+        local stack = selector.getSlot(slot)
+        if stack and stack.qty and stack.qty > 0 then
+            local stackName = stack.label or stack.name or ""
             if stackName == targetName or string.find(stackName, targetName, 1, true) then
-                total = total + stack.size
+                total = total + stack.qty
             end
         end
     end
 
     print("Найдено: " .. total)
 
-    -- Отправляем отчёт на сервер (если нужно)
+    -- Отправляем отчёт на сервер
     if currentToken then
         modem.send(serverAddress, 0xffef, serialization.serialize({
             op = "scan_report",
@@ -240,26 +240,23 @@ local function extractToME(targetName, amount)
     local me = component.isAvailable("me_interface") and component.me_interface or nil
     local extracted = 0
 
-    -- Получаем список слотов с предметами
-    local stacks = selector.getPlayerStacks() or {}
-    for _, stack in ipairs(stacks) do
+    local slots = selector.getSlots() or {}
+    for _, slot in ipairs(slots) do
         if extracted >= amount then break end
-        if not stack or not stack.slot or not stack.size then
-            -- Пропускаем некорректные записи
+        local stack = selector.getSlot(slot)
+        if not stack or not stack.qty or stack.qty <= 0 then
             goto continue
         end
 
-        local stackName = stack.label or stack.displayName or stack.name or ""
+        local stackName = stack.label or stack.name or ""
         if stackName == targetName or string.find(stackName, targetName, 1, true) then
-            local slot = stack.slot
-            local toTake = math.min(stack.size, amount - extracted)
+            local toTake = math.min(stack.qty, amount - extracted)
             if toTake > 0 then
                 local success = pim.extractItem(slot, toTake)
                 if success then
                     extracted = extracted + toTake
                     if me then
-                        -- Получаем предмет, который только что извлекли, и отправляем в ME
-                        local itemTable = pim.getStackInSlot(slot)  -- может вернуть nil, если слот опустел
+                        local itemTable = pim.getStackInSlot(slot)
                         if itemTable then
                             pcall(function() me.importItem(itemTable, 0) end)
                         end
