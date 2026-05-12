@@ -40,7 +40,7 @@ local showOnlyAvailable = false
 local currentShopMode = "buy"   -- "buy" или "sell"
 
 -- Фильтр для раздела пополнения ("all" / "vanilla")
-local buyFilterMode = "vanilla" -- ИЗМЕНЕНО НА "vanilla", так как в пополнении по умолчанию показываем Vanilla
+local buyFilterMode = "all"
 
 -- Скролл и выделение
 local listScroll = 1
@@ -57,6 +57,10 @@ local maxItemWidth = 0
 -- Переменные экрана покупки
 local purchaseQuantity = 1
 local purchaseItem = nil
+
+-- ========== ПЕРЕМЕННЫЕ ДЛЯ ПРОДАЖИ ==========
+local sellConfirmItem = nil
+local foundAmount = 0
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
@@ -143,7 +147,7 @@ end
 
 -- Кнопки панели (текст и цвет динамические)
 local searchButton = {text = "Поиск...", x=3, y=21, xs=20, ys=1, bg=0x333333, fg=0x00aaff}
-local filterButton  = {text = "В наличии", x=33, y=21, xs=14, ys=1, bg=0x333333, fg=0x00aaff} -- Текст по умолчанию для режима покупки
+local filterButton  = {text = "В наличии", x=33, y=21, xs=14, ys=1, bg=0x333333, fg=0x00aaff}
 local nextButton    = {text = "Далее", x=70, y=21, xs=7, ys=1, bg=0x333333, fg=0x888888}
 
 -- Кнопки меню "Магазин"
@@ -182,19 +186,51 @@ local function loadSellItems()
   end
 end
 
+-- ==================== РАБОТА С ИНВЕНТАРЁМ И ME ====================
+local function scanPlayerInventory(itemName)
+  if not pim then return 0 end
+  local count = 0
+  for slot = 1, 44 do
+    local stack = pim.getStackInSlot(slot)
+    if stack and (stack.label == itemName or stack.name == itemName) then
+      count = count + (stack.size or 0)
+    end
+  end
+  return count
+end
+
+local function extractToME(itemName, amount)
+  if not pim or amount <= 0 then return 0 end
+  local extracted = 0
+  for slot = 1, 44 do
+    if extracted >= amount then break end
+    local stack = pim.getStackInSlot(slot)
+    if stack and (stack.label == itemName or stack.name == itemName) then
+      local toTake = math.min(stack.size, amount - extracted)
+      local success = pim.extractItem(slot, toTake)
+      if success then
+        if component.isAvailable("me_interface") then
+          local me = component.me_interface
+          me.exportItem({name = stack.name, damage = stack.damage or 0}, 0, toTake)
+        end
+        extracted = extracted + toTake
+      end
+    end
+  end
+  return extracted
+end
+
 -- ========== ПОЛУЧЕНИЕ ОТФИЛЬТРОВАННОГО СПИСКА ==========
 local function getFilteredItems()
   local filtered = {}
   for _, item in ipairs(shopItems) do
     local matchesSearch = (shopSearch == "" or string.find(string.lower(item.name), string.lower(shopSearch), 1, true))
 
-    -- Фильтр "В наличии" для покупки
     local matchesAvailability = true
     if currentShopMode == "buy" then
       matchesAvailability = (not showOnlyAvailable) or (item.qty > 0)
     end
 
-    -- Фильтр "Vanilla" для пополнения (currentShopMode == "sell")
     local matchesVanilla = true
     if currentShopMode == "sell" and buyFilterMode == "vanilla" then
       matchesVanilla = false
@@ -221,14 +257,12 @@ end
 -- ========== СТАТИЧЕСКАЯ ЧАСТЬ ПОКУПКИ ==========
 local function drawBuyStatic()
   clear()
-  -- Баланс
   local balanceText = "Баланс: " .. string.format("%.2f Ресов $ | ", playerBalance)
   gpu.setForeground(0x00ff88)
   gpu.set(3, 1, balanceText)
   gpu.setForeground(0xff7300)
   gpu.set(3 + unicode.len(balanceText), 1, string.format("%.2f Эмов *", playerBalance))
 
-  -- Заголовок
   if currentShopMode == "buy" then
     gpu.setForeground(0xff7300)
     gpu.set(3, 3, "Магазин продаёт")
@@ -237,7 +271,6 @@ local function drawBuyStatic()
     gpu.set(3, 3, "Магазин покупает")
   end
 
-  -- Заголовки таблицы (строка 4)
   gpu.setBackground(0x222222)
   gpu.fill(2, 4, 76, 1, " ")
   gpu.setForeground(0xffaa00)
@@ -246,11 +279,9 @@ local function drawBuyStatic()
   gpu.set(65, 4, "Цена")
   gpu.setBackground(0x000000)
 
-  -- Разделитель (строка 5)
   gpu.setForeground(0x444444)
   gpu.set(3, 5, string.rep("─", 74))
 
-  -- Нижние статические элементы
   gpu.set(3, 18, string.rep("─", 74))
   drawCenteredText(19, "Категория", 0x888888)
   gpu.set(3, 23, string.rep("─", 74))
@@ -371,7 +402,6 @@ end
 
 -- ========== ОБНОВЛЕНИЕ КНОПОК ПОКУПКИ ==========
 local function drawBuyButtons()
-  -- Кнопка поиска
   if searchActive then
     local displayText = unicode.sub(searchInput, -16)
     searchButton.text = displayText .. "_"
@@ -379,18 +409,15 @@ local function drawBuyButtons()
     searchButton.text = "Поиск..."
   end
 
-  -- Кнопка фильтра
   if currentShopMode == "sell" then
-    -- Раздел "Пополнение": кнопка "Все" / "Vanilla"
     if buyFilterMode == "all" then
       filterButton.text = "Все"
-      filterButton.fg = 0x00aaff
+      filterButton.fg = 0x00ff00   -- зелёный
     else
       filterButton.text = "Vanilla"
-      filterButton.fg = 0xffaa00
+      filterButton.fg = 0xffaa00   -- оранжевый
     end
   else
-    -- Раздел "Покупка": кнопка "В наличии"
     if showOnlyAvailable then
       filterButton.text = "● В наличии"
       filterButton.fg = 0x00ff00
@@ -400,7 +427,6 @@ local function drawBuyButtons()
     end
   end
 
-  -- Кнопка "Далее"
   if selectedItem then
     nextButton.fg = 0xffaa00
   else
@@ -408,13 +434,12 @@ local function drawBuyButtons()
   end
 
   drawFlexButton(searchButton)
-  -- Ручное центрирование для filterButton, так как стандартная функция drawFlexButton
-  -- использует xs из определения кнопки, которое не меняется.
-  -- Здесь мы пересчитываем позицию текста для текущего содержимого.
+
+  -- Ручное центрирование для filterButton
   local filterBg = filterButton.bg
   local filterX = filterButton.x
   local filterY = filterButton.y
-  local filterXs = 14 -- фиксированная ширина кнопки "Все"/"Vanilla"
+  local filterXs = 14
   local filterYs = filterButton.ys
   local filterText = filterButton.text
   local filterFg = filterButton.fg
@@ -429,50 +454,43 @@ local function drawBuyButtons()
   drawFlexButton(nextButton)
 end
 
--- ========== ЭКРАН ПОКУПКИ (ОСТАВЛЕН ДЛЯ ПОКУПКИ) ==========
+-- ========== ЭКРАН ПОКУПКИ ==========
 local function drawPurchaseScreen()
   currentScreen = "purchase"
   clear()
 
-  -- Баланс
   local balanceText = "Баланс: " .. string.format("%.2f Ресов $ | ", playerBalance)
   gpu.setForeground(0x00ff88)
   gpu.set(3, 1, balanceText)
   gpu.setForeground(0xff7300)
   gpu.set(3 + unicode.len(balanceText), 1, string.format("%.2f Эмов *", playerBalance))
 
-  -- Имя предмета
   gpu.setForeground(0x00ff88)
   gpu.set(3, 3, "Имя предмета: ")
   gpu.setForeground(0xffffff)
   gpu.set(18, 3, purchaseItem.name)
 
-  -- Доступно
   gpu.setForeground(0x00ff88)
   gpu.set(55, 3, "Доступно: ")
   gpu.setForeground(0xffffff)
   gpu.set(66, 3, tostring(purchaseItem.qty))
 
-  -- На сумму
   local total = (purchaseItem.price or 0.0) * purchaseQuantity
   gpu.setForeground(0x00ff88)
   gpu.set(3, 5, "На сумму: ")
   gpu.setForeground(0xff0000)
   gpu.set(14, 5, string.format("%.2f", total))
 
-  -- Цена
   gpu.setForeground(0x00ff88)
   gpu.set(55, 5, "Цена: ")
   gpu.setForeground(0x00ff88)
   gpu.set(62, 5, string.format("%.2f", purchaseItem.price or 0.0))
 
-  -- Кол-во
   gpu.setForeground(0x00ff88)
   gpu.set(3, 7, "Кол-во: ")
   gpu.setForeground(0xffffff)
   gpu.set(12, 7, tostring(purchaseQuantity))
 
-  -- ========== ЦИФРОВАЯ КЛАВИАТУРА ==========
   local keys = {
     {"1","2","3"},
     {"4","5","6"},
@@ -500,7 +518,6 @@ local function drawPurchaseScreen()
     end
   end
 
-  -- Кнопки Назад и Купить
   local backBtn = {x = 18, y = 23, xs = 10, ys = 1, text = "Назад", bg = 0x333333, fg = 0xff7300}
   local buyBtn  = {x = 50, y = 23, xs = 10, ys = 1, text = "Купить", bg = 0x333333, fg = 0x00ff88}
 
@@ -521,12 +538,86 @@ local function handleQuantityButtonClick(btnText)
   drawPurchaseScreen()
 end
 
--- ========== ПЕРЕХОД В ЭКРАН ПОКУПКИ ==========
 local function goToPurchase(item)
   if not item then return end
   purchaseItem = item
   purchaseQuantity = 1
   drawPurchaseScreen()
+end
+
+-- ========== ЭКРАН СКАНИРОВАНИЯ (ПОПОЛНЕНИЕ) ==========
+local function drawSellScanScreen()
+  currentScreen = "sell_scan"
+  clear()
+
+  local balanceText = "Баланс: " .. string.format("%.2f Ресов $ | ", playerBalance)
+  gpu.setForeground(0x00ff88)
+  gpu.set(3, 1, balanceText)
+  gpu.setForeground(0xff7300)
+  gpu.set(3 + unicode.len(balanceText), 1, string.format("%.2f Эмов *", playerBalance))
+
+  gpu.setForeground(0x00ff88)
+  gpu.set(3, 3, "Имя предмета: ")
+  gpu.setForeground(0xffffff)
+  gpu.set(18, 3, sellConfirmItem.name)
+
+  gpu.setForeground(0x00ff88)
+  gpu.set(55, 3, "Цена: ")
+  gpu.setForeground(0xffffff)
+  gpu.set(62, 3, string.format("%.0f", sellConfirmItem.price))
+
+  gpu.setForeground(0x00ff88)
+  gpu.set(3, 4, "Можно продать: ")
+  gpu.setForeground(0xffffff)
+  gpu.set(18, 4, tostring(sellConfirmItem.qty))
+
+  gpu.setForeground(0xffaa00)
+  gpu.set(3, 6, "Сканировать на наличие предмета:")
+
+  local slotBtn = {x=28, y=8, xs=20, ys=1, text="1 слот", bg=0x333333, fg=0xaaaaaa}
+  local allBtn  = {x=28, y=10, xs=20, ys=1, text="Весь инвентарь", bg=0x333333, fg=0x00ff88}
+
+  drawFlexButton(slotBtn)
+  drawFlexButton(allBtn)
+  drawFlexButton(backButton)
+end
+
+-- ========== ФИНАЛЬНОЕ ОКНО ПОДТВЕРЖДЕНИЯ ==========
+local function drawSellFinalConfirm()
+  currentScreen = "sell_confirm"
+  clear()
+
+  local balanceText = "Баланс: " .. string.format("%.2f Ресов $ | ", playerBalance)
+  gpu.setForeground(0x00ff88)
+  gpu.set(3, 1, balanceText)
+  gpu.setForeground(0xff7300)
+  gpu.set(3 + unicode.len(balanceText), 1, string.format("%.2f Эмов *", playerBalance))
+
+  gpu.setForeground(0x00ff88)
+  gpu.set(3, 4, "В инвентаре найдено:")
+  gpu.setForeground(0xffffff)
+  gpu.set(25, 4, foundAmount .. " шт. " .. sellConfirmItem.name)
+
+  gpu.setForeground(0xffaa00)
+  gpu.set(3, 6, "Будет изъято: " .. foundAmount .. " шт.")
+
+  local value = foundAmount * sellConfirmItem.price
+  gpu.setForeground(0x00ff88)
+  gpu.set(3, 7, "Пополнение баланса: +" .. string.format("%.2f", value) .. " Эмов")
+
+  local confirmBtn = {x=18, y=12, xs=20, ys=2, text="ПОДТВЕРДИТЬ", bg=0x003300, fg=0x00ff88}
+  local cancelBtn  = {x=45, y=12, xs=15, ys=2, text="ОТМЕНА", bg=0x330000, fg=0xff5555}
+
+  drawFlexButton(confirmBtn)
+  drawFlexButton(cancelBtn)
+  drawFlexButton(backButton)
+end
+
+local function goToSellConfirm(item)
+  if not item then return end
+  sellConfirmItem = item
+  foundAmount = 0
+  drawSellScanScreen()
 end
 
 -- Заглушка покупки
@@ -559,7 +650,7 @@ local function goToBuy()
   searchActive = false
   searchInput = ""
   showOnlyAvailable = false
-  buyFilterMode = "vanilla" -- Установлено для консистентности, хотя в покупке не используется
+  buyFilterMode = "all"
   loadBuyItems()
   drawBuyStatic()
   drawBuyItemsList()
@@ -578,7 +669,7 @@ local function goToSell()
   searchActive = false
   searchInput = ""
   showOnlyAvailable = false
-  buyFilterMode = "vanilla" -- Устанавливаем "vanilla" при открытии пополнения
+  buyFilterMode = "all"   -- начинаем с "Все"
   loadSellItems()
   drawBuyStatic()
   drawBuyItemsList()
@@ -879,7 +970,11 @@ while true do
         end
       elseif isButtonClicked(nextButton, x, y) then
         if selectedItem then
-          goToPurchase(selectedItem)
+          if currentShopMode == "buy" then
+            goToPurchase(selectedItem)
+          else
+            goToSellConfirm(selectedItem)   -- ← переход в сканирование для продажи
+          end
         end
       elseif searchActive then
         shopSearch = searchInput
@@ -933,6 +1028,51 @@ while true do
             break
           end
         end
+      end
+
+    elseif currentScreen == "sell_scan" then
+      if isButtonClicked(backButton, x, y) then
+        currentScreen = "shop_sell"
+        drawBuyStatic()
+        drawBuyItemsList()
+        drawBuyButtons()
+      elseif y == 8 and x >= 28 and x <= 48 then -- 1 слот
+        drawCenteredText(15, "Сканирование...", 0xffaa00)
+        os.sleep(0.4)
+        foundAmount = scanPlayerInventory(sellConfirmItem.name)
+        if foundAmount > 0 then drawSellFinalConfirm() else
+          drawCenteredText(15, "Предмет не найден!", 0xff0000); os.sleep(1.2); drawSellScanScreen()
+        end
+      elseif y == 10 and x >= 28 and x <= 48 then -- Весь инвентарь
+        drawCenteredText(15, "Сканирование инвентаря...", 0xffaa00)
+        os.sleep(0.6)
+        foundAmount = scanPlayerInventory(sellConfirmItem.name)
+        if foundAmount > 0 then drawSellFinalConfirm() else
+          drawCenteredText(15, "Предмет не найден!", 0xff0000); os.sleep(1.5); drawSellScanScreen()
+        end
+      end
+
+    elseif currentScreen == "sell_confirm" then
+      if isButtonClicked(backButton, x, y) or (y >= 12 and y <= 13 and x >= 45 and x <= 60) then
+        currentScreen = "sell_scan"
+        drawSellScanScreen()
+      elseif y >= 12 and y <= 13 and x >= 18 and x <= 38 then -- ПОДТВЕРДИТЬ
+        drawCenteredText(15, "Выполняется пополнение...", 0x00ff88)
+        os.sleep(0.8)
+
+        local realExtracted = extractToME(sellConfirmItem.name, foundAmount)
+        local value = realExtracted * sellConfirmItem.price
+
+        playerBalance = playerBalance + value
+        playerTransactions = playerTransactions + 1
+
+        drawCenteredText(15, "Успешно! +" .. string.format("%.2f", value) .. " Эмов", 0x00ff88)
+        os.sleep(1.8)
+
+        currentScreen = "shop_sell"
+        drawBuyStatic()
+        drawBuyItemsList()
+        drawBuyButtons()
       end
 
     elseif currentScreen == "menu" then
