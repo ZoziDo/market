@@ -67,7 +67,8 @@ local function getOrCreatePlayer(name)
   if not players[name] then
     local realDate = getRealTime()
     players[name] = {
-      balance = 0.0,
+      balance = 0.0,       -- Эмы
+      resBalance = 0.0,    -- Ресы
       transactions = 0,
       regDate = realDate
     }
@@ -133,7 +134,9 @@ while true do
 
       modem.send(from, 0xffef, serialization.serialize({
         op="welcome", status="ok", token=token,
-        balance=player.balance, transactions=player.transactions,
+        balance=player.balance or 0.0,          -- Эмы
+        resBalance=player.resBalance or 0.0,    -- Ресы
+        transactions=player.transactions,
         regDate=player.regDate
       }))
 
@@ -153,7 +156,8 @@ while true do
       modem.send(from, 0xffef, serialization.serialize({
         op="accountData",
         data = {
-          balance = player.balance,
+          balance = player.balance or 0.0,
+          resBalance = player.resBalance or 0.0,
           transactions = player.transactions,
           regDate = player.regDate
         }
@@ -179,14 +183,20 @@ while true do
       if not player then goto continue end
       local qty = tonumber(msg.qty) or 0
       local value = tonumber(msg.value) or 0
-      player.balance = (player.balance or 0) + value
+      local currency = msg.currency or "em"   -- "em" или "res"
+
+      if currency == "em" then
+        player.balance = (player.balance or 0) + value
+      else
+        player.resBalance = (player.resBalance or 0) + value
+      end
       player.transactions = (player.transactions or 0) + 1
       sessions[msg.name].lastAction = os.time()
       saveDB()
-      log("INFO", string.format("💰 %s пополнил баланс: предмет '%s' x%d на сумму %.2f. Новый баланс: %.2f",
-        msg.name, msg.item, qty, value, player.balance))
+      log("INFO", string.format("💰 %s пополнил %s: предмет '%s' x%d на сумму %.2f. Баланс Эмов: %.2f, Ресов: %.2f",
+        msg.name, currency, msg.item, qty, value, player.balance or 0, player.resBalance or 0))
 
-    elseif msg.op == "buy" then   -- зарезервировано для будущей покупки
+    elseif msg.op == "buy" then   -- зарезервировано
       local player = players[msg.name]
       if not player or not validateSession(msg.name, msg.token) then
         log("WARN", "Неверный токен от " .. (msg.name or "?"))
