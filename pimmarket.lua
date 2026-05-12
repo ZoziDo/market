@@ -209,10 +209,15 @@ local function scanPlayerInventory(itemName)
       local label       = stack.label or "nil"
       local displayName = stack.displayName or "nil"
       local name        = stack.name or "nil"
+      local id          = stack.id or "nil"
+      local damage      = stack.damage or "nil"
       local size        = stack.size or 0
 
-      -- Основная проверка
-      local found = (label == itemName or displayName == itemName or name == itemName)
+      local found = false
+      -- Пытаемся найти разными способами
+      if label == itemName or displayName == itemName or name == itemName then
+        found = true
+      end
 
       if found then
         count = count + size
@@ -220,8 +225,8 @@ local function scanPlayerInventory(itemName)
         gpu.set(3, line, string.format("Слот %2d: НАЙДЕНО! %s x%d", slot, displayName, size))
       else
         gpu.setForeground(0x888888)
-        gpu.set(3, line, string.format("Слот %2d: label=%s | display=%s | name=%s", 
-              slot, label:sub(1,20), displayName:sub(1,20), name:sub(1,20)))
+        gpu.set(3, line, string.format("Слот %2d: id=%s dmg=%s label=%s", 
+              slot, id, damage, label:sub(1,25)))
       end
 
       line = line + 1
