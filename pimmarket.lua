@@ -8,7 +8,8 @@ local keyboard = require("keyboard")
 -- Загружаем внешний файл с предметами
 local shopData = dofile("/home/shop_items.lua")
 local sellItems = shopData.sellItems
-local vanillaItems = shopData.vanillaItems
+-- Безопасная загрузка vanillaItems (если нет – пустая таблица)
+local vanillaItems = shopData.vanillaItems or {}
 
 local modem = component.modem
 local pimList = {}
@@ -44,25 +45,34 @@ local alreadyAuthorized = false
 local helpPage = 1
 local HELP_PAGES = 3
 
--- Переменные магазина
+-- Переменные магазина (общие для покупки и пополнения)
 local shopItems = {}
 local shopSearch = ""
 local searchActive = false
 local searchInput = ""
 local showOnlyAvailable = false
-local currentShopMode = "buy"
+local currentShopMode = "buy"   -- "buy" или "sell"
 
+-- Фильтр для раздела пополнения ("all" / "vanilla")
 local buyFilterMode = "all"
+
+-- Скролл и выделение
 local listScroll = 1
 local visibleRows = 12
 local selectedIndex = 0
 local hoveredIndex = 0
 local filteredItems = {}
 local selectedItem = nil
+
+-- Горизонтальный скролл для длинных названий
 local horizontalScroll = 1
 local maxItemWidth = 0
+
+-- Переменные экрана покупки
 local purchaseQuantity = 1
 local purchaseItem = nil
+
+-- ========== ПЕРЕМЕННЫЕ ДЛЯ ПРОДАЖИ ==========
 local sellConfirmItem = nil
 local foundAmount = 0
 
@@ -149,7 +159,7 @@ local function isButtonClicked(btn, x, y)
          x >= btn.x and x < btn.x + btn.xs
 end
 
--- Кнопки панели
+-- Кнопки панели (текст и цвет динамические)
 local searchButton = {text = "Поиск...", x=3, y=21, xs=20, ys=1, bg=0x333333, fg=0x00aaff}
 local filterButton  = {text = "В наличии", x=33, y=21, xs=14, ys=1, bg=0x333333, fg=0x00aaff}
 local nextButton    = {text = "Далее", x=70, y=21, xs=7, ys=1, bg=0x333333, fg=0x888888}
@@ -462,10 +472,10 @@ local function drawBuyButtons()
   if currentShopMode == "sell" then
     if buyFilterMode == "all" then
       filterButton.text = "Все"
-      filterButton.fg = 0x00ff00
+      filterButton.fg = 0x00ff00   -- зелёный
     else
       filterButton.text = "Vanilla"
-      filterButton.fg = 0xffaa00
+      filterButton.fg = 0xffaa00   -- оранжевый
     end
   else
     if showOnlyAvailable then
@@ -683,7 +693,6 @@ local function performSell()
   playerBalance = playerBalance + value
   playerTransactions = playerTransactions + 1
 
-  -- Отправка отчёта на сервер
   if currentToken then
     modem.send(serverAddress, 0xffef, serialization.serialize({
       op = "sell",
@@ -741,14 +750,14 @@ local function goToSell()
   searchActive = false
   searchInput = ""
   showOnlyAvailable = false
-  buyFilterMode = "all"
+  buyFilterMode = "all"   -- начинаем с "Все"
   loadSellItems()
   drawBuyStatic()
   drawBuyItemsList()
   drawBuyButtons()
 end
 
--- ========== ОСТАЛЬНЫЕ ЭКРАНЫ (без изменений) ==========
+-- ========== ОСТАЛЬНЫЕ ЭКРАНЫ ==========
 local function drawShopMenu()
   clear()
   drawCenteredText(4, "МАГАЗИН", 0xff7300)
@@ -958,10 +967,6 @@ local function goBackToMenu() currentScreen="menu" drawMainMenu() end
 -- ======== ИНИЦИАЛИЗАЦИЯ ========
 drawWelcomeScreen()
 modem.send(serverAddress,0xffef,serialization.serialize({op="register"}))
--- Отправка статуса Item Selector'а на сервер
-if currentToken then   -- на момент старта токена ещё нет, отправим после авторизации
-    -- (будет отправлено в блоке player_on)
-end
 print("Терминал отправляет регистрацию...")
 
 -- ======== ГЛАВНЫЙ ЦИКЛ ========
@@ -986,7 +991,7 @@ while true do
     local x, y = ev[3], ev[4]
 
     if currentScreen == "shop_buy" or currentScreen == "shop_sell" then
-      -- ... (обработка списка и кнопок без изменений)
+      -- Клик по списку
       if y >= 6 and y <= 17 and x >= 2 and x <= 77 then
         local relativeRow = y - 5
         local clickedIndex = listScroll + relativeRow - 1
@@ -999,6 +1004,7 @@ while true do
         end
       end
 
+      -- Клик по скроллбару
       if x >= 78 and y >= 6 and y <= 17 then
         local total = #filteredItems
         if total > visibleRows then
@@ -1008,6 +1014,7 @@ while true do
         end
       end
 
+      -- Кнопки
       if isButtonClicked(backButton, x, y) then
         currentScreen = "shop"
         selectedIndex = 0
@@ -1020,6 +1027,7 @@ while true do
         drawBuyButtons()
       elseif isButtonClicked(filterButton, x, y) then
         if currentShopMode == "sell" then
+          -- Переключаем фильтр "Все" / "Vanilla" для пополнения
           if buyFilterMode == "all" then
             buyFilterMode = "vanilla"
           else
@@ -1032,6 +1040,7 @@ while true do
           drawBuyItemsList()
           drawBuyButtons()
         else
+          -- Режим покупки: фильтр "В наличии"
           showOnlyAvailable = not showOnlyAvailable
           listScroll = 1
           selectedIndex = 0
@@ -1045,7 +1054,7 @@ while true do
           if currentShopMode == "buy" then
             goToPurchase(selectedItem)
           else
-            goToSellConfirm(selectedItem)
+            goToSellConfirm(selectedItem)   -- ← переход в сканирование для продажи
           end
         end
       elseif searchActive then
@@ -1060,7 +1069,7 @@ while true do
       end
 
     elseif currentScreen == "purchase" then
-      -- ... без изменений
+      -- Кнопка Назад
       if (y >= 23 and y <= 23) and (x >= 18 and x <= 28) then
         if currentShopMode == "buy" then
           currentScreen = "shop_buy"
@@ -1072,6 +1081,7 @@ while true do
         drawBuyButtons()
       end
 
+      -- Кнопка Купить
       if (y >= 23 and y <= 23) and (x >= 50 and x <= 60) then
         drawCenteredText(20, "Покупка выполняется...", 0x00ff88)
         os.sleep(1)
@@ -1088,17 +1098,20 @@ while true do
         drawBuyButtons()
       end
 
+      -- Обработка цифровой клавиатуры
       local startX = 34
       local startY = 11
       local btnW = 3
       local btnH = 1
       local spacing = 2
+
       local keys = {
         {"1","2","3"},
         {"4","5","6"},
         {"7","8","9"},
         {"<","0","C"}
       }
+
       for row = 1, 4 do
         for col = 1, 3 do
           local bx = startX + (col-1)*(btnW + spacing)
@@ -1116,14 +1129,14 @@ while true do
         drawBuyStatic()
         drawBuyItemsList()
         drawBuyButtons()
-      elseif y == 8 and x >= 28 and x <= 48 then
+      elseif y == 8 and x >= 28 and x <= 48 then -- 1 слот
         drawCenteredText(15, "Сканирование...", 0xffaa00)
         os.sleep(0.4)
         foundAmount = scanPlayerInventory(sellConfirmItem.name)
         if foundAmount > 0 then drawSellFinalConfirm() else
           drawCenteredText(15, "Предмет не найден!", 0xff0000); os.sleep(1.2); drawSellScanScreen()
         end
-      elseif y == 10 and x >= 28 and x <= 48 then
+      elseif y == 10 and x >= 28 and x <= 48 then -- Весь инвентарь
         drawCenteredText(15, "Сканирование инвентаря...", 0xffaa00)
         os.sleep(0.6)
         foundAmount = scanPlayerInventory(sellConfirmItem.name)
@@ -1136,12 +1149,11 @@ while true do
       if isButtonClicked(backButton, x, y) or (y >= 12 and y <= 13 and x >= 45 and x <= 60) then
         currentScreen = "sell_scan"
         drawSellScanScreen()
-      elseif y >= 12 and y <= 13 and x >= 18 and x <= 38 then
+      elseif y >= 12 and y <= 13 and x >= 18 and x <= 38 then -- ПОДТВЕРДИТЬ
         performSell()
       end
 
     elseif currentScreen == "menu" then
-      -- ... без изменений
       for name,btn in pairs(menuButtons) do
         if x>=btn.x and x<btn.x+btn.xs and y>=btn.y and y<btn.y+btn.ys then
           if name=="shop" then goToShop()
@@ -1153,11 +1165,50 @@ while true do
       if y == 23 then
         if x >= 4 and x <= 13 then goToHelp() end
       end
-    -- ... остальные экраны без изменений (help, account, shop, utility)
+    elseif currentScreen == "help" then
+      local pageStr = "⟵ " .. helpPage .. " ⟶"
+      local pageX = math.floor((80 - unicode.len(pageStr)) / 2) + 1
+      if y == 20 then
+        if x >= pageX and x < pageX + 4 and helpPage > 1 then
+          helpPage = helpPage - 1
+          drawHelpScreen()
+        elseif x >= pageX + unicode.len(pageStr) - 4 and x < pageX + unicode.len(pageStr) and helpPage < HELP_PAGES then
+          helpPage = helpPage + 1
+          drawHelpScreen()
+        end
+      end
+      if isButtonClicked(backButton, x, y) then
+        goBackToMenu()
+      end
+    elseif currentScreen == "account" or currentScreen == "account_loading" then
+      if isButtonClicked(backButton, x, y) then
+        goBackToMenu()
+      end
+    elseif currentScreen == "shop" then
+      for name, btn in pairs(shopMenuButtons) do
+        if x>=btn.x and x<btn.x+btn.xs and y>=btn.y and y<btn.y+btn.ys then
+          if name == "buy" then goToBuy()
+          elseif name == "sell" then goToSell()
+          elseif name == "bundle" then
+            currentScreen = "shop_bundle"
+            clear()
+            drawCenteredText(10, "Наборы/Квесты (в разработке)", 0xffffff)
+            drawFlexButton(backButton)
+          end
+          break
+        end
+      end
+      if isButtonClicked(backButton, x, y) then goBackToMenu() end
+    elseif currentScreen == "shop_bundle" then
+      if isButtonClicked(backButton, x, y) then
+        currentScreen = "shop"
+        drawShopMenu()
+      end
+    elseif currentScreen == "utility" then
+      if x>=2 and x<=13 and y>=22 and y<=24 then goBackToMenu() end
     end
 
   elseif e == "scroll" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
-    -- ... без изменений
     local direction = ev[5]
     local x = ev[3]
     local y = ev[4]
@@ -1170,7 +1221,6 @@ while true do
     end
 
   elseif e == "mouse_move" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
-    -- ... без изменений
     local x, y = ev[3], ev[4]
     if y >= 6 and y <= 17 and x >= 2 and x <= 77 then
       local rel = y - 5
@@ -1187,7 +1237,6 @@ while true do
     end
 
   elseif e == "key_down" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") and searchActive then
-    -- ... без изменений
     local ch = ev[3]
     if ch == 13 then
       shopSearch = searchInput
@@ -1228,13 +1277,6 @@ while true do
       end
     elseif currentToken then
       alreadyAuthorized = true
-      -- Отправляем статус селектора после успешной авторизации
-      modem.send(serverAddress, 0xffef, serialization.serialize({
-        op = "selector_status",
-        name = currentPlayer,
-        token = currentToken,
-        available = (selector ~= nil)
-      }))
       if currentScreen == "auth" or currentScreen == "account_loading" then
         currentScreen = "menu"
         drawMainMenu()
@@ -1265,13 +1307,15 @@ while true do
           playerTransactions = msg.transactions or 0
           playerRegDate = msg.regDate or ""
           alreadyAuthorized = true
-          -- Отправляем статус селектора после получения токена
-          modem.send(serverAddress, 0xffef, serialization.serialize({
-            op = "selector_status",
-            name = currentPlayer,
-            token = currentToken,
-            available = (selector ~= nil)
-          }))
+          -- Отправляем статус селектора после успешной авторизации
+          if selector then
+            modem.send(serverAddress, 0xffef, serialization.serialize({
+              op = "selector_status",
+              name = currentPlayer,
+              token = currentToken,
+              available = true
+            }))
+          end
           if currentScreen == "auth" or currentScreen == "account_loading" then
             currentScreen = "menu"
             drawMainMenu()
