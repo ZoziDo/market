@@ -323,6 +323,8 @@ local function getFilteredItems()
     local len = unicode.len(item.displayName or item.name or "")
     if len > maxItemWidth then maxItemWidth = len end
   end
+  return filtered
+end
 
 -- ========== СТАТИЧЕСКАЯ ЧАСТЬ ПОКУПКИ ==========
 local function drawBuyStatic()
