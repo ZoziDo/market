@@ -150,8 +150,8 @@ end
 
 local function drawBottomPanel()
   gpu.setForeground(0xcc3342) gpu.set(4,23,"[Помощь]")
-  gpu.setForeground(0x00FF00) gpu.set(33,23,"[Конвертация + / $]")
-  gpu.setForeground(0xcc3342) gpu.set(69,23,"[Отзывы]")
+  gpu.setForeground(0x00FF00) gpu.set(32,23,"[Конвертация + / $]")
+  gpu.setForeground(0xcc3342) gpu.set(70,23,"[Отзывы]")
 end
 
 local function drawFlexButton(btn)
@@ -184,9 +184,9 @@ local filterButton  = {text = "В наличии", x=33, y=21, xs=14, ys=1, bg=0
 local nextButton    = {text = "Далее", x=70, y=21, xs=7, ys=1, bg=0x333333, fg=0x888888}
 
 local shopMenuButtons = {
-  buy = {x=31,xs=20,y=7,ys=3,text="Покупка",tx=6,ty=1,bg=0x444444,fg=0x3375cc},
-  sell = {x=31,xs=20,y=11,ys=3,text="Пополнение",tx=5,ty=1,bg=0x444444,fg=0x3375cc},
-  bundle = {x=31,xs=20,y=15,ys=3,text="Наборы/Квесты",tx=4,ty=1,bg=0x444444,fg=0x3375cc}
+  shop = {x=31,xs=20,y=10,ys=3,text="Магазин",tx=6,ty=1,bg=0x444444,fg=0x3375cc},
+  util = {x=31,xs=20,y=14,ys=3,text="Полезности",tx=5,ty=1,bg=0x444444,fg=0x3375cc},
+  account = {x=31,xs=20,y=18,ys=3,text="Аккаунт",tx=6,ty=1,bg=0x444444,fg=0x3375cc}
 }
 
 -- ==================== ЗАГРУЗКА ПРЕДМЕТОВ ====================
@@ -578,8 +578,8 @@ end
 
 -- ========== МОДАЛЬНОЕ ОКНО ПОДТВЕРЖДЕНИЯ ПРОДАЖИ ==========
 local function drawSellPopup()
-  local popupWidth = 38
-  local popupHeight = 7
+  local popupWidth = 40
+  local popupHeight = 9
   local popupX = math.floor((80 - popupWidth) / 2)
   local popupY = 6
 
