@@ -30,14 +30,17 @@ if not selector then
 end
 
 local function debugPlayerInventory()
-    if not selector then return end
-    print("=== СОДЕРЖИМОЕ ИНВЕНТАРЯ ===")
+    if not pim then return end
+    print("=== СОДЕРЖИМОЕ ИНВЕНТАРЯ (PIM) ===")
     for slot = 1, 36 do
-        local ok, stack = pcall(selector.getSlot, slot)
-        if ok and stack and stack.qty and stack.qty > 0 then
-            local rawName = stack.label or stack.name or "???"
-            local cleanName = rawName:gsub("§.", "")
-            print(string.format("Слот %2d | %3d шт. | %s", slot, stack.qty, cleanName))
+        local stack = pim.getStackInSlot(slot)
+        if stack then
+            local qty = stack.size or stack.qty or 0
+            if qty > 0 then
+                local rawName = stack.label or stack.name or "???"
+                local cleanName = rawName:gsub("§.", "")
+                print(string.format("Слот %2d | %3d шт. | %s", slot, qty, cleanName))
+            end
         end
     end
 end
@@ -206,28 +209,31 @@ local function loadSellItems()
   shopItems = {}
   for _, item in ipairs(sellItems) do
     table.insert(shopItems, {
-      name = item.name,
+      displayName = item.displayName or item.name,   -- русское название
+      internalName = item.internalName or item.name, -- английский ID
       qty = item.qty,
       price = item.price
     })
   end
 end
 
--- ==================== СКАНИРОВАНИЕ ====================
+-- ==================== СКАНИРОВАНИЕ ЧЕРЕЗ PIM ====================
 local function scanPlayerInventory(targetName)
-    if not selector then return 0 end
+    if not pim then return 0 end
     local total = 0
-    print("Сканируем: '" .. targetName .. "' (слоты 1-36)")
+    print("Сканируем: '" .. targetName .. "' (PIM, слоты 1-36)")
 
-    -- Перебираем слоты с 1 по 36 (стандартный инвентарь)
     for slot = 1, 36 do
-        local ok, stack = pcall(selector.getSlot, slot)  -- защита от ошибок
-        if ok and stack and stack.qty and stack.qty > 0 then
-            -- Удаляем цветовые коды (§) из названия предмета для сравнения
-            local rawName = stack.label or stack.name or ""
-            local cleanName = rawName:gsub("§.", "")   -- убираем §a, §6 и т.д.
-            if cleanName == targetName or string.find(cleanName, targetName, 1, true) then
-                total = total + stack.qty
+        local stack = pim.getStackInSlot(slot)
+        if stack then
+            local qty = stack.size or stack.qty or 0
+            if qty > 0 then
+                local rawName = stack.label or stack.name or ""
+                -- Убираем цветовые коды (§), которые могут быть в названиях
+                local cleanName = rawName:gsub("§.", "")
+                if cleanName == targetName or string.find(cleanName, targetName, 1, true) then
+                    total = total + qty
+                end
             end
         end
     end
@@ -248,39 +254,41 @@ local function scanPlayerInventory(targetName)
     return total
 end
 
--- ==================== ИЗЪЯТИЕ ====================
+-- ==================== ИЗЪЯТИЕ ЧЕРЕЗ PIM ====================
 local function extractToME(targetName, amount)
-    if not selector or not pim or amount <= 0 then return 0 end
+    if not pim or amount <= 0 then return 0 end
     local me = component.isAvailable("me_interface") and component.me_interface or nil
     local extracted = 0
 
     for slot = 1, 36 do
         if extracted >= amount then break end
-        local ok, stack = pcall(selector.getSlot, slot)
-        if not ok or not stack or not stack.qty or stack.qty <= 0 then
-            goto continue
-        end
-
-        local rawName = stack.label or stack.name or ""
-        local cleanName = rawName:gsub("§.", "")
-        if cleanName == targetName or string.find(cleanName, targetName, 1, true) then
-            local toTake = math.min(stack.qty, amount - extracted)
-            if toTake > 0 then
-                local success = pim.extractItem(slot, toTake)
-                if success then
-                    extracted = extracted + toTake
-                    if me then
-                        local itemTable = pim.getStackInSlot(slot)  -- может быть nil после извлечения всего стака
-                        if itemTable then
-                            pcall(function() me.importItem(itemTable, 0) end)
+        local stack = pim.getStackInSlot(slot)
+        if stack then
+            local qty = stack.size or stack.qty or 0
+            if qty > 0 then
+                local rawName = stack.label or stack.name or ""
+                local cleanName = rawName:gsub("§.", "")
+                if cleanName == targetName or string.find(cleanName, targetName, 1, true) then
+                    local toTake = math.min(qty, amount - extracted)
+                    if toTake > 0 then
+                        local success = pim.extractItem(slot, toTake)
+                        if success then
+                            extracted = extracted + toTake
+                            if me then
+                                -- Небольшая пауза, чтобы слот обновился
+                                os.sleep(0.05)
+                                local item = pim.getStackInSlot(slot) or stack
+                                if item then
+                                    pcall(function() me.importItem(item, 0) end)
+                                end
+                            end
+                        else
+                            print("Не удалось extractItem из слота " .. slot)
                         end
                     end
-                else
-                    print("Не удалось extractItem из слота " .. slot)
                 end
             end
         end
-        ::continue::
     end
 
     print("Изъято: " .. extracted .. " / " .. amount .. " " .. targetName)
@@ -291,7 +299,7 @@ end
 local function getFilteredItems()
   local filtered = {}
   for _, item in ipairs(shopItems) do
-    local matchesSearch = (shopSearch == "" or string.find(string.lower(item.name), string.lower(shopSearch), 1, true))
+    local matchesSearch = (shopSearch == "" or string.find(string.lower(item.displayName or item.name), string.lower(shopSearch), 1, true))
     local matchesAvailability = true
     if currentShopMode == "buy" then
       matchesAvailability = (not showOnlyAvailable) or (item.qty > 0)
@@ -300,7 +308,7 @@ local function getFilteredItems()
     if currentShopMode == "sell" and buyFilterMode == "vanilla" then
       matchesVanilla = false
       for _, vname in ipairs(vanillaItems) do
-        if item.name == vname then
+        if (item.internalName or item.name) == vname then
           matchesVanilla = true
           break
         end
@@ -366,7 +374,7 @@ local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
   end
   gpu.fill(2, y, 76, 1, " ")
   gpu.setForeground(0x00ffcc)
-  local name = item.name
+  local name = item.displayName or item.name
   if unicode.len(name) > 37 then
     name = unicode.sub(name, horizontalScroll, horizontalScroll + 36)
   end
@@ -623,7 +631,7 @@ local function drawSellScanScreen()
   gpu.setForeground(0x00ff88)
   gpu.set(3, 3, "Имя предмета: ")
   gpu.setForeground(0xffffff)
-  gpu.set(18, 3, sellConfirmItem.name)
+  gpu.set(18, 3, sellConfirmItem.displayName)
 
   gpu.setForeground(0x00ff88)
   gpu.set(55, 3, "Цена: ")
@@ -662,7 +670,7 @@ local function drawSellFinalConfirm()
   gpu.setForeground(0x00ff88)
   gpu.set(3, 4, "В инвентаре найдено:")
   gpu.setForeground(0xffffff)
-  gpu.set(25, 4, foundAmount .. " шт. " .. sellConfirmItem.name)
+  gpu.set(25, 4, foundAmount .. " шт. " .. sellConfirmItem.displayName)
 
   gpu.setForeground(0xffaa00)
   gpu.set(3, 6, "Будет изъято: " .. foundAmount .. " шт.")
@@ -691,7 +699,7 @@ local function performSell()
   drawCenteredText(15, "Выполняется пополнение...", 0x00ff88)
   os.sleep(0.6)
 
-  local realExtracted = extractToME(sellConfirmItem.name, foundAmount)
+  local realExtracted = extractToME(sellConfirmItem.internalName, foundAmount)
   local value = realExtracted * sellConfirmItem.price
 
   playerBalance = playerBalance + value
@@ -702,7 +710,7 @@ local function performSell()
       op = "sell",
       name = currentPlayer,
       token = currentToken,
-      item = sellConfirmItem.name,
+      item = sellConfirmItem.displayName,
       qty = realExtracted,
       value = value
     }))
@@ -1136,7 +1144,7 @@ while true do
       elseif y == 8 and x >= 28 and x <= 48 then -- 1 слот
         drawCenteredText(15, "Сканирование...", 0xffaa00)
         os.sleep(0.4)
-        foundAmount = scanPlayerInventory(sellConfirmItem.name)
+        foundAmount = scanPlayerInventory(sellConfirmItem.internalName)
         if foundAmount > 0 then drawSellFinalConfirm() else
           drawCenteredText(15, "Предмет не найден!", 0xff0000); os.sleep(1.2); drawSellScanScreen()
         end
@@ -1144,7 +1152,7 @@ while true do
         drawCenteredText(15, "Сканирование инвентаря...", 0xffaa00)
         os.sleep(0.6)
         debugPlayerInventory()
-        foundAmount = scanPlayerInventory(sellConfirmItem.name)
+        foundAmount = scanPlayerInventory(sellConfirmItem.internalName)
         if foundAmount > 0 then drawSellFinalConfirm() else
           drawCenteredText(15, "Предмет не найден!", 0xff0000); os.sleep(1.5); drawSellScanScreen()
         end
