@@ -15,8 +15,16 @@ local pimList = {}
 for addr in component.list("pim") do table.insert(pimList, addr) end
 local pim = component.proxy(pimList[1])
 
-for k,v in pairs(pim) do
-  print(k)
+-- ==================== ITEM SELECTOR ====================
+local selector = nil
+for addr in component.list("item_selector") do
+    selector = component.proxy(addr)
+    break
+end
+if selector then
+    print("Item Selector успешно подключён")
+else
+    print("ОШИБКА: Item Selector не найден!")
 end
 
 modem.open(0xffef)
@@ -190,73 +198,83 @@ local function loadSellItems()
   end
 end
 
--- ==================== СКАНИРОВАНИЕ ====================
-local function scanPlayerInventory(itemName)
-  if not pim then return 0 end
-  
-  local count = 0
+-- ==================== СКАНИРОВАНИЕ (Item Selector) ====================
+local function scanPlayerInventory(targetName)
+    if not selector then return 0 end
+    local total = 0
+    print("Сканируем: '" .. targetName .. "'")
 
-  for slot = 1, 44 do
-    local stack = pim.getStackInSlot(slot)
-    if stack then
-      local id = stack.id or ""
-      local display = stack.displayName or stack.label or ""
-      local size = stack.size or 1
-
-      local found = false
-      if itemName == "Деньги" and (id == "customnpcs:npcMoney" or display:find("Деньги")) then
-        found = true
-      elseif display == itemName then
-        found = true
-      end
-
-      if found then
-        count = count + size
-      end
+    -- Вариант 1: По точному label (displayName)
+    local results = selector.findInPlayer({label = targetName})
+    if results and #results > 0 then
+        for _, stack in ipairs(results) do
+            total = total + (stack.size or 0)
+        end
+        print("Найдено по label: " .. total)
+        return total
     end
-  end
 
-  return count
+    -- Вариант 2: По name (minecraft:id)
+    results = selector.findInPlayer({name = targetName})
+    if results and #results > 0 then
+        for _, stack in ipairs(results) do
+            total = total + (stack.size or 0)
+        end
+        print("Найдено по name: " .. total)
+        return total
+    end
+
+    -- Вариант 3: Поиск по частичному совпадению (крайний случай)
+    local allStacks = selector.getPlayerStacks() or {}
+    for _, stack in ipairs(allStacks) do
+        local label = stack.label or stack.displayName or ""
+        if label == targetName or string.find(label, targetName, 1, true) then
+            total = total + (stack.size or 0)
+        end
+    end
+
+    print("Итог сканирования: " .. total)
+    return total
 end
 
--- ==================== ИЗЪЯТИЕ ====================
-local function extractToME(itemName, amount)
-  if not pim or amount <= 0 then return 0 end
-  local extracted = 0
+-- ==================== ИЗЪЯТИЕ (Item Selector + PIM) ====================
+local function extractToME(targetName, amount)
+    if not selector or not pim or amount <= 0 then return 0 end
+    local me = component.isAvailable("me_interface") and component.me_interface or nil
+    local extracted = 0
+    local results = selector.findInPlayer({label = targetName})
 
-  for slot = 1, 44 do
-    if extracted >= amount then break end
-    local stack = pim.getStackInSlot(slot)
-    if not stack then goto next end
-
-    local id = stack.id or ""
-    local display = stack.displayName or stack.label or ""
-
-    local match = false
-    if itemName == "Деньги" and (id == "customnpcs:npcMoney" or display:find("Деньги")) then
-      match = true
-    elseif display == itemName then
-      match = true
+    if not results or #results == 0 then
+        results = selector.findInPlayer({name = targetName})
     end
 
-    if match then
-      local toTake = math.min(stack.size or 1, amount - extracted)
-      if toTake > 0 then
-        local success = pim.extractItem and pim.extractItem(slot, toTake)
-        if success then
-          if component.isAvailable("me_interface") then
-            local me = component.me_interface
-            pcall(function()
-              me.exportItem({name = stack.name, damage = stack.damage or 0}, 0, toTake)
-            end)
-          end
-          extracted = extracted + toTake
+    if not results or #results == 0 then
+        print("Не найдено предметов для изъятия: " .. targetName)
+        return 0
+    end
+
+    for _, info in ipairs(results) do
+        if extracted >= amount then break end
+        local slot = info.slot
+        local toTake = math.min(info.size or 1, amount - extracted)
+        if toTake > 0 then
+            local success = pim.extractItem(slot, toTake)
+            if success then
+                extracted = extracted + toTake
+                if me then
+                    local stack = pim.getStackInSlot(slot)
+                    if stack then
+                        pcall(function() me.importItem(stack, 0) end)
+                    end
+                end
+            else
+                print("Не удалось extractItem из слота " .. slot)
+            end
         end
-      end
     end
-    ::next::
-  end
-  return extracted
+
+    print("Изъято: " .. extracted .. " / " .. amount .. " " .. targetName)
+    return extracted
 end
 
 -- ========== ПОЛУЧЕНИЕ ОТФИЛЬТРОВАННОГО СПИСКА ==========
@@ -264,12 +282,10 @@ local function getFilteredItems()
   local filtered = {}
   for _, item in ipairs(shopItems) do
     local matchesSearch = (shopSearch == "" or string.find(string.lower(item.name), string.lower(shopSearch), 1, true))
-
     local matchesAvailability = true
     if currentShopMode == "buy" then
       matchesAvailability = (not showOnlyAvailable) or (item.qty > 0)
     end
-
     local matchesVanilla = true
     if currentShopMode == "sell" and buyFilterMode == "vanilla" then
       matchesVanilla = false
@@ -280,7 +296,6 @@ local function getFilteredItems()
         end
       end
     end
-
     if matchesSearch and matchesAvailability and matchesVanilla then
       table.insert(filtered, item)
     end
@@ -589,14 +604,12 @@ local function drawSellScanScreen()
   currentScreen = "sell_scan"
   clear()
 
-  -- Баланс
   local balanceText = "Баланс: " .. string.format("%.2f Ресов $ | ", playerBalance)
   gpu.setForeground(0x00ff88)
   gpu.set(3, 1, balanceText)
   gpu.setForeground(0xff7300)
   gpu.set(3 + unicode.len(balanceText), 1, string.format("%.2f Эмов *", playerBalance))
 
-  -- Имя предмета
   gpu.setForeground(0x00ff88)
   gpu.set(3, 3, "Имя предмета: ")
   gpu.setForeground(0xffffff)
@@ -618,7 +631,6 @@ local function drawSellScanScreen()
   local scanX = math.floor((80 - unicode.len(scanText)) / 2)
   gpu.set(scanX, 6, scanText)
 
-  -- Кнопки
   local slotBtn = {x=28, y=8, xs=20, ys=1, text="1 слот", bg=0x333333, fg=0xaaaaaa}
   local allBtn  = {x=28, y=10, xs=20, ys=1, text="Весь инвентарь", bg=0x333333, fg=0x00ff88}
 
@@ -626,6 +638,7 @@ local function drawSellScanScreen()
   drawFlexButton(allBtn)
   drawFlexButton(backButton)
 end
+
 -- ========== ФИНАЛЬНОЕ ОКНО ПОДТВЕРЖДЕНИЯ ==========
 local function drawSellFinalConfirm()
   currentScreen = "sell_confirm"
@@ -664,18 +677,26 @@ local function goToSellConfirm(item)
   drawSellScanScreen()
 end
 
--- Заглушка покупки
-local function performPurchase()
-  drawCenteredText(20, "Покупка выполняется...", 0x00ff88)
-  os.sleep(1)
-  if currentShopMode == "buy" then
-    currentScreen = "shop_buy"
+-- Функция выполнения продажи (изъятие + пополнение)
+local function performSell()
+  drawCenteredText(15, "Выполняется пополнение...", 0x00ff88)
+  os.sleep(0.6)
+
+  local realExtracted = extractToME(sellConfirmItem.name, foundAmount)
+  local value = realExtracted * sellConfirmItem.price
+
+  playerBalance = playerBalance + value
+  playerTransactions = playerTransactions + 1
+
+  if realExtracted > 0 then
+    drawCenteredText(18, "Успешно! +" .. string.format("%.2f", value) .. " Эмов", 0x00ff88)
   else
-    currentScreen = "shop_sell"
+    drawCenteredText(18, "Не удалось изъять предметы!", 0xff0000)
   end
-  selectedItem = nil
-  selectedIndex = 0
-  hoveredIndex = 0
+
+  os.sleep(2.5)
+
+  currentScreen = "shop_sell"
   drawBuyStatic()
   drawBuyItemsList()
   drawBuyButtons()
@@ -1046,7 +1067,20 @@ while true do
 
       -- Кнопка Купить
       if (y >= 23 and y <= 23) and (x >= 50 and x <= 60) then
-        performPurchase()
+        -- здесь будет вызов покупки (пока заглушка)
+        drawCenteredText(20, "Покупка выполняется...", 0x00ff88)
+        os.sleep(1)
+        if currentShopMode == "buy" then
+          currentScreen = "shop_buy"
+        else
+          currentScreen = "shop_sell"
+        end
+        selectedItem = nil
+        selectedIndex = 0
+        hoveredIndex = 0
+        drawBuyStatic()
+        drawBuyItemsList()
+        drawBuyButtons()
       end
 
       -- Обработка цифровой клавиатуры
@@ -1101,28 +1135,8 @@ while true do
         currentScreen = "sell_scan"
         drawSellScanScreen()
       elseif y >= 12 and y <= 13 and x >= 18 and x <= 38 then -- ПОДТВЕРДИТЬ
-        drawCenteredText(15, "Выполняется изъятие...", 0x00ff88)
-        os.sleep(0.6)
-
-        local realExtracted = extractToME(sellConfirmItem.name, foundAmount)
-        
-        local value = realExtracted * sellConfirmItem.price
-
-        playerBalance = playerBalance + value
-        playerTransactions = playerTransactions + 1
-
-        if realExtracted > 0 then
-          drawCenteredText(18, "Успешно! +" .. string.format("%.2f", value) .. " Эмов", 0x00ff88)
-        else
-          drawCenteredText(18, "Не удалось изъять предметы!", 0xff0000)
-        end
-
-        os.sleep(2.5)
-
-        currentScreen = "shop_sell"
-        drawBuyStatic()
-        drawBuyItemsList()
-        drawBuyButtons()
+        performSell()
+      end
 
     elseif currentScreen == "menu" then
       for name,btn in pairs(menuButtons) do
