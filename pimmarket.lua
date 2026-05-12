@@ -59,7 +59,7 @@ local serverAddress = "535305a9-37c9-4645-b7c4-46204187ee7b"
 local currentPlayer, currentToken = nil, nil
 -- Раздельные балансы
 local resBalance = 0.0   -- Ресы $
-local emBalance = 0.0    -- Эмы *
+local emBalance = 0.0    -- Эмы ֎
 local playerTransactions = 0
 local playerRegDate = ""
 local currentScreen = "welcome"
@@ -138,9 +138,9 @@ end
 
 -- Кнопки главного меню
 local menuButtons = {
-  shop = {x=31,xs=20,y=9,ys=3,text="Магазин",tx=6,ty=1,bg=0x444444,fg=0x3375cc},
-  util = {x=31,xs=20,y=13,ys=3,text="Полезности",tx=5,ty=1,bg=0x444444,fg=0x3375cc},
-  account = {x=31,xs=20,y=17,ys=3,text="Аккаунт",tx=6,ty=1,bg=0x444444,fg=0x3375cc}
+  shop = {x=31,xs=20,y=9,ys=3,text="Магазин",tx=6,ty=1,bg=0x444444,fg=0x00FF88},
+  util = {x=31,xs=20,y=13,ys=3,text="Полезности",tx=5,ty=1,bg=0x444444,fg=0x00FF88},
+  account = {x=31,xs=20,y=17,ys=3,text="Аккаунт",tx=6,ty=1,bg=0x444444,fg=0x00FF88}
 }
 local function drawButton(btn)
   gpu.setBackground(btn.bg) gpu.fill(btn.x,btn.y,btn.xs,btn.ys," ")
@@ -184,9 +184,9 @@ local filterButton  = {text = "В наличии", x=33, y=21, xs=14, ys=1, bg=0
 local nextButton    = {text = "Далее", x=70, y=21, xs=7, ys=1, bg=0x333333, fg=0x888888}
 
 local shopMenuButtons = {
-  buy = {x=31,xs=20,y=7,ys=3,text="Покупка",tx=6,ty=1,bg=0x444444,fg=0x3375cc},
-  sell = {x=31,xs=20,y=11,ys=3,text="Пополнение",tx=5,ty=1,bg=0x444444,fg=0x3375cc},
-  bundle = {x=31,xs=20,y=15,ys=3,text="Наборы/Квесты",tx=4,ty=1,bg=0x444444,fg=0x3375cc}
+  buy = {x=31,xs=20,y=9,ys=3,text="Покупка",tx=6,ty=1,bg=0x444444,fg=0x00FF88},
+  sell = {x=31,xs=20,y=13,ys=3,text="Пополнение",tx=5,ty=1,bg=0x444444,fg=0x00FF88},
+  bundle = {x=31,xs=20,y=17,ys=3,text="Наборы/Квесты",tx=4,ty=1,bg=0x444444,fg=0x00FF88}
 }
 
 -- ==================== ЗАГРУЗКА ПРЕДМЕТОВ ====================
@@ -312,7 +312,7 @@ end
 local function drawBuyStatic()
   clear()
   local resText = "Баланс: " .. string.format("%.2f Ресов $ | ", resBalance)
-  local emText = string.format("%.2f Эмов *", emBalance)
+  local emText = string.format("%.2f Эмов ֎", emBalance)
   gpu.setForeground(0x00ff88)
   gpu.set(3, 1, resText)
   gpu.setForeground(0xff7300)
@@ -475,7 +475,7 @@ local function drawBuyButtons()
   local filterBg = filterButton.bg
   local filterX = filterButton.x
   local filterY = filterButton.y
-  local filterXs = 14
+  local filterXs = 15
   local filterYs = filterButton.ys
   local filterText = filterButton.text
   local filterFg = filterButton.fg
@@ -494,7 +494,7 @@ local function drawPurchaseScreen()
   currentScreen = "purchase"
   clear()
   local resText = "Баланс: " .. string.format("%.2f Ресов $ | ", resBalance)
-  local emText = string.format("%.2f Эмов *", emBalance)
+  local emText = string.format("%.2f Эмов ֎", emBalance)
   gpu.setForeground(0x00ff88)
   gpu.set(3, 1, resText)
   gpu.setForeground(0xff7300)
@@ -596,16 +596,16 @@ local function drawSellPopup()
   local currency = (sellConfirmItem.internalName == "npcMoney") and "Эмов" or "$"
 
   gpu.setForeground(0xffffff)
-  gpu.set(popupX+2, popupY+1, "Подтверждение")
+  gpu.set(popupX+3, popupY+1, "Подтверждение")
   gpu.setForeground(0xffaa00)
-  gpu.set(popupX+2, popupY+2, "Магазин заберёт: " .. totalFound)
-  gpu.set(popupX+2, popupY+3, name .. " x" .. totalFound)
+  gpu.set(popupX+3, popupY+2, "Магазин заберёт: " .. totalFound)
+  gpu.set(popupX+3, popupY+3, name .. " x" .. totalFound)
   gpu.setForeground(0x00ff88)
-  gpu.set(popupX+2, popupY+4, "Вы получите: " .. string.format("%.2f", value) .. " " .. currency)
+  gpu.set(popupX+3, popupY+4, "Вы получите: " .. string.format("%.2f", value) .. " " .. currency)
 
   -- Кнопки внутри окна
-  local yesBtn = {x=popupX+5, y=popupY+5, xs=10, ys=1, text="Да", bg=0x004400, fg=0x00ff88}
-  local noBtn  = {x=popupX+popupWidth-15, y=popupY+5, xs=10, ys=1, text="Отмена", bg=0x440000, fg=0xff5555}
+  local yesBtn = {x=popupX+5, y=popupY+6, xs=10, ys=1, text="Да", bg=0x004400, fg=0x00ff88}
+  local noBtn  = {x=popupX+popupWidth-15, y=popupY+6, xs=10, ys=1, text="Отмена", bg=0x440000, fg=0xff5555}
   drawFlexButton(yesBtn)
   drawFlexButton(noBtn)
 end
@@ -615,7 +615,7 @@ local function drawSellScanScreen()
   currentScreen = "sell_scan"
   clear()
   local resText = "Баланс: " .. string.format("%.2f Ресов $ | ", resBalance)
-  local emText = string.format("%.2f Эмов *", emBalance)
+  local emText = string.format("%.2f Эмов ֎", emBalance)
   gpu.setForeground(0x00ff88)
   gpu.set(3, 1, resText)
   gpu.setForeground(0xff7300)
@@ -760,7 +760,7 @@ end
 local drawHelpScreen = dofile("/home/help_screen.lua")
 
 local function drawWelcomeScreen()
-  gpu.setBackground(0x202020) gpu.fill(1,1,80,25," ")
+  gpu.setBackground(0x000000) gpu.fill(1,1,80,25," ")
   drawBigTitle()
   gpu.setForeground(0x00FF00)
   drawCenteredText(17, "↓   Встаньте на PIM   ↓", 0x00FF00)
@@ -771,7 +771,7 @@ local function drawWelcomeScreen()
 end
 
 local function drawAuthScreen()
-  gpu.setBackground(0x202020) gpu.fill(1,1,80,25," ")
+  gpu.setBackground(0x000000) gpu.fill(1,1,80,25," ")
   drawBigTitle()
   gpu.setForeground(0xFFFFFF)
   drawCenteredText(17, "Авторизация....", 0xFFFFFF)
@@ -782,39 +782,72 @@ end
 
 local function drawMainMenu()
   clear()
+
   if currentPlayer then
-    local pink1 = "Добро пожаловать, " local white1 = currentPlayer.."!"
-    local full1 = pink1..white1
+    local hello1 = "Добро пожаловать, "
+    local hello2 = currentPlayer.."!"
+    local full1 = hello1..hello2
     local x1 = math.floor((80 - unicode.len(full1))/2)+1
-    gpu.setForeground(0xFF00FF) gpu.set(x1,4,pink1)
-    gpu.setForeground(0xFFFFFF) gpu.set(x1+unicode.len(pink1),4,white1)
-    local pink2 = "Ресы: " local white2 = string.format("%.2f", resBalance).." $ | Эмы: ".. string.format("%.2f", emBalance).." *"
-    local full2 = pink2..white2
+
+    gpu.setForeground(0x00FF88)
+    gpu.set(x1, 4, hello1)
+    gpu.setForeground(0xFFFFFF)
+    gpu.set(x1 + unicode.len(hello1), 4, hello2)
+
+    local resText = "Ваш баланс: " .. string.format("%.2f Ресов $ | ", resBalance)
+    local emText = string.format("%.2f Эмы ֎", emBalance)
+    local full2 = resText .. emText
     local x2 = math.floor((80 - unicode.len(full2))/2)+1
-    gpu.setForeground(0xFF00FF) gpu.set(x2,6,pink2)
-    gpu.setForeground(0xFFFFFF) gpu.set(x2+unicode.len(pink2),6,white2)
-    for _,btn in pairs(menuButtons) do drawButton(btn) end
+
+    gpu.setForeground(0x00FF88)
+    gpu.set(x2, 6, resText)
+    gpu.setForeground(0xFF7300)
+    gpu.set(x2 + unicode.len(resText), 6, emText)
+
+    for _,btn in pairs(menuButtons) do
+      drawButton(btn)
+    end
+
     drawBottomPanel()
-  else drawWelcomeScreen() end
+  else
+    drawWelcomeScreen()
+  end
 end
 
 local function drawAccount(data)
   clear()
-  drawCenteredText(6, currentPlayer .. ":", 0xFFD700)
+  drawCenteredText(10, currentPlayer .. ":", 0xFFD700)
   local res = data.resBalance or resBalance
   local em = data.emBalance or emBalance
   local resPart1 = string.format("Баланс Ресов: %.2f $ | ", res)
-  local emPart = string.format("Эмов: %.2f *", em)
+  local emPart = string.format("Эмов: %.2f ֎", em)
   local full = resPart1 .. emPart
   local x = math.floor((80 - unicode.len(full)) / 2) + 1
   gpu.setForeground(0x00FF00)
-  gpu.set(x, 8, resPart1)
+  gpu.set(x, 12, resPart1)
   gpu.setForeground(0xff7300)
-  gpu.set(x + unicode.len(resPart1), 8, emPart)
-  local transText = "Совершенно транзакций: " .. tostring(data.transactions or 0)
-  drawCenteredText(10, transText, 0x00FF00)
-  local regText = "Регистрация: " .. (data.regDate or "Неизвестно")
-  drawCenteredText(12, regText, 0x00FF00)
+  gpu.set(x + unicode.len(resPart1), 12, emPart)
+
+  -- Совершенно транзакций: зелёное слово + белая цифра
+  local transLabel = "Совершенно транзакций: "
+  local transCount = tostring(data.transactions or 0)
+  local fullTrans = transLabel .. transCount
+  local transX = math.floor((80 - unicode.len(fullTrans)) / 2) + 1
+  gpu.setForeground(0x00FF00)
+  gpu.set(transX, 13, transLabel)
+  gpu.setForeground(0xFFFFFF)
+  gpu.set(transX + unicode.len(transLabel), 13, transCount)
+
+  -- Регистрация: зелёная надпись + белая дата
+  local regLabel = "Регистрация: "
+  local regDate = data.regDate or "Неизвестно"
+  local fullReg = regLabel .. regDate
+  local regX = math.floor((80 - unicode.len(fullReg)) / 2) + 1
+  gpu.setForeground(0x00FF00)
+  gpu.set(regX, 14, regLabel)
+  gpu.setForeground(0xFFFFFF)
+  gpu.set(regX + unicode.len(regLabel), 14, regDate)
+
   drawFlexButton(backButton)
 end
 
