@@ -190,10 +190,16 @@ end
 local function scanPlayerInventory(itemName)
   if not pim then return 0 end
   local count = 0
+
   for slot = 1, 44 do
     local stack = pim.getStackInSlot(slot)
-    if stack and (stack.label == itemName or stack.name == itemName) then
-      count = count + (stack.size or 0)
+    if stack then
+      -- Несколько способов проверки имени
+      if stack.label == itemName or 
+         stack.name == itemName or 
+         (stack.displayName and stack.displayName == itemName) then
+        count = count + (stack.size or 0)
+      end
     end
   end
   return count
@@ -202,18 +208,26 @@ end
 local function extractToME(itemName, amount)
   if not pim or amount <= 0 then return 0 end
   local extracted = 0
+
   for slot = 1, 44 do
     if extracted >= amount then break end
     local stack = pim.getStackInSlot(slot)
-    if stack and (stack.label == itemName or stack.name == itemName) then
-      local toTake = math.min(stack.size, amount - extracted)
-      local success = pim.extractItem(slot, toTake)
-      if success then
-        if component.isAvailable("me_interface") then
-          local me = component.me_interface
-          me.exportItem({name = stack.name, damage = stack.damage or 0}, 0, toTake)
+    if stack then
+      if stack.label == itemName or stack.name == itemName or 
+         (stack.displayName and stack.displayName == itemName) then
+        
+        local toTake = math.min(stack.size or 0, amount - extracted)
+        if toTake > 0 then
+          local success = pim.extractItem(slot, toTake)
+          if success then
+            if component.isAvailable("me_interface") then
+              local me = component.me_interface
+              local itemToExport = {name = stack.name, damage = stack.damage or 0}
+              me.exportItem(itemToExport, 0, toTake)
+            end
+            extracted = extracted + toTake
+          end
         end
-        extracted = extracted + toTake
       end
     end
   end
@@ -550,12 +564,14 @@ local function drawSellScanScreen()
   currentScreen = "sell_scan"
   clear()
 
+  -- Баланс
   local balanceText = "Баланс: " .. string.format("%.2f Ресов $ | ", playerBalance)
   gpu.setForeground(0x00ff88)
   gpu.set(3, 1, balanceText)
   gpu.setForeground(0xff7300)
   gpu.set(3 + unicode.len(balanceText), 1, string.format("%.2f Эмов *", playerBalance))
 
+  -- Имя предмета
   gpu.setForeground(0x00ff88)
   gpu.set(3, 3, "Имя предмета: ")
   gpu.setForeground(0xffffff)
@@ -571,9 +587,13 @@ local function drawSellScanScreen()
   gpu.setForeground(0xffffff)
   gpu.set(18, 4, tostring(sellConfirmItem.qty))
 
+  -- Центрированная строка
   gpu.setForeground(0xffaa00)
-  gpu.set(3, 6, "Сканировать на наличие предмета:")
+  local scanText = "Сканировать на наличие предмета:"
+  local scanX = math.floor((80 - unicode.len(scanText)) / 2)
+  gpu.set(scanX, 6, scanText)
 
+  -- Кнопки
   local slotBtn = {x=28, y=8, xs=20, ys=1, text="1 слот", bg=0x333333, fg=0xaaaaaa}
   local allBtn  = {x=28, y=10, xs=20, ys=1, text="Весь инвентарь", bg=0x333333, fg=0x00ff88}
 
@@ -581,7 +601,6 @@ local function drawSellScanScreen()
   drawFlexButton(allBtn)
   drawFlexButton(backButton)
 end
-
 -- ========== ФИНАЛЬНОЕ ОКНО ПОДТВЕРЖДЕНИЯ ==========
 local function drawSellFinalConfirm()
   currentScreen = "sell_confirm"
