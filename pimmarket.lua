@@ -209,14 +209,12 @@ local function scanPlayerInventory(itemName)
       local id          = stack.id or ""
       local label       = stack.label or "nil"
       local displayName = stack.displayName or "nil"
-      local name        = stack.name or "nil"
-      local size        = stack.size or 0
+      local size        = stack.size or 1   -- ← Важно! Если size = 0, берём 1 по умолчанию
 
-      -- Специальная проверка для CustomNPCs
       local found = false
       if itemName == "Деньги" and id == "customnpcs:npcMoney" then
         found = true
-      elseif label == itemName or displayName == itemName or name == itemName or id == itemName then
+      elseif label == itemName or displayName == itemName then
         found = true
       end
 
@@ -226,7 +224,7 @@ local function scanPlayerInventory(itemName)
         gpu.set(3, line, string.format("Слот %2d: НАЙДЕНО! %s x%d", slot, displayName ~= "nil" and displayName or "Деньги", size))
       else
         gpu.setForeground(0x777777)
-        gpu.set(3, line, string.format("Слот %2d: %s", slot, displayName ~= "nil" and displayName:sub(1,35) or id))
+        gpu.set(3, line, string.format("Слот %2d: %s", slot, displayName ~= "nil" and displayName:sub(1,30) or id))
       end
 
       line = line + 1
