@@ -198,7 +198,7 @@ local function loadBuyItems()
   for _, item in ipairs(rawItems) do
     if item and item.size and item.size > 0 then
       local name = item.label or item.name or "???"
-      local price = buyPrices[item.name] or 0.0  -- используем цену из внешнего файла
+      local price = buyPrices[item.name] or 0.0
       table.insert(shopItems, {
         name = name,
         qty = item.size,
@@ -578,10 +578,10 @@ end
 
 -- ========== МОДАЛЬНОЕ ОКНО ПОДТВЕРЖДЕНИЯ ПРОДАЖИ ==========
 local function drawSellPopup()
-  local popupWidth = 34
-  local popupHeight = 6
+  local popupWidth = 38
+  local popupHeight = 7
   local popupX = math.floor((80 - popupWidth) / 2)
-  local popupY = 7
+  local popupY = 6
 
   gpu.setBackground(0x000000)
   gpu.setForeground(0xffffff)
@@ -603,8 +603,9 @@ local function drawSellPopup()
   gpu.setForeground(0x00ff88)
   gpu.set(popupX+2, popupY+4, "Вы получите: " .. string.format("%.2f", value) .. " " .. currency)
 
-  local yesBtn = {x=popupX+4, y=popupY+5, xs=10, ys=1, text="Да", bg=0x003300, fg=0x00ff88}
-  local noBtn  = {x=popupX+popupWidth-14, y=popupY+5, xs=10, ys=1, text="Отмена", bg=0x330000, fg=0xff5555}
+  -- Кнопки внутри окна
+  local yesBtn = {x=popupX+5, y=popupY+5, xs=10, ys=1, text="Да", bg=0x004400, fg=0x00ff88}
+  local noBtn  = {x=popupX+popupWidth-15, y=popupY+5, xs=10, ys=1, text="Отмена", bg=0x440000, fg=0xff5555}
   drawFlexButton(yesBtn)
   drawFlexButton(noBtn)
 end
@@ -628,7 +629,7 @@ local function drawSellScanScreen()
   gpu.setForeground(0x00ff88)
   gpu.set(55, 3, "Цена: ")
   gpu.setForeground(0xffffff)
-  gpu.set(62, 3, string.format("%.0f", sellConfirmItem.price))
+  gpu.set(62, 3, string.format("%.2f", sellConfirmItem.price))
 
   gpu.setForeground(0x00ff88)
   gpu.set(3, 5, "Можно продать: ")
@@ -652,7 +653,7 @@ local function drawSellScanScreen()
   end
 end
 
--- goToSellConfirm теперь ПОСЛЕ drawSellScanScreen
+-- goToSellConfirm после drawSellScanScreen
 local function goToSellConfirm(item)
   if not item then return end
   sellConfirmItem = item
@@ -664,14 +665,15 @@ end
 -- ========== ВЫПОЛНЕНИЕ ПРОДАЖИ ==========
 local function performSell()
   showSellPopup = false
-  drawSellScanScreen()  -- скроем попап
+  drawSellScanScreen()  -- скрываем попап, показываем экран сканирования
   drawCenteredText(17, "Выполняется пополнение...", 0x00ff88)
   os.sleep(0.6)
 
   local realExtracted = extractToME(sellConfirmItem.internalName, foundAmount)
   local value = realExtracted * sellConfirmItem.price
+  local currency = (sellConfirmItem.internalName == "npcMoney") and "em" or "res"
 
-  if sellConfirmItem.internalName == "npcMoney" then
+  if currency == "em" then
     emBalance = emBalance + value
   else
     resBalance = resBalance + value
@@ -685,15 +687,18 @@ local function performSell()
       token = currentToken,
       item = sellConfirmItem.displayName,
       qty = realExtracted,
-      value = value
+      value = value,
+      currency = currency
     }))
   end
 
-  local currency = (sellConfirmItem.internalName == "npcMoney") and "Эмов" or "Ресов"
+  -- Выводим результат
+  clear()
+  local currencyName = (sellConfirmItem.internalName == "npcMoney") and "Эмов" or "Ресов"
   if realExtracted > 0 then
-    drawCenteredText(18, "Успешно! +" .. string.format("%.2f", value) .. " " .. currency, 0x00ff88)
+    drawCenteredText(15, "Успешно! +" .. string.format("%.2f", value) .. " " .. currencyName, 0x00ff88)
   else
-    drawCenteredText(18, "Не удалось изъять предметы!", 0xff0000)
+    drawCenteredText(15, "Не удалось изъять предметы!", 0xff0000)
   end
   os.sleep(2.5)
 
@@ -912,12 +917,12 @@ while true do
 
     -- Обработка модального окна продажи (поверх всего)
     if showSellPopup and currentScreen == "sell_scan" then
-      local popupWidth = 34
-      local popupHeight = 6
+      local popupWidth = 38
+      local popupHeight = 7
       local popupX = math.floor((80 - popupWidth) / 2)
-      local popupY = 7
-      local yesBtn = {x=popupX+4, y=popupY+5, xs=10, ys=1}
-      local noBtn = {x=popupX+popupWidth-14, y=popupY+5, xs=10, ys=1}
+      local popupY = 6
+      local yesBtn = {x=popupX+5, y=popupY+5, xs=10, ys=1}
+      local noBtn = {x=popupX+popupWidth-15, y=popupY+5, xs=10, ys=1}
       if isButtonClicked(yesBtn, x, y) then
         performSell()
       elseif isButtonClicked(noBtn, x, y) then
@@ -1075,7 +1080,7 @@ while true do
       elseif y == 15 and x >= 28 and x <= 48 then  -- "Весь инвентарь"
         drawCenteredText(17, "Сканирование инвентаря...", 0xffaa00)
         os.sleep(0.6)
-        debugPlayerInventory()
+        -- debugPlayerInventory()  -- убрано, чтобы не мелькал отладочный вывод
         foundAmount = scanPlayerInventory(sellConfirmItem.internalName)
         if foundAmount > 0 then
           showSellPopup = true
@@ -1100,7 +1105,7 @@ while true do
         if x >= 4 and x <= 13 then goToHelp() end
       end
     elseif currentScreen == "help" then
-      local pageStr = "⟵  " .. helpPage .. "  ⟶"   -- расширенные пробелы
+      local pageStr = "⟵  " .. helpPage .. "  ⟶"
       local pageX = math.floor((80 - unicode.len(pageStr)) / 2) + 1
       if y == 20 then
         -- Левая стрелка (область 5 символов)
