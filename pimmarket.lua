@@ -576,49 +576,6 @@ local function goToPurchase(item)
   drawPurchaseScreen()
 end
 
--- ========== ЭКРАН СКАНИРОВАНИЯ (ПОПОЛНЕНИЕ) ==========
-local function drawSellScanScreen()
-  currentScreen = "sell_scan"
-  clear()
-  local resText = "Баланс: " .. string.format("%.2f Ресов $ | ", resBalance)
-  local emText = string.format("%.2f Эмов *", emBalance)
-  gpu.setForeground(0x00ff88)
-  gpu.set(3, 1, resText)
-  gpu.setForeground(0xff7300)
-  gpu.set(3 + unicode.len(resText), 1, emText)
-
-  gpu.setForeground(0x00ff88)
-  gpu.set(3, 3, "Имя предмета: ")
-  gpu.setForeground(0xffffff)
-  gpu.set(18, 3, sellConfirmItem.displayName)
-
-  gpu.setForeground(0x00ff88)
-  gpu.set(55, 3, "Цена: ")
-  gpu.setForeground(0xffffff)
-  gpu.set(62, 3, string.format("%.0f", sellConfirmItem.price))
-
-  gpu.setForeground(0x00ff88)
-  gpu.set(3, 5, "Можно продать: ")   -- был y=4, сдвинули на 5
-  gpu.setForeground(0xffffff)
-  gpu.set(18, 5, tostring(sellConfirmItem.qty))
-
-  -- Сдвинутый вниз текст и кнопки
-  gpu.setForeground(0xffaa00)
-  local scanText = "Сканировать на наличие предмета:"
-  local scanX = math.floor((80 - unicode.len(scanText)) / 2)
-  gpu.set(scanX, 11, scanText)   -- было 6
-
-  local slotBtn = {x=28, y=13, xs=20, ys=1, text="1 слот", bg=0x333333, fg=0xaaaaaa}
-  local allBtn  = {x=28, y=15, xs=20, ys=1, text="Весь инвентарь", bg=0x333333, fg=0x00ff88}
-  drawFlexButton(slotBtn)
-  drawFlexButton(allBtn)
-  drawFlexButton(backButton)
-
-  -- Если активно модальное окно, рисуем его поверх
-  if showSellPopup and sellConfirmItem then
-    drawSellPopup()
-  end
-end
 
 -- ========== МОДАЛЬНОЕ ОКНО ПОДТВЕРЖДЕНИЯ ПРОДАЖИ ==========
 local function drawSellPopup()
@@ -665,6 +622,50 @@ local function goToSellConfirm(item)
   foundAmount = 0
   showSellPopup = false
   drawSellScanScreen()
+end
+
+-- ========== ЭКРАН СКАНИРОВАНИЯ (ПОПОЛНЕНИЕ) ==========
+local function drawSellScanScreen()
+  currentScreen = "sell_scan"
+  clear()
+  local resText = "Баланс: " .. string.format("%.2f Ресов $ | ", resBalance)
+  local emText = string.format("%.2f Эмов *", emBalance)
+  gpu.setForeground(0x00ff88)
+  gpu.set(3, 1, resText)
+  gpu.setForeground(0xff7300)
+  gpu.set(3 + unicode.len(resText), 1, emText)
+
+  gpu.setForeground(0x00ff88)
+  gpu.set(3, 3, "Имя предмета: ")
+  gpu.setForeground(0xffffff)
+  gpu.set(18, 3, sellConfirmItem.displayName)
+
+  gpu.setForeground(0x00ff88)
+  gpu.set(55, 3, "Цена: ")
+  gpu.setForeground(0xffffff)
+  gpu.set(62, 3, string.format("%.0f", sellConfirmItem.price))
+
+  gpu.setForeground(0x00ff88)
+  gpu.set(3, 5, "Можно продать: ")   -- был y=4, сдвинули на 5
+  gpu.setForeground(0xffffff)
+  gpu.set(18, 5, tostring(sellConfirmItem.qty))
+
+  -- Сдвинутый вниз текст и кнопки
+  gpu.setForeground(0xffaa00)
+  local scanText = "Сканировать на наличие предмета:"
+  local scanX = math.floor((80 - unicode.len(scanText)) / 2)
+  gpu.set(scanX, 11, scanText)   -- было 6
+
+  local slotBtn = {x=28, y=13, xs=20, ys=1, text="1 слот", bg=0x333333, fg=0xaaaaaa}
+  local allBtn  = {x=28, y=15, xs=20, ys=1, text="Весь инвентарь", bg=0x333333, fg=0x00ff88}
+  drawFlexButton(slotBtn)
+  drawFlexButton(allBtn)
+  drawFlexButton(backButton)
+
+  -- Если активно модальное окно, рисуем его поверх
+  if showSellPopup and sellConfirmItem then
+    drawSellPopup()
+  end
 end
 
 -- ========== ВЫПОЛНЕНИЕ ПРОДАЖИ ==========
