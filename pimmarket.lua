@@ -248,47 +248,60 @@ end
 
 -- ==================== ИЗЪЯТИЕ ====================
 local function extractToME(itemName, amount)
-  if not pim or amount <= 0 then return 0 end
-
+  if not pim or amount <= 0 then 
+    print("extractToME: нет pim или amount=0")
+    return 0 
+  end
+  
   local extracted = 0
 
   for slot = 1, 44 do
     if extracted >= amount then break end
-
+    
     local stack = pim.getStackInSlot(slot)
-    if stack then
-      local id = stack.id or ""
-      local displayName = stack.displayName or ""
-      local label = stack.label or ""
-      local size = stack.size or stack.qty or stack.count or 1
+    if not stack then goto continue end
 
-      local found = false
+    local id = stack.id or ""
+    local display = stack.displayName or stack.label or ""
 
-      if itemName == "Деньги" then
-        if id == "customnpcs:npcMoney" or displayName == "Деньги" or label == "Деньги" then
-          found = true
+    local match = false
+    if itemName == "Деньги" and (id == "customnpcs:npcMoney" or display:find("Деньги")) then
+      match = true
+    elseif display == itemName then
+      match = true
+    end
+
+    if match then
+      local toTake = math.min(stack.size or 1, amount - extracted)
+      if toTake > 0 then
+        -- Несколько попыток изъятия
+        local success = false
+        
+        -- Вариант 1 (самый частый)
+        success = pcall(function() return pim.extractItem(slot, toTake) end)
+        
+        -- Вариант 2
+        if not success then
+          success = pcall(function() return pim.extractItem(stack, toTake) end)
         end
-      else
-        if displayName == itemName or label == itemName then
-          found = true
-        end
-      end
 
-      if found then
-        local toTake = math.min(size, amount - extracted)
-
-        -- ВАЖНО: extractItem(stack, count)
-        local ok, result = pcall(function()
-          return pim.extractItem(stack, toTake)
-        end)
-
-        if ok and result then
+        if success then
+          -- Отправка в ME
+          if component.isAvailable("me_interface") then
+            local me = component.me_interface
+            pcall(function()
+              me.exportItem({name = stack.name, damage = stack.damage or 0}, 0, toTake)
+            end)
+          end
           extracted = extracted + toTake
+          print("Изъято " .. toTake .. " из слота " .. slot)
         end
       end
     end
+    ::continue::
   end
-
+  
+  print("extractToME итого: " .. extracted)
   return extracted
 end
 
@@ -1133,38 +1146,29 @@ while true do
       if isButtonClicked(backButton, x, y) or (y >= 12 and y <= 13 and x >= 45 and x <= 60) then
         currentScreen = "sell_scan"
         drawSellScanScreen()
-      elseif y >= 12 and y <= 13 and x >= 18 and x <= 38 then
-        drawCenteredText(15, "Выполняется пополнение...", 0x00ff88)
-        os.sleep(0.8)
-      
+      elseif y >= 12 and y <= 13 and x >= 18 and x <= 38 then -- ПОДТВЕРДИТЬ
+        drawCenteredText(15, "Выполняется изъятие...", 0x00ff88)
+        os.sleep(0.6)
+
         local realExtracted = extractToME(sellConfirmItem.name, foundAmount)
-      
-        gpu.setForeground(0xffffff)
-        gpu.fill(3, 18, 70, 1, " ")
-        gpu.set(3, 18, "Изъято предметов: " .. tostring(realExtracted))
-      
-        os.sleep(1.5)
-      
+        
         local value = realExtracted * sellConfirmItem.price
-      
+
         playerBalance = playerBalance + value
         playerTransactions = playerTransactions + 1
-      
-        gpu.fill(3, 20, 70, 1, " ")
-      
+
         if realExtracted > 0 then
-          drawCenteredText(20, "Успешно! +" .. string.format("%.2f", value) .. " Эмов", 0x00ff88)
+          drawCenteredText(18, "Успешно! +" .. string.format("%.2f", value) .. " Эмов", 0x00ff88)
         else
-          drawCenteredText(20, "Ошибка изъятия!", 0xff0000)
+          drawCenteredText(18, "Не удалось изъять предметы!", 0xff0000)
         end
-      
-        os.sleep(2)
-      
+
+        os.sleep(2.5)
+
         currentScreen = "shop_sell"
         drawBuyStatic()
         drawBuyItemsList()
         drawBuyButtons()
-      end
 
     elseif currentScreen == "menu" then
       for name,btn in pairs(menuButtons) do
