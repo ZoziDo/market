@@ -213,10 +213,8 @@ local function scanPlayerInventory(itemName)
 
       local found = false
 
-      -- Специально для Деньги (CustomNPC)
-      if itemName == "Деньги" and (id == "customnpcs:npcMoney" or label:find("Деньги") or displayName:find("Деньги")) then
+      if itemName == "Деньги" and (id == "customnpcs:npcMoney" or label:find("Деньги")) then
         found = true
-      -- Для обычных предметов (Minecraft, IC2, GregTech и т.д.)
       elseif label == itemName or displayName == itemName then
         found = true
       end
@@ -227,8 +225,8 @@ local function scanPlayerInventory(itemName)
         gpu.set(3, line, string.format("Слот %2d: НАЙДЕНО! %s x%d", slot, itemName, size))
       else
         gpu.setForeground(0x777777)
-        local showName = displayName ~= "" and displayName:sub(1,32) or label:sub(1,32)
-        gpu.set(3, line, string.format("Слот %2d: %s", slot, showName))
+        local show = (displayName ~= "" and displayName) or (label ~= "" and label) or id
+        gpu.set(3, line, string.format("Слот %2d: %s", slot, show:sub(1,35)))
       end
 
       line = line + 1
@@ -252,12 +250,12 @@ local function extractToME(itemName, amount)
     if extracted >= amount then break end
     local stack = pim.getStackInSlot(slot)
     if stack then
-      local id          = stack.id or ""
-      local label       = stack.label or ""
+      local id = stack.id or ""
+      local label = stack.label or ""
       local displayName = stack.displayName or ""
 
       local match = false
-      if itemName == "Деньги" and (id == "customnpcs:npcMoney" or label:find("Деньги") or displayName:find("Деньги")) then
+      if itemName == "Деньги" and (id == "customnpcs:npcMoney" or label:find("Деньги")) then
         match = true
       elseif label == itemName or displayName == itemName then
         match = true
