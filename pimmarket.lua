@@ -188,20 +188,36 @@ end
 
 -- ==================== РАБОТА С ИНВЕНТАРЁМ И ME ====================
 local function scanPlayerInventory(itemName)
-  if not pim then return 0 end
+  if not pim then 
+    print("PIM не найден!")
+    return 0 
+  end
+  
   local count = 0
-
+  print("=== Сканирование инвентаря для: " .. itemName .. " ===") -- отладка
+  
   for slot = 1, 44 do
     local stack = pim.getStackInSlot(slot)
     if stack then
-      -- Несколько способов проверки имени
-      if stack.label == itemName or 
-         stack.name == itemName or 
-         (stack.displayName and stack.displayName == itemName) then
+      local label = stack.label or ""
+      local displayName = stack.displayName or ""
+      local internalName = stack.name or ""
+      
+      -- Отладка — что именно лежит в слоте
+      if label == itemName or displayName == itemName or internalName == itemName then
         count = count + (stack.size or 0)
+        print(string.format("Слот %d: НАЙДЕНО! %s x%d", slot, label, stack.size))
+      else
+        -- Показываем, что реально лежит (для отладки)
+        if slot <= 9 or slot % 5 == 0 then -- показываем не все слоты, чтобы не спамило
+          print(string.format("Слот %d: label='%s' | display='%s' | name='%s'", 
+                slot, label, displayName, internalName))
+        end
       end
     end
   end
+  
+  print("Итого найдено: " .. count)
   return count
 end
 
@@ -213,9 +229,11 @@ local function extractToME(itemName, amount)
     if extracted >= amount then break end
     local stack = pim.getStackInSlot(slot)
     if stack then
-      if stack.label == itemName or stack.name == itemName or 
-         (stack.displayName and stack.displayName == itemName) then
-        
+      local label = stack.label or ""
+      local displayName = stack.displayName or ""
+      local internalName = stack.name or ""
+
+      if label == itemName or displayName == itemName or internalName == itemName then
         local toTake = math.min(stack.size or 0, amount - extracted)
         if toTake > 0 then
           local success = pim.extractItem(slot, toTake)
