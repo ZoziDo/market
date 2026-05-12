@@ -31,13 +31,13 @@ end
 
 local function debugPlayerInventory()
     if not selector then return end
-    local slots = selector.getSlots() or {}
     print("=== СОДЕРЖИМОЕ ИНВЕНТАРЯ ===")
-    for _, slot in ipairs(slots) do
-        local stack = selector.getSlot(slot)
-        if stack and stack.qty and stack.qty > 0 then
-            print(string.format("Слот %2d | %3d шт. | %s | %s", 
-                slot, stack.qty, stack.label or "???", stack.name or "нет имени"))
+    for slot = 1, 36 do
+        local ok, stack = pcall(selector.getSlot, slot)
+        if ok and stack and stack.qty and stack.qty > 0 then
+            local rawName = stack.label or stack.name or "???"
+            local cleanName = rawName:gsub("§.", "")
+            print(string.format("Слот %2d | %3d шт. | %s", slot, stack.qty, cleanName))
         end
     end
 end
@@ -217,15 +217,16 @@ end
 local function scanPlayerInventory(targetName)
     if not selector then return 0 end
     local total = 0
-    print("Сканируем: '" .. targetName .. "'")
+    print("Сканируем: '" .. targetName .. "' (слоты 1-36)")
 
-    -- Получаем все слоты, занятые предметами
-    local slots = selector.getSlots() or {}
-    for _, slot in ipairs(slots) do
-        local stack = selector.getSlot(slot)
-        if stack and stack.qty and stack.qty > 0 then
-            local stackName = stack.label or stack.name or ""
-            if stackName == targetName or string.find(stackName, targetName, 1, true) then
+    -- Перебираем слоты с 1 по 36 (стандартный инвентарь)
+    for slot = 1, 36 do
+        local ok, stack = pcall(selector.getSlot, slot)  -- защита от ошибок
+        if ok and stack and stack.qty and stack.qty > 0 then
+            -- Удаляем цветовые коды (§) из названия предмета для сравнения
+            local rawName = stack.label or stack.name or ""
+            local cleanName = rawName:gsub("§.", "")   -- убираем §a, §6 и т.д.
+            if cleanName == targetName or string.find(cleanName, targetName, 1, true) then
                 total = total + stack.qty
             end
         end
@@ -253,23 +254,23 @@ local function extractToME(targetName, amount)
     local me = component.isAvailable("me_interface") and component.me_interface or nil
     local extracted = 0
 
-    local slots = selector.getSlots() or {}
-    for _, slot in ipairs(slots) do
+    for slot = 1, 36 do
         if extracted >= amount then break end
-        local stack = selector.getSlot(slot)
-        if not stack or not stack.qty or stack.qty <= 0 then
+        local ok, stack = pcall(selector.getSlot, slot)
+        if not ok or not stack or not stack.qty or stack.qty <= 0 then
             goto continue
         end
 
-        local stackName = stack.label or stack.name or ""
-        if stackName == targetName or string.find(stackName, targetName, 1, true) then
+        local rawName = stack.label or stack.name or ""
+        local cleanName = rawName:gsub("§.", "")
+        if cleanName == targetName or string.find(cleanName, targetName, 1, true) then
             local toTake = math.min(stack.qty, amount - extracted)
             if toTake > 0 then
                 local success = pim.extractItem(slot, toTake)
                 if success then
                     extracted = extracted + toTake
                     if me then
-                        local itemTable = pim.getStackInSlot(slot)
+                        local itemTable = pim.getStackInSlot(slot)  -- может быть nil после извлечения всего стака
                         if itemTable then
                             pcall(function() me.importItem(itemTable, 0) end)
                         end
