@@ -8,13 +8,13 @@ local keyboard = require("keyboard")
 -- Загружаем внешний файл с предметами
 local shopData = dofile("/home/shop_items.lua")
 local sellItems = shopData.sellItems
--- Безопасная загрузка vanillaItems (если нет – пустая таблица)
 local vanillaItems = shopData.vanillaItems or {}
 
 local modem = component.modem
 local pimList = {}
 for addr in component.list("pim") do table.insert(pimList, addr) end
-local pim = component.proxy(pimList[1])
+local pimAddr = pimList[1]
+local PUSH_DIRECTION = "down"   -- направление в ME-интерфейс
 
 -- ==================== ITEM SELECTOR ====================
 local selector = nil
@@ -30,10 +30,10 @@ if not selector then
 end
 
 local function debugPlayerInventory()
-    if not pim then return end
+    if not pimAddr then return end
     print("=== СОДЕРЖИМОЕ ИНВЕНТАРЯ (PIM) ===")
     for slot = 1, 36 do
-        local stack = pim.getStackInSlot(slot)
+        local stack = component.invoke(pimAddr, "getStackInSlot", slot)
         if stack then
             local qty = stack.size or stack.qty or 0
             if qty > 0 then
@@ -61,18 +61,16 @@ local alreadyAuthorized = false
 local helpPage = 1
 local HELP_PAGES = 3
 
--- Переменные магазина (общие для покупки и пополнения)
+-- Переменные магазина
 local shopItems = {}
 local shopSearch = ""
 local searchActive = false
 local searchInput = ""
 local showOnlyAvailable = false
-local currentShopMode = "buy"   -- "buy" или "sell"
+local currentShopMode = "buy"
 
--- Фильтр для раздела пополнения ("all" / "vanilla")
 local buyFilterMode = "all"
 
--- Скролл и выделение
 local listScroll = 1
 local visibleRows = 12
 local selectedIndex = 0
@@ -80,15 +78,12 @@ local hoveredIndex = 0
 local filteredItems = {}
 local selectedItem = nil
 
--- Горизонтальный скролл для длинных названий
 local horizontalScroll = 1
 local maxItemWidth = 0
 
--- Переменные экрана покупки
 local purchaseQuantity = 1
 local purchaseItem = nil
 
--- ========== ПЕРЕМЕННЫЕ ДЛЯ ПРОДАЖИ ==========
 local sellConfirmItem = nil
 local foundAmount = 0
 
@@ -96,7 +91,7 @@ local foundAmount = 0
 gpu.setResolution(80, 25)
 gpu.setBackground(0x000000)
 
--- ========== КРУПНЫЙ ШРИФТ NEXAR SHOP ==========
+-- ========== КРУПНЫЙ ШРИФТ ==========
 local function drawBigTitle()
   gpu.setForeground(0xff7300)
   local darkonLines = {
@@ -148,7 +143,6 @@ local function drawBottomPanel()
   gpu.setForeground(0xcc3342) gpu.set(69,23,"[Отзывы]")
 end
 
--- Гибкая кнопка
 local function drawFlexButton(btn)
   gpu.setBackground(btn.bg)
   gpu.fill(btn.x, btn.y, btn.xs, btn.ys, " ")
@@ -159,7 +153,6 @@ local function drawFlexButton(btn)
   gpu.setBackground(0x000000)
 end
 
--- Кнопка "Назад" главная
 local backButton = {
   text = "Назад",
   x = nil, y = 24,
@@ -175,12 +168,10 @@ local function isButtonClicked(btn, x, y)
          x >= btn.x and x < btn.x + btn.xs
 end
 
--- Кнопки панели (текст и цвет динамические)
 local searchButton = {text = "Поиск...", x=3, y=21, xs=20, ys=1, bg=0x333333, fg=0x00aaff}
 local filterButton  = {text = "В наличии", x=33, y=21, xs=14, ys=1, bg=0x333333, fg=0x00aaff}
 local nextButton    = {text = "Далее", x=70, y=21, xs=7, ys=1, bg=0x333333, fg=0x888888}
 
--- Кнопки меню "Магазин"
 local shopMenuButtons = {
   buy = {x=31,xs=20,y=7,ys=3,text="Покупка",tx=6,ty=1,bg=0x444444,fg=0x3375cc},
   sell = {x=31,xs=20,y=11,ys=3,text="Пополнение",tx=5,ty=1,bg=0x444444,fg=0x3375cc},
@@ -209,8 +200,8 @@ local function loadSellItems()
   shopItems = {}
   for _, item in ipairs(sellItems) do
     table.insert(shopItems, {
-      displayName = item.displayName or item.name,   -- русское название
-      internalName = item.internalName or item.name, -- английский ID
+      displayName = item.displayName or item.name,
+      internalName = item.internalName or item.name,
       qty = item.qty,
       price = item.price
     })
@@ -219,17 +210,16 @@ end
 
 -- ==================== СКАНИРОВАНИЕ ЧЕРЕЗ PIM ====================
 local function scanPlayerInventory(targetName)
-    if not pim then return 0 end
+    if not pimAddr then return 0 end
     local total = 0
     print("Сканируем: '" .. targetName .. "' (PIM, слоты 1-36)")
 
     for slot = 1, 36 do
-        local stack = pim.getStackInSlot(slot)
+        local stack = component.invoke(pimAddr, "getStackInSlot", slot)
         if stack then
             local qty = stack.size or stack.qty or 0
             if qty > 0 then
                 local rawName = stack.label or stack.name or ""
-                -- Убираем цветовые коды (§), которые могут быть в названиях
                 local cleanName = rawName:gsub("§.", "")
                 if cleanName == targetName or string.find(cleanName, targetName, 1, true) then
                     total = total + qty
@@ -240,7 +230,6 @@ local function scanPlayerInventory(targetName)
 
     print("Найдено: " .. total)
 
-    -- Отправляем отчёт на сервер
     if currentToken then
         modem.send(serverAddress, 0xffef, serialization.serialize({
             op = "scan_report",
@@ -254,15 +243,14 @@ local function scanPlayerInventory(targetName)
     return total
 end
 
--- ==================== ИЗЪЯТИЕ ЧЕРЕЗ PIM ====================
+-- ==================== ИЗЪЯТИЕ ЧЕРЕЗ PIM (pushItem) ====================
 local function extractToME(targetName, amount)
-    if not pim or amount <= 0 then return 0 end
-    local me = component.isAvailable("me_interface") and component.me_interface or nil
+    if not pimAddr or amount <= 0 then return 0 end
     local extracted = 0
 
     for slot = 1, 36 do
         if extracted >= amount then break end
-        local stack = pim.getStackInSlot(slot)
+        local stack = component.invoke(pimAddr, "getStackInSlot", slot)
         if stack then
             local qty = stack.size or stack.qty or 0
             if qty > 0 then
@@ -271,19 +259,11 @@ local function extractToME(targetName, amount)
                 if cleanName == targetName or string.find(cleanName, targetName, 1, true) then
                     local toTake = math.min(qty, amount - extracted)
                     if toTake > 0 then
-                        local success = pim.extractItem(slot, toTake)
-                        if success then
-                            extracted = extracted + toTake
-                            if me then
-                                -- Небольшая пауза, чтобы слот обновился
-                                os.sleep(0.05)
-                                local item = pim.getStackInSlot(slot) or stack
-                                if item then
-                                    pcall(function() me.importItem(item, 0) end)
-                                end
-                            end
+                        local moved = component.invoke(pimAddr, "pushItem", PUSH_DIRECTION, slot, toTake)
+                        if type(moved) == "number" and moved > 0 then
+                            extracted = extracted + moved
                         else
-                            print("Не удалось extractItem из слота " .. slot)
+                            print("Не удалось переместить из слота " .. slot)
                         end
                     end
                 end
@@ -484,10 +464,10 @@ local function drawBuyButtons()
   if currentShopMode == "sell" then
     if buyFilterMode == "all" then
       filterButton.text = "Все"
-      filterButton.fg = 0x00ff00   -- зелёный
+      filterButton.fg = 0x00ff00
     else
       filterButton.text = "Vanilla"
-      filterButton.fg = 0xffaa00   -- оранжевый
+      filterButton.fg = 0xffaa00
     end
   else
     if showOnlyAvailable then
@@ -507,7 +487,6 @@ local function drawBuyButtons()
 
   drawFlexButton(searchButton)
 
-  -- Ручное центрирование для filterButton
   local filterBg = filterButton.bg
   local filterX = filterButton.x
   local filterY = filterButton.y
@@ -762,7 +741,7 @@ local function goToSell()
   searchActive = false
   searchInput = ""
   showOnlyAvailable = false
-  buyFilterMode = "all"   -- начинаем с "Все"
+  buyFilterMode = "all"
   loadSellItems()
   drawBuyStatic()
   drawBuyItemsList()
@@ -777,68 +756,11 @@ local function drawShopMenu()
   drawFlexButton(backButton)
 end
 
-local function drawHelpScreen()
-  clear()
-  if helpPage == 1 then
-    drawCenteredText(2, "Информация об магазине", 0xff7300)
-    drawCenteredText(4, "Добро пожаловать в магазин/обменник warg'а Legend", 0xffffff)
-    drawCenteredText(5, "Обязательно к прочтению", 0xff0000)
-    gpu.setForeground(0xff7300)
-    gpu.set(4, 7, "1. Что такое $ – Это торговая валюта")
-    gpu.setForeground(0xffffff)
-    gpu.set(4, 8, "за ресурсы которыми можно пополнить данный магазин")
-    gpu.setForeground(0xff7300)
-    gpu.set(4, 9, "Что такое ♦ – Это эмеральды")
-    gpu.setForeground(0xffffff)
-    gpu.set(4, 10, 'которыми можно пополнить магазин в виде физических "денег"')
-    gpu.setForeground(0xff7300)
-    gpu.set(4, 12, '2. Как пополнять свой баланс для покупок - в разделе')
-    gpu.setForeground(0x00aaff)
-    gpu.set(4, 13, '"Пополнить"')
-    gpu.setForeground(0xffffff)
-    gpu.set(4, 14, "Вы можете пополнить свой баланс")
-    gpu.setForeground(0x00ff88)
-    gpu.set(4, 15, "$ – Ресурсами скупаемыми магазином")
-    gpu.setForeground(0xffffff)
-    gpu.set(4, 16, "и так-же ♦ – Физическими деньгами")
-  elseif helpPage == 2 then
-    drawCenteredText(2, "Информация об магазине", 0xff7300)
-    gpu.setForeground(0xff7300)
-    gpu.set(4, 5, "3. Магазин имеет 3 вида оплаты")
-    gpu.setForeground(0x00ff88)
-    gpu.set(4, 6, "$ - Только ресурсы")
-    gpu.setForeground(0x00aaff)
-    gpu.set(4, 7, "♦ - Только эмеральны")
-    gpu.setForeground(0xffaa00)
-    gpu.set(4, 8, "$ и ♦ - Смежная оплата за обе валюты")
-    gpu.setForeground(0xff7300)
-    gpu.set(4, 10, "4. Как совершить покупку - в разделе")
-    gpu.setForeground(0xffffff)
-    gpu.set(4, 11, '"Покупка" Выбираете интересующий товар,')
-    gpu.set(4, 12, "указываете кол-во и нажимаете на 'купить'")
-    gpu.set(4, 13, "товар будет выдан автоматически. Таким же")
-    gpu.set(4, 14, "образом совершается покупка Наборов и")
-    gpu.set(4, 15, 'Квестов в разделе "Наборы/Квесты"')
-  elseif helpPage == 3 then
-    drawCenteredText(2, "Информация об магазине", 0xff7300)
-    gpu.setForeground(0xff0000)
-    gpu.set(4, 5, "5. Правила:")
-    gpu.setForeground(0xffffff)
-    gpu.set(4, 6, "Запрещено использовать уязвимости,")
-    gpu.set(4, 7, "баги и любые возможные способы")
-    gpu.set(4, 8, "обогащения не задуманные создателями")
-    gpu.set(4, 9, "данного магазина кроме купле/продажи,")
-    gpu.set(4, 10, "о любых сбоях в работе, багах или")
-    gpu.set(4, 11, "возможных улучшениях рекомендуется")
-    gpu.set(4, 12, "сообщить или предложить Владельцам в")
-    gpu.setForeground(0x00aaff)
-    gpu.set(4, 13, "Telegram: f0rb4ik")
-    drawCenteredText(15, "Приятных покупок", 0x00ff88)
-  end
-  local pageStr = "⟵ " .. helpPage .. " ⟶"
-  drawCenteredText(20, pageStr, 0x00CCFF)
-  drawFlexButton(backButton)
-end
+-- Загружаем внешнюю функцию справки
+local drawHelpScreen = dofile("/home/help_screen.lua")(helpPage, gpu, unicode, drawCenteredText, drawFlexButton, backButton)
+-- Обратите внимание: helpPage здесь передаётся как копия, функция будет использовать переданное значение, 
+-- но мы будем менять глобальную helpPage и перерисовывать экран. Это нормально, т.к. drawHelpScreen вызывается 
+-- каждый раз при отрисовке и получает актуальную helpPage.
 
 local function drawWelcomeScreen()
   gpu.setBackground(0x202020) gpu.fill(1,1,80,25," ")
@@ -972,7 +894,7 @@ local function goToUtility() currentScreen="utility" clear() drawCenteredText(8,
 local function goToHelp()
   currentScreen = "help"
   helpPage = 1
-  drawHelpScreen()
+  drawHelpScreen(helpPage, gpu, unicode, drawCenteredText, drawFlexButton, backButton)  -- вызываем с актуальным helpPage
 end
 local function goBackToMenu() currentScreen="menu" drawMainMenu() end
 
@@ -1003,7 +925,6 @@ while true do
     local x, y = ev[3], ev[4]
 
     if currentScreen == "shop_buy" or currentScreen == "shop_sell" then
-      -- Клик по списку
       if y >= 6 and y <= 17 and x >= 2 and x <= 77 then
         local relativeRow = y - 5
         local clickedIndex = listScroll + relativeRow - 1
@@ -1016,7 +937,6 @@ while true do
         end
       end
 
-      -- Клик по скроллбару
       if x >= 78 and y >= 6 and y <= 17 then
         local total = #filteredItems
         if total > visibleRows then
@@ -1026,7 +946,6 @@ while true do
         end
       end
 
-      -- Кнопки
       if isButtonClicked(backButton, x, y) then
         currentScreen = "shop"
         selectedIndex = 0
@@ -1039,7 +958,6 @@ while true do
         drawBuyButtons()
       elseif isButtonClicked(filterButton, x, y) then
         if currentShopMode == "sell" then
-          -- Переключаем фильтр "Все" / "Vanilla" для пополнения
           if buyFilterMode == "all" then
             buyFilterMode = "vanilla"
           else
@@ -1052,7 +970,6 @@ while true do
           drawBuyItemsList()
           drawBuyButtons()
         else
-          -- Режим покупки: фильтр "В наличии"
           showOnlyAvailable = not showOnlyAvailable
           listScroll = 1
           selectedIndex = 0
@@ -1066,7 +983,7 @@ while true do
           if currentShopMode == "buy" then
             goToPurchase(selectedItem)
           else
-            goToSellConfirm(selectedItem)   -- ← переход в сканирование для продажи
+            goToSellConfirm(selectedItem)
           end
         end
       elseif searchActive then
@@ -1081,7 +998,6 @@ while true do
       end
 
     elseif currentScreen == "purchase" then
-      -- Кнопка Назад
       if (y >= 23 and y <= 23) and (x >= 18 and x <= 28) then
         if currentShopMode == "buy" then
           currentScreen = "shop_buy"
@@ -1093,7 +1009,6 @@ while true do
         drawBuyButtons()
       end
 
-      -- Кнопка Купить
       if (y >= 23 and y <= 23) and (x >= 50 and x <= 60) then
         drawCenteredText(20, "Покупка выполняется...", 0x00ff88)
         os.sleep(1)
@@ -1110,7 +1025,6 @@ while true do
         drawBuyButtons()
       end
 
-      -- Обработка цифровой клавиатуры
       local startX = 34
       local startY = 11
       local btnW = 3
@@ -1141,14 +1055,14 @@ while true do
         drawBuyStatic()
         drawBuyItemsList()
         drawBuyButtons()
-      elseif y == 8 and x >= 28 and x <= 48 then -- 1 слот
+      elseif y == 8 and x >= 28 and x <= 48 then
         drawCenteredText(15, "Сканирование...", 0xffaa00)
         os.sleep(0.4)
         foundAmount = scanPlayerInventory(sellConfirmItem.internalName)
         if foundAmount > 0 then drawSellFinalConfirm() else
           drawCenteredText(15, "Предмет не найден!", 0xff0000); os.sleep(1.2); drawSellScanScreen()
         end
-      elseif y == 10 and x >= 28 and x <= 48 then -- Весь инвентарь
+      elseif y == 10 and x >= 28 and x <= 48 then
         drawCenteredText(15, "Сканирование инвентаря...", 0xffaa00)
         os.sleep(0.6)
         debugPlayerInventory()
@@ -1162,7 +1076,7 @@ while true do
       if isButtonClicked(backButton, x, y) or (y >= 12 and y <= 13 and x >= 45 and x <= 60) then
         currentScreen = "sell_scan"
         drawSellScanScreen()
-      elseif y >= 12 and y <= 13 and x >= 18 and x <= 38 then -- ПОДТВЕРДИТЬ
+      elseif y >= 12 and y <= 13 and x >= 18 and x <= 38 then
         performSell()
       end
 
@@ -1184,10 +1098,10 @@ while true do
       if y == 20 then
         if x >= pageX and x < pageX + 4 and helpPage > 1 then
           helpPage = helpPage - 1
-          drawHelpScreen()
+          drawHelpScreen(helpPage, gpu, unicode, drawCenteredText, drawFlexButton, backButton)
         elseif x >= pageX + unicode.len(pageStr) - 4 and x < pageX + unicode.len(pageStr) and helpPage < HELP_PAGES then
           helpPage = helpPage + 1
-          drawHelpScreen()
+          drawHelpScreen(helpPage, gpu, unicode, drawCenteredText, drawFlexButton, backButton)
         end
       end
       if isButtonClicked(backButton, x, y) then
@@ -1320,7 +1234,6 @@ while true do
           playerTransactions = msg.transactions or 0
           playerRegDate = msg.regDate or ""
           alreadyAuthorized = true
-          -- Отправляем статус селектора после успешной авторизации
           if selector then
             modem.send(serverAddress, 0xffef, serialization.serialize({
               op = "selector_status",
