@@ -344,17 +344,19 @@ local function loadSellItems()
 end
 
 -- ==================== СКАНИРОВАНИЕ И ИЗЪЯТИЕ ====================
-local function scanPlayerInventory(targetName)
+local function scanPlayerInventory(targetName, targetDamage)
     if not pimAddr then return 0 end
+    targetDamage = targetDamage or 0
     local total = 0
     for slot = 1, 36 do
         local stack = component.invoke(pimAddr, "getStackInSlot", slot)
         if stack then
             local qty = stack.size or stack.qty or 0
             if qty > 0 then
-                local rawName = stack.label or stack.name or ""
+                local rawName = stack.name or stack.label or ""
                 local cleanName = rawName:gsub("§.", "")
-                if cleanName == targetName or string.find(cleanName, targetName, 1, true) then
+                local damage = stack.damage or 0
+                if (cleanName == targetName or cleanName:find(targetName, 1, true) or targetName:find(cleanName, 1, true)) and damage == targetDamage then
                     total = total + qty
                 end
             end
@@ -372,8 +374,9 @@ local function scanPlayerInventory(targetName)
     return total
 end
 
-local function extractToME(targetName, amount)
+local function extractToME(targetName, amount, targetDamage)
     if not pimAddr or amount <= 0 then return 0 end
+    targetDamage = targetDamage or 0
     local extracted = 0
     for slot = 1, 36 do
         if extracted >= amount then break end
@@ -381,9 +384,11 @@ local function extractToME(targetName, amount)
         if stack then
             local qty = stack.size or stack.qty or 0
             if qty > 0 then
-                local rawName = stack.label or stack.name or ""
+                local rawName = stack.name or stack.label or ""
                 local cleanName = rawName:gsub("§.", "")
+                local damage = stack.damage or 0
                 local match = (cleanName == targetName) or (cleanName == "minecraft:" .. targetName) or (cleanName:find(targetName, 1, true) and cleanName:match(targetName))
+                match = match and (damage == targetDamage)
                 if match then
                     local toTake = math.min(qty, amount - extracted)
                     if toTake > 0 then
@@ -828,7 +833,7 @@ local function performSell()
   drawCenteredText(17, "Выполняется пополнение...", 0x00ff88)
   os.sleep(0.6)
 
-  local realExtracted = extractToME(sellConfirmItem.internalName, foundAmount)
+  local realExtracted = extractToME(sellConfirmItem.internalName, foundAmount, sellConfirmItem.damage or 0)
   if realExtracted == 0 then
     drawCenteredText(17, "Не удалось изъять предметы! Проверьте инвентарь.", 0xff0000)
     os.sleep(2.5)
@@ -1507,26 +1512,26 @@ while true do
       elseif y == 13 and x >= 30 and x <= 50 then
         drawCenteredText(17, "Сканирование...", 0xffaa00)
         os.sleep(0.4)
-        foundAmount = scanPlayerInventory(sellConfirmItem.internalName)
+        foundAmount = scanPlayerInventory(sellConfirmItem.internalName, sellConfirmItem.damage or 0)
         if foundAmount > 0 then
-          showSellPopup = true
-          drawSellScanScreen()
+            showSellPopup = true
+            drawSellScanScreen()
         else
-          drawCenteredText(17, "Предмет не найден!", 0xff0000)
-          os.sleep(1.2)
-          drawSellScanScreen()
+            drawCenteredText(17, "Предмет не найден!", 0xff0000)
+            os.sleep(1.2)
+            drawSellScanScreen()
         end
       elseif y == 15 and x >= 30 and x <= 50 then
         drawCenteredText(17, "Сканирование инвентаря...", 0xffaa00)
         os.sleep(0.6)
-        foundAmount = scanPlayerInventory(sellConfirmItem.internalName)
+        foundAmount = scanPlayerInventory(sellConfirmItem.internalName, sellConfirmItem.damage or 0)
         if foundAmount > 0 then
-          showSellPopup = true
-          drawSellScanScreen()
+            showSellPopup = true
+            drawSellScanScreen()
         else
-          drawCenteredText(17, "Предмет не найден!", 0xff0000)
-          os.sleep(1.5)
-          drawSellScanScreen()
+            drawCenteredText(17, "Предмет не найден!", 0xff0000)
+            os.sleep(1.5)
+            drawSellScanScreen()
         end
       end
 
