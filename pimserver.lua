@@ -2,7 +2,7 @@ local component = require("component")
 local event = require("event")
 local serialization = require("serialization")
 local filesystem = require("filesystem")
-local gpu = component.gpu   -- получаем GPU
+local gpu = component.gpu
 
 local modem = component.modem
 modem.open(0xffef)
@@ -89,7 +89,6 @@ local SESSION_TIMEOUT = 1800
 local marketConnected = false
 local logBuffer = {}
 
--- Динамические размеры экрана
 local screenW, screenH = 80, 25
 local colX = {5, 30, 55}
 local colWidth = 25
@@ -101,52 +100,64 @@ local function updateScreenSize()
     if screenW < 40 then screenW = 40 end
     if screenH < 15 then screenH = 15 end
 
-    -- Равномерное распределение ширины на 3 столбца
     local usable = screenW - 8
-    colWidth = math.floor(usable / 3)
+    colWidth = math.max(15, math.floor(usable / 3))
     colX = {
         4,
         4 + colWidth,
         4 + colWidth * 2
     }
-    -- Область логов: с 18 строки до низа
     logStartY = math.min(18, screenH - 5)
     maxLogLines = screenH - logStartY - 3
     if maxLogLines < 3 then maxLogLines = 3 end
 end
 
--- ========== ОТРИСОВКА ИНТЕРФЕЙСА ==========
+local function gotoxy(x, y)
+    io.write("\27[", y, ";", x, "H")
+end
+
+local function fill(x, y, w, h, char)
+    for i = 0, h-1 do
+        gotoxy(x, y+i)
+        io.write(string.rep(char, w))
+    end
+end
+
 function drawInterface()
     io.write(ansi.hide_cursor .. ansi.clear)
     updateScreenSize()
     
     -- Верхняя панель
     setColor(ansi.bg_blue, ansi.white)
+    fill(1, 2, screenW, 1, " ")
+    gotoxy(1, 2)
     local title = " PIM MARKET SERVER – СТАТУС: " .. (marketConnected and "АКТИВЕН" or "ОЖИДАНИЕ MARKET")
-    io.write("\27[2;1H" .. string.rep(" ", screenW))
-    io.write("\27[2;1H" .. title .. string.rep(" ", screenW - #title))
+    io.write(title .. string.rep(" ", screenW - #title))
     resetColor()
     
     -- Часы и статистика
     setColor(ansi.cyan)
-    io.write("\27[3;1HВремя: " .. os.date("%H:%M:%S"))
+    gotoxy(1, 3)
+    io.write("Время: " .. os.date("%H:%M:%S"))
     local activeCount = 0
     for _, v in pairs(sessions) do
         if type(v) == "table" and v.token then activeCount = activeCount + 1 end
     end
-    io.write(string.format("\27[3;%dHАктивных сессий: %d", screenW - 25, activeCount))
+    gotoxy(screenW - 25, 3)
+    io.write("Активных сессий: " .. activeCount)
     resetColor()
     
     -- Разделитель
     setColor(ansi.white)
-    io.write("\27[4;1H" .. string.rep("─", screenW))
+    fill(1, 4, screenW, 1, "─")
     resetColor()
     
     -- Заголовки столбцов
     local titles = {"👥 ИГРОКИ", "📦 ME СИСТЕМА", "🔒 БЕЗОПАСНОСТЬ"}
     setColor(ansi.bold, ansi.yellow)
     for i=1,3 do
-        io.write(string.format("\27[5;%dH%-*s", colX[i], colWidth, titles[i]))
+        gotoxy(colX[i], 5)
+        io.write(string.format("%-"..colWidth.."s", titles[i]))
     end
     resetColor()
     
@@ -160,35 +171,41 @@ function drawInterface()
     end
     local rowsAvailable = logStartY - 7
     for i=1, math.min(rowsAvailable, #playerList) do
-        io.write(string.format("\27[%d;%dH%s", 5+i, colX[1], playerList[i]))
+        gotoxy(colX[1], 5+i)
+        io.write(string.format("%-"..colWidth.."s", playerList[i]))
     end
     resetColor()
     
     -- 2) ME система (заглушка)
     setColor(ansi.cyan)
-    io.write(string.format("\27[6;%dHДанные ME не доступны", colX[2]))
-    io.write(string.format("\27[7;%dH(требуется компонент)", colX[2]))
+    gotoxy(colX[2], 6)
+    io.write("Данные ME не доступны")
+    gotoxy(colX[2], 7)
+    io.write("(требуется компонент)")
     resetColor()
     
     -- 3) Безопасность
     setColor(ansi.magenta)
-    io.write(string.format("\27[6;%dHЛимит сессии: %d сек", colX[3], SESSION_TIMEOUT))
+    gotoxy(colX[3], 6)
+    io.write("Лимит сессии: " .. SESSION_TIMEOUT .. " сек")
     local playersCount = 0
     for _ in pairs(players) do playersCount = playersCount + 1 end
-    io.write(string.format("\27[7;%dHИгроков в БД: %d", colX[3], playersCount))
+    gotoxy(colX[3], 7)
+    io.write("Игроков в БД: " .. playersCount)
     resetColor()
     
     -- Область логов
     setColor(ansi.white)
-    io.write(string.format("\27[%d;1H" .. string.rep("─", screenW), logStartY-1))
+    fill(1, logStartY-1, screenW, 1, "─")
     resetColor()
     for i=1, maxLogLines do
         local entry = logBuffer[#logBuffer - maxLogLines + i]
         if entry then
             setColor(entry.color)
+            gotoxy(1, logStartY + i - 1)
             local line = entry.text
             if #line > screenW - 1 then line = line:sub(1, screenW-1) end
-            io.write(string.format("\27[%d;1H%-*s", logStartY + i - 1, screenW, line))
+            io.write(string.format("%-"..screenW.."s", line))
             resetColor()
         end
     end
@@ -209,12 +226,11 @@ local function log(level, msg)
     addLog("[" .. os.date("%H:%M:%S") .. "] [" .. level .. "] " .. msg, color)
 end
 
--- Обработчик изменения размера окна (если есть)
-pcall(function() 
-    event.listen("term_resize", function() drawInterface() end) 
+-- Обработчик изменения размера окна
+pcall(function()
+    event.listen("term_resize", function() drawInterface() end)
 end)
 
--- Таймер обновления (каждую секунду)
 event.timer(1, function() drawInterface() end, math.huge)
 
 -- ========== БАЗОВЫЕ ФУНКЦИИ ==========
@@ -239,7 +255,7 @@ end
 log("INFO", "Сервер запущен. Ожидание терминалов...")
 drawInterface()
 
--- ========== ОСНОВНОЙ ЦИКЛ (обработка сообщений) ==========
+-- ========== ОСНОВНОЙ ЦИКЛ ==========
 while true do
     local ev = {event.pull(0.5)}
     local etype = ev[1]
