@@ -823,10 +823,11 @@ local function performSell()
 end
 
 -- ========== ПОКУПКА ==========
+-- ========== ПОКУПКА (с поддержкой количества > 64) ==========
 local function performBuy()
   -- Проверка согласия
   if not playerAgreed then
-    drawCenteredText(20, "Сначала примите пользовательское соглашение (Помощь)", 0xff0000)
+    drawCenteredText(20, "Сначала примите пользовательское соглашение", 0xff0000)
     os.sleep(2)
     currentScreen = "menu"
     drawMainMenu()
@@ -890,8 +891,30 @@ local function performBuy()
   os.sleep(0.4)
 
   local fingerprint = { id = item.internalName, raw_name = item.displayName }
-  local ok, err = pcall(function() me.exportItem(fingerprint, PULL_DIRECTION, qty) end)
-  local extracted = ok and qty or 0
+  
+  -- Максимальный размер стака (обычно 64)
+  local maxStackSize = 64
+  -- Пытаемся получить точное значение из ME (если метод доступен)
+  local ok, detail = pcall(me.getItemDetail, me, item.internalName)
+  if ok and detail and detail.maxSize then
+    maxStackSize = detail.maxSize
+  end
+  
+  local remaining = qty
+  local extracted = 0
+  local lastError = nil
+  
+  while remaining > 0 do
+    local toTake = math.min(remaining, maxStackSize)
+    local okExport, err = pcall(function() me.exportItem(fingerprint, PULL_DIRECTION, toTake) end)
+    if okExport then
+      extracted = extracted + toTake
+      remaining = remaining - toTake
+    else
+      lastError = err
+      break
+    end
+  end
 
   if extracted > 0 then
     if currency == "em" then
@@ -924,7 +947,7 @@ local function performBuy()
       end
     end
   else
-    drawCenteredText(20, "Не удалось выдать предметы! Ошибка: " .. tostring(err), 0xff0000)
+    drawCenteredText(20, "Не удалось выдать предметы! Ошибка: " .. (lastError or "неизвестная"), 0xff0000)
   end
   os.sleep(2.5)
   currentScreen = "shop_buy"
