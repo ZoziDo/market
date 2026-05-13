@@ -795,15 +795,8 @@ local function performBuy()
     return
   end
 
-  -- Извлекаем предметы из МЭ в PIM (вверх)
-  local extracted = 0
+    -- Извлечение из ME в PIM
   local extracted = me.extract({name = item.internalName}, qty, PULL_DIRECTION) or 0
-  if success then
-    extracted = qty   -- упрощение: обычно возвращает true/false, точный остаток не узнать
-  else
-    -- попробуем через pushItem? Нет, me.extractItem – стандартный метод AE2
-    -- если не сработает – сканируем после
-  end
 
   if extracted > 0 then
     if currency == "em" then
@@ -812,6 +805,7 @@ local function performBuy()
       resBalance = resBalance - totalCost
     end
     playerTransactions = playerTransactions + 1
+
     if currentToken then
       modem.send(serverAddress, 0xffef, serialization.serialize({
         op = "buy",
@@ -823,6 +817,7 @@ local function performBuy()
         currency = currency
       }))
     end
+
     local currencyName = (currency == "em") and "Эмов" or "Ресов"
     drawCenteredText(20, "Куплено " .. extracted .. " шт. за " .. string.format("%.2f", totalCost) .. " " .. currencyName, 0x00ff88)
   else
