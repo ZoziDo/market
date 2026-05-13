@@ -3,6 +3,8 @@ local event = require("event")
 local serialization = require("serialization")
 local filesystem = require("filesystem")
 local gpu = component.gpu
+local math = require("math")
+local os = require("os")
 
 local modem = component.modem
 modem.open(0xffef)
@@ -34,6 +36,9 @@ end
 local function resetColor()
     io.write(ansi.reset)
 end
+
+-- ========== ПАРОЛЬ ДЛЯ ПОДКЛЮЧЕНИЯ ==========
+local ACCESS_PASSWORD = "secret"   -- измените на свой пароль
 
 -- ========== БАЗА ДАННЫХ ИГРОКОВ ==========
 local DB_PATH = "/home/players.db"
@@ -82,45 +87,34 @@ local function saveGlobalStats()
     file:close()
 end
 
--- ========== РЕАЛЬНОЕ ВРЕМЯ ==========
-local function getRealTime()
-    if component.isAvailable("internet") then
-        local ok, result = pcall(function()
-            local internet = require("internet")
-            local conn = internet.open("just-the-time.appspot.com", 80)
-            conn:write("GET / HTTP/1.1\r\nHost: just-the-time.appspot.com\r\nConnection: close\r\n\r\n")
-            conn:flush()
-            local body = ""
-            while true do
-                local chunk = conn:read(1024)
-                if not chunk then break end
-                body = body .. chunk
-            end
-            conn:close()
-            local match = body:match("(%d+%-%d+%-%d+ %d+:%d+:%d+)")
-            if match then
-                local year, month, day, time = match:match("(%d+)%-(%d+)%-(%d+) (.+)")
-                if year and month and day and time then
-                    return string.format("%s.%s.%s %s", day, month, year, time)
-                end
-            end
-        end)
-        if ok and result then return result end
-    end
-    return os.date("%d.%m.%Y %H:%M:%S")
-end
+-- ========== ХРАНЕНИЕ ЦЕН ПРЕДМЕТОВ (для админ-панели) ==========
+-- Здесь можно хранить цены для предметов, которые будут отправляться клиенту
+-- Пока заглушка
+local itemPrices = {}
 
--- ========== ПЕРЕМЕННЫЕ ОБЩИЕ ==========
+-- ========== ПЕРЕМЕННЫЕ СЕРВЕРА ==========
 local owner = nil
 local sessions = {}
 local SESSION_TIMEOUT = 31536000   -- 1 год
 local marketConnected = false
 local logBuffer = {}
+local shopPaused = false            -- пауза магазина
+local adminMode = false             -- режим администрирования
+local adminPlayerList = {}          -- список игроков для админ-панели
+local adminScroll = 0               -- прокрутка в списке игроков
+local selectedAdminIndex = 1        -- выбранный игрок (индекс в списке)
+local lastDrawTime = 0
 
--- Кеш для ME статистики (обновляется асинхронно, раз в 10 секунд)
+-- Кеш для ME статистики
 local cachedMeTotal = "Загрузка..."
 local cachedMeUnique = "Загрузка..."
 local meStatsTimer = nil
+
+-- График активности (кольцевой буфер)
+local ACTIVITY_SIZE = 60           -- 60 минут
+local activityBuffer = {}
+for i=1, ACTIVITY_SIZE do activityBuffer[i] = 0 end
+local activityIndex = 0
 
 local screenW, screenH = 80, 25
 local colX = {5, 30, 55, 80}
@@ -159,10 +153,37 @@ local function fill(x, y, w, h, char)
     end
 end
 
--- ========== ДАННЫЕ ИЗ ME СИСТЕМЫ (асинхронное обновление) ==========
+-- ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
+local function timeToMidnight()
+    local now = os.date("*t")
+    local secondsLeft = (24 - now.hour - 1) * 3600 + (60 - now.min - 1) * 60 + (60 - now.sec)
+    if secondsLeft < 0 then secondsLeft = 0 end
+    local h = math.floor(secondsLeft / 3600)
+    local m = math.floor((secondsLeft % 3600) / 60)
+    local s = secondsLeft % 60
+    return string.format("%02d:%02d:%02d", h, m, s)
+end
+
+local function addActivity()
+    activityIndex = activityIndex % ACTIVITY_SIZE + 1
+    activityBuffer[activityIndex] = 0
+    -- увеличиваем предыдущую минуту (в реальном приложении нужно привязывать к реальному времени, но для простоты считаем, что вызов раз в минуту)
+end
+
+-- Вызывать при каждой транзакции
+local function recordTransaction()
+    if activityBuffer[activityIndex] then
+        activityBuffer[activityIndex] = activityBuffer[activityIndex] + 1
+    end
+end
+
+-- Таймер для сдвига активности каждую минуту
+event.timer(60, addActivity, math.huge)
+
+-- ========== ДАННЫЕ ИЗ ME СИСТЕМЫ ==========
 local function updateMeStats()
     if not component.isAvailable("me_interface") then
-        cachedMeTotal = "Компонент не найден"
+        cachedMeTotal = "Комп. не найден"
         cachedMeUnique = "Проверь подключение"
         return
     end
@@ -178,22 +199,74 @@ local function updateMeStats()
 
     local totalItems = 0
     local uniqueItems = 0
-
     for _, it in ipairs(items) do
         totalItems = totalItems + (it.size or 0)
         uniqueItems = uniqueItems + 1
     end
-
     cachedMeTotal = tostring(totalItems)
     cachedMeUnique = tostring(uniqueItems)
 end
 
--- Запускаем периодическое обновление кеша (раз в 10 секунд)
 meStatsTimer = event.timer(10, updateMeStats, math.huge)
-updateMeStats() -- сразу заполняем кеш
+updateMeStats()
+
+-- ========== АДМИН-ПАНЕЛЬ: ОБНОВЛЕНИЕ СПИСКА ИГРОКОВ ==========
+local function updateAdminPlayerList()
+    adminPlayerList = {}
+    for name, data in pairs(players) do
+        table.insert(adminPlayerList, {name=name, data=data})
+    end
+    table.sort(adminPlayerList, function(a,b) return a.name < b.name end)
+end
+
+local function drawAdminPanel()
+    -- Очищаем область интерфейса (правая часть или отдельная область)
+    -- Рисуем рамку
+    local w = screenW - 40
+    local h = 16
+    local x = 2
+    local y = 6
+    setColor(ansi.bg_black, ansi.white)
+    fill(x, y, w, h, " ")
+    setColor(ansi.white)
+    gotoxy(x, y) io.write("┌"..string.rep("─", w-2).."┐")
+    for i=1, h-2 do
+        gotoxy(x, y+i) io.write("│"..string.rep(" ", w-2).."│")
+    end
+    gotoxy(x, y+h-1) io.write("└"..string.rep("─", w-2).."┘")
+    gotoxy(x+2, y) io.write("АДМИН-ПАНЕЛЬ (нажмите A для выхода)")
+
+    -- Список игроков
+    local startIdx = adminScroll + 1
+    local endIdx = math.min(#adminPlayerList, adminScroll + h-5)
+    gotoxy(x+2, y+2)
+    setColor(ansi.yellow)
+    io.write("Игроки (↑↓ выбор, ENTER - действия, D - бан, R - сброс статистики, P - пауза)")
+    resetColor()
+    for i=startIdx, endIdx do
+        local ply = adminPlayerList[i]
+        local line = ply.name .. "   Ресы:"..string.format("%.2f", ply.data.resBalance or 0) .. " Эмы:"..string.format("%.2f", ply.data.balance or 0) .. " Транз:"..(ply.data.transactions or 0)
+        if #line > w-4 then line = line:sub(1, w-4) end
+        setColor((i == selectedAdminIndex) and ansi.bg_blue or ansi.white, (i == selectedAdminIndex) and ansi.white or nil)
+        gotoxy(x+2, y+2+i-startIdx+1)
+        io.write(line)
+        resetColor()
+    end
+
+    -- Подсказки
+    gotoxy(x+2, y+h-3)
+    setColor(ansi.cyan)
+    io.write("BAN: D | UNBAN: U | RESET STATS: R | PAUSE: P | EDIT PRICE: E")
+    resetColor()
+end
 
 -- ========== ОТРИСОВКА ИНТЕРФЕЙСА ==========
 function drawInterface()
+    if adminMode then
+        drawAdminPanel()
+        return
+    end
+
     io.write(ansi.hide_cursor .. ansi.clear)
     updateScreenSize()
     
@@ -202,13 +275,14 @@ function drawInterface()
     fill(1, 2, screenW, 1, " ")
     gotoxy(1, 2)
     local title = " PIM MARKET SERVER – СТАТУС: " .. (marketConnected and "АКТИВЕН" or "ОЖИДАНИЕ MARKET")
+    if shopPaused then title = title .. " [ПАУЗА]" end
     io.write(title .. string.rep(" ", screenW - #title))
     resetColor()
     
     -- Часы и статистика
     setColor(ansi.cyan)
     gotoxy(1, 3)
-    io.write("Время: " .. os.date("%H:%M:%S"))
+    io.write("Время: " .. os.date("%H:%M:%S") .. "  До сброса репортов: " .. timeToMidnight())
     local activeCount = 0
     for _, v in pairs(sessions) do
         if type(v) == "table" and v.token then activeCount = activeCount + 1 end
@@ -231,7 +305,7 @@ function drawInterface()
     end
     resetColor()
     
-    -- 1) Игроки (активные сессии)
+    -- 1) Игроки
     setColor(ansi.green)
     local playerList = {}
     for name, s in pairs(sessions) do
@@ -248,7 +322,7 @@ function drawInterface()
     end
     resetColor()
     
-    -- 2) ME система (кешированные данные – быстро)
+    -- 2) ME система
     setColor(ansi.cyan)
     gotoxy(colX[2], 6)
     io.write("Всего предметов: " .. cachedMeTotal)
@@ -264,9 +338,25 @@ function drawInterface()
     for _ in pairs(players) do playersCount = playersCount + 1 end
     gotoxy(colX[3], 7)
     io.write("Игроков в БД: " .. playersCount)
+    -- График активности
+    gotoxy(colX[3], 9)
+    io.write("Активность (последние 60 мин):")
+    local graphWidth = colWidth - 2
+    local maxVal = 1
+    for i=1, ACTIVITY_SIZE do
+        if activityBuffer[i] > maxVal then maxVal = activityBuffer[i] end
+    end
+    for i=1, math.min(ACTIVITY_SIZE, graphWidth) do
+        local val = activityBuffer[(activityIndex - i + ACTIVITY_SIZE) % ACTIVITY_SIZE + 1] or 0
+        local height = math.ceil((val / (maxVal+0.01)) * 3)
+        gotoxy(colX[3]+i-1, 13 - height)
+        setColor(ansi.green)
+        io.write("█")
+        resetColor()
+    end
     resetColor()
     
-    -- 4) Статистика (репорты, покупки, продажи)
+    -- 4) Статистика
     setColor(ansi.yellow)
     gotoxy(colX[4], 6)
     io.write("Репортов: " .. globalStats.totalReports)
@@ -274,6 +364,12 @@ function drawInterface()
     io.write("Покупок: " .. globalStats.totalBuys)
     gotoxy(colX[4], 8)
     io.write("Продаж: " .. globalStats.totalSells)
+    resetColor()
+    
+    -- Подсказки клавиш
+    setColor(ansi.white)
+    gotoxy(1, screenH-1)
+    io.write("P - Пауза магазина | A - Админ-панель")
     resetColor()
     
     -- Область логов
@@ -294,6 +390,7 @@ function drawInterface()
     io.flush()
 end
 
+-- ========== ЛОГИРОВАНИЕ ==========
 function addLog(text, fg)
     table.insert(logBuffer, {text = text, color = fg or ansi.white})
     while #logBuffer > 200 do table.remove(logBuffer, 1) end
@@ -308,13 +405,71 @@ local function log(level, msg)
     addLog("[" .. os.date("%H:%M:%S") .. "] [" .. level .. "] " .. msg, color)
 end
 
--- Обработчик изменения размера окна
-pcall(function()
-    event.listen("term_resize", function() drawInterface() end)
-end)
+-- ========== ОБРАБОТКА СОБЫТИЙ КЛАВИАТУРЫ ==========
+local function handleKeyDown(ch, code)
+    if ch == 112 or ch == 80 then   -- P / p
+        shopPaused = not shopPaused
+        log("INFO", "Магазин " .. (shopPaused and "приостановлен" or "возобновлён"))
+        drawInterface()
+    elseif ch == 97 or ch == 65 then -- A / a
+        if adminMode then
+            adminMode = false
+            drawInterface()
+        else
+            adminMode = true
+            updateAdminPlayerList()
+            selectedAdminIndex = 1
+            adminScroll = 0
+            drawAdminPanel()
+        end
+    elseif adminMode then
+        if ch == 200 then -- стрелка вверх
+            if selectedAdminIndex > 1 then
+                selectedAdminIndex = selectedAdminIndex - 1
+                if selectedAdminIndex <= adminScroll then adminScroll = adminScroll - 1 end
+                drawAdminPanel()
+            end
+        elseif ch == 208 then -- стрелка вниз
+            if selectedAdminIndex < #adminPlayerList then
+                selectedAdminIndex = selectedAdminIndex + 1
+                if selectedAdminIndex > adminScroll + (16-6) then adminScroll = adminScroll + 1 end
+                drawAdminPanel()
+            end
+        elseif ch == 100 then -- D (бан)
+            local ply = adminPlayerList[selectedAdminIndex]
+            if ply then
+                if not ply.data.banned then
+                    ply.data.banned = true
+                    log("INFO", "Игрок " .. ply.name .. " забанен")
+                else
+                    ply.data.banned = false
+                    log("INFO", "Игрок " .. ply.name .. " разбанен")
+                end
+                saveDB()
+                drawAdminPanel()
+            end
+        elseif ch == 114 then -- R (сброс статистики игрока)
+            local ply = adminPlayerList[selectedAdminIndex]
+            if ply then
+                ply.data.transactions = 0
+                ply.data.balance = 0
+                ply.data.resBalance = 0
+                saveDB()
+                log("INFO", "Статистика игрока " .. ply.name .. " сброшена")
+                drawAdminPanel()
+            end
+        elseif ch == 112 then -- P (пауза магазина) - уже обработано выше, но для админ-панели тоже
+            shopPaused = not shopPaused
+            log("INFO", "Магазин " .. (shopPaused and "приостановлен" or "возобновлён"))
+            drawAdminPanel()
+        elseif ch == 101 then -- E (редактировать цену) - заглушка
+            log("INFO", "Редактирование цен пока не реализовано")
+            drawAdminPanel()
+        end
+    end
+end
 
--- Таймер перерисовки интерфейса (раз в секунду, но без обращения к ME)
-event.timer(1, function() drawInterface() end, math.huge)
+event.listen("key_down", handleKeyDown)
 
 -- ========== БАЗОВЫЕ ФУНКЦИИ ==========
 local function getOrCreatePlayer(name)
@@ -322,7 +477,7 @@ local function getOrCreatePlayer(name)
         local realDate = getRealTime()
         players[name] = {
             balance = 0.0, resBalance = 0.0, transactions = 0,
-            regDate = realDate, agreed = false
+            regDate = realDate, agreed = false, banned = false
         }
         saveDB()
         log("INFO", "Создан игрок " .. name .. " с датой: " .. realDate)
@@ -334,6 +489,8 @@ local function validateSession(name, token)
     local s = sessions[name]
     return s and s.token == token and os.time() - (s.lastAction or 0) < SESSION_TIMEOUT
 end
+
+event.timer(1, function() drawInterface() end, math.huge)
 
 log("INFO", "Сервер запущен. Ожидание терминалов...")
 drawInterface()
@@ -361,21 +518,35 @@ while true do
         log("INFO", string.format("От %s | op=%s | name=%s | token=%s", from, tostring(msg.op), msg.name or "?", msg.token or "нет"))
 
         if msg.op == "register" then
+            -- Проверка пароля
+            if msg.password ~= ACCESS_PASSWORD then
+                modem.send(from, 0xffef, serialization.serialize({op="error", message="Неверный пароль"}))
+                log("WARN", "Попытка подключения с неверным паролем от " .. from)
+                goto continue
+            end
             marketConnected = true
             if not owner then
                 owner = from
                 log("INFO", "✅ АДМИН ЗАРЕГИСТРИРОВАН: " .. from)
             end
-            modem.send(from, 0xffef, serialization.serialize({op="welcome", owner=(from==owner)}))
+            modem.send(from, 0xffef, serialization.serialize({op="welcome", owner=(from==owner), shopPaused=shopPaused}))
             drawInterface()
 
         elseif msg.op == "enter" then
+            if shopPaused then
+                modem.send(from, 0xffef, serialization.serialize({op="error", message="Магазин на паузе"}))
+                goto continue
+            end
             local playerName = msg.name
             if not playerName or playerName == "" then
                 log("WARN", "Вход без имени от " .. from)
                 goto continue
             end
             local player = getOrCreatePlayer(playerName)
+            if player.banned then
+                modem.send(from, 0xffef, serialization.serialize({op="error", message="Вы забанены"}))
+                goto continue
+            end
 
             local existingSession = sessions[playerName]
             local token
@@ -395,7 +566,8 @@ while true do
                 resBalance=player.resBalance or 0.0,
                 transactions=player.transactions,
                 regDate=player.regDate,
-                agreed = player.agreed or false
+                agreed = player.agreed or false,
+                shopPaused = shopPaused
             }))
             drawInterface()
 
@@ -417,28 +589,23 @@ while true do
                     resBalance = player.resBalance,
                     transactions = player.transactions,
                     regDate = player.regDate,
-                    agreed = player.agreed
+                    agreed = player.agreed,
+                    shopPaused = shopPaused
                 }
             }))
             log("INFO", "Аккаунт отправлен для " .. msg.name)
 
-        elseif msg.op == "selector_status" then
-            log("INFO", string.format("Selector status от %s: %s", msg.name or "?", msg.available and "подключён" or "не найден"))
-
-        elseif msg.op == "scan_report" then
-            if not validateSession(msg.name, msg.token) then
-                log("WARN", "Неверный токен для scan_report")
+        elseif msg.op == "sell" then
+            if shopPaused then
+                modem.send(from, 0xffef, serialization.serialize({op="error", message="Магазин на паузе"}))
                 goto continue
             end
-            log("INFO", string.format("🔍 %s сканирует '%s': найдено %d шт.", msg.name, msg.target, msg.found or 0))
-
-        elseif msg.op == "sell" then
             if not validateSession(msg.name, msg.token) then
                 log("WARN", "Неверный токен для sell")
                 goto continue
             end
             local player = players[msg.name]
-            if not player then goto continue end
+            if not player or player.banned then goto continue end
             local qty = tonumber(msg.qty) or 0
             local value = tonumber(msg.value) or 0
             local currency = msg.currency or "em"
@@ -453,17 +620,21 @@ while true do
 
             globalStats.totalSells = (globalStats.totalSells or 0) + 1
             saveGlobalStats()
-
             saveDB()
+            recordTransaction()
             log("INFO", string.format("💰 %s пополнил %s: предмет '%s' x%d на сумму %.2f", msg.name, currency, msg.item, qty, value))
 
         elseif msg.op == "buy" then
+            if shopPaused then
+                modem.send(from, 0xffef, serialization.serialize({op="error", message="Магазин на паузе"}))
+                goto continue
+            end
             if not validateSession(msg.name, msg.token) then
                 log("WARN", "Неверный токен для buy")
                 goto continue
             end
             local player = players[msg.name]
-            if not player then goto continue end
+            if not player or player.banned then goto continue end
             local value = tonumber(msg.value) or 0
             local currency = msg.currency or "res"
             if currency == "em" then
@@ -476,18 +647,9 @@ while true do
 
             globalStats.totalBuys = (globalStats.totalBuys or 0) + 1
             saveGlobalStats()
-
             saveDB()
+            recordTransaction()
             log("INFO", string.format("🛒 %s купил %s x%d за %.2f %s", msg.name, msg.item, msg.qty, value, currency))
-
-        elseif msg.op == "new_items" then
-            if not validateSession(msg.name, msg.token) then
-                log("WARN", "Неверный токен для new_items")
-                goto continue
-            end
-            for _, item in ipairs(msg.items or {}) do
-                log("INFO", "🆕 Новый предмет: " .. item.name .. " (x" .. item.qty .. ")")
-            end
 
         elseif msg.op == "report" then
             if not validateSession(msg.name, msg.token) then
@@ -496,7 +658,6 @@ while true do
             end
             globalStats.totalReports = (globalStats.totalReports or 0) + 1
             saveGlobalStats()
-
             log("INFO", "📩 Репорт от " .. msg.name .. " (" .. msg.time .. ")")
             log("INFO", "   Текст: " .. (msg.text or ""))
             local file = io.open("/home/reports.log", "a")
