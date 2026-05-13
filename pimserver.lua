@@ -96,9 +96,12 @@ local logStartY = 20
 local maxLogLines = 14
 
 local function updateScreenSize()
-    screenW, screenH = gpu.getResolution()
-    if screenW < 40 then screenW = 40 end
-    if screenH < 15 then screenH = 15 end
+    local w, h = gpu.getResolution()
+    -- Ограничиваем максимальную ширину, чтобы избежать ошибок формата
+    if w > 200 then w = 200 end
+    if w < 40 then w = 40 end
+    if h < 15 then h = 15 end
+    screenW, screenH = w, h
 
     local usable = screenW - 8
     colWidth = math.max(15, math.floor(usable / 3))
@@ -157,7 +160,7 @@ function drawInterface()
     setColor(ansi.bold, ansi.yellow)
     for i=1,3 do
         gotoxy(colX[i], 5)
-        io.write(string.format("%-"..colWidth.."s", titles[i]))
+        io.write(titles[i] .. string.rep(" ", colWidth - #titles[i]))
     end
     resetColor()
     
@@ -172,7 +175,9 @@ function drawInterface()
     local rowsAvailable = logStartY - 7
     for i=1, math.min(rowsAvailable, #playerList) do
         gotoxy(colX[1], 5+i)
-        io.write(string.format("%-"..colWidth.."s", playerList[i]))
+        local name = playerList[i]
+        if #name > colWidth then name = name:sub(1, colWidth) end
+        io.write(name .. string.rep(" ", colWidth - #name))
     end
     resetColor()
     
@@ -205,7 +210,7 @@ function drawInterface()
             gotoxy(1, logStartY + i - 1)
             local line = entry.text
             if #line > screenW - 1 then line = line:sub(1, screenW-1) end
-            io.write(string.format("%-"..screenW.."s", line))
+            io.write(line .. string.rep(" ", screenW - #line))
             resetColor()
         end
     end
