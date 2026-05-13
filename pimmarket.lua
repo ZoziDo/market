@@ -648,7 +648,7 @@ local function drawPurchaseScreen()
     end
   end
   local backBtn = {x = 18, y = 23, xs = 10, ys = 1, text = "Назад", bg = 0x333333, fg = 0xff7300}
-  local buyBtn  = {x = 50, y = 23, xs = 10, ys = 1, text = "Купить", bg = 0x333333, fg = 0x00ff88}
+  local buyBtn  = {x = 51, y = 23, xs = 10, ys = 1, text = "Купить", bg = 0x333333, fg = 0x00ff88}
   drawFlexButton(backBtn)
   drawFlexButton(buyBtn)
 end
