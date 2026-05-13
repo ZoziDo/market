@@ -70,7 +70,8 @@ local function getOrCreatePlayer(name)
       balance = 0.0,       -- Эмы
       resBalance = 0.0,    -- Ресы
       transactions = 0,
-      regDate = realDate
+      regDate = realDate,
+      agreed = false        -- <-- НОВОЕ ПОЛЕ: СОГЛАСИЕ С ПРАВИЛАМИ
     }
     saveDB()
     log("INFO", "Создан игрок " .. name .. " с датой: " .. realDate)
@@ -137,7 +138,8 @@ while true do
         balance=player.balance or 0.0,          -- Эмы
         resBalance=player.resBalance or 0.0,    -- Ресы
         transactions=player.transactions,
-        regDate=player.regDate
+        regDate=player.regDate,
+        agreed = player.agreed or false         -- <-- ПЕРЕДАЁМ СТАТУС СОГЛАСИЯ
       }))
 
     elseif msg.op == "getAccount" then
@@ -159,7 +161,8 @@ while true do
           balance = player.balance or 0.0,
           resBalance = player.resBalance or 0.0,
           transactions = player.transactions,
-          regDate = player.regDate
+          regDate = player.regDate,
+          agreed = player.agreed or false        -- <-- СТАТУС СОГЛАСИЯ В АККАУНТЕ
         }
       }))
       log("INFO", "Аккаунт отправлен для " .. msg.name)
@@ -183,7 +186,7 @@ while true do
       if not player then goto continue end
       local qty = tonumber(msg.qty) or 0
       local value = tonumber(msg.value) or 0
-      local currency = msg.currency or "em"   -- "em" или "res"
+      local currency = msg.currency or "em"
 
       if currency == "em" then
         player.balance = (player.balance or 0) + value
@@ -239,6 +242,27 @@ while true do
         log("INFO", "✅ Сохранено в reports.log")
       else
         log("ERROR", "❌ Не удалось открыть reports.log для записи")
+      end
+
+    elseif msg.op == "agree" then   -- <-- НОВЫЙ ОБРАБОТЧИК ПРИНЯТИЯ СОГЛАШЕНИЯ
+      if not validateSession(msg.name, msg.token) then
+        log("WARN", "Неверный токен для agree от " .. (msg.name or "?"))
+        modem.send(from, 0xffef, serialization.serialize({ op="agree", error = true, message = "Токен устарел" }))
+        goto continue
+      end
+      local player = players[msg.name]
+      if player then
+        player.agreed = true
+        saveDB()
+        sessions[msg.name].lastAction = os.time()
+        log("INFO", "📝 " .. msg.name .. " принял пользовательское соглашение")
+        modem.send(from, 0xffef, serialization.serialize({
+          op = "agree",
+          success = true,
+          agreed = true
+        }))
+      else
+        modem.send(from, 0xffef, serialization.serialize({ op = "agree", error = true, message = "Игрок не найден" }))
       end
     end
   end
