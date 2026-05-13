@@ -156,7 +156,7 @@ end
 local function drawBottomPanel()
   gpu.setForeground(0xcc3342) 
   gpu.set(4, 23, "[Сообщить о проблеме]")
-  gpu.set(34, 23, "[Соглашение]")           -- правее, например 33
+  gpu.set(35, 23, "[Соглашение]")           -- правее, например 33
   gpu.set(70, 23, "[Отзывы]")
 end
 
@@ -1453,7 +1453,7 @@ while true do
         if x >= 4 and x <= 25 then          -- [Сообщить о проблеме]
           showShopDenied = false
           goToReport()
-        elseif x >= 34 and x <= 45 then     -- [Соглашение] (30 - начало, ~40 - конец)
+        elseif x >= 39 and x <= 45 then     -- [Соглашение] (30 - начало, ~40 - конец)
           showShopDenied = false
           goToHelp()
         elseif x >= 70 and x <= 78 then     -- [Отзывы]
