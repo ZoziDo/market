@@ -773,18 +773,15 @@ local function performSell()
   drawBuyButtons()
 end
 
--- ========== ВЫПОЛНЕНИЕ ПОКУПКИ (с проверкой на 0) ==========
+-- ========== ВЫПОЛНЕНИЕ ПОКУПКИ (сначала проверка баланса) ==========
 local function performBuy()
-  drawCenteredText(20, "Выполняется покупка...", 0x00ff88)
-  os.sleep(0.4)
-
   local me = component.me_interface
   local item = purchaseItem
   local qty = purchaseQuantity
   local totalCost = item.price * qty
   local currency = item.currency
 
-  -- Проверка, что количество больше нуля
+  -- 1. Проверка количества
   if qty <= 0 then
     drawCenteredText(20, "Выберите количество!", 0xff0000)
     os.sleep(1.5)
@@ -795,7 +792,7 @@ local function performBuy()
     return
   end
 
-  -- Проверка баланса
+  -- 2. Проверка баланса (сначала!)
   if currency == "em" and emBalance < totalCost then
     drawCenteredText(20, "Недостаточно Эмов!", 0xff0000)
     os.sleep(1.5)
@@ -813,6 +810,46 @@ local function performBuy()
     drawBuyButtons()
     return
   end
+
+  -- 3. Если баланса хватает – показываем сообщение и выдаём товар
+  drawCenteredText(20, "Выполняется покупка...", 0x00ff88)
+  os.sleep(0.4)
+
+  local fingerprint = { id = item.internalName, raw_name = item.displayName }
+  local ok, err = pcall(function() me.exportItem(fingerprint, PULL_DIRECTION, qty) end)
+  local extracted = ok and qty or 0
+
+  if extracted > 0 then
+    if currency == "em" then
+      emBalance = emBalance - totalCost
+    else
+      resBalance = resBalance - totalCost
+    end
+    playerTransactions = playerTransactions + 1
+
+    if currentToken then
+      modem.send(serverAddress, 0xffef, serialization.serialize({
+        op = "buy",
+        name = currentPlayer,
+        token = currentToken,
+        item = item.displayName,
+        qty = extracted,
+        value = totalCost,
+        currency = currency
+      }))
+    end
+
+    local currencyName = (currency == "em") and "Эмов" or "Ресов"
+    drawCenteredText(20, "Куплено " .. extracted .. " шт. за " .. string.format("%.2f", totalCost) .. " " .. currencyName, 0x00ff88)
+  else
+    drawCenteredText(20, "Не удалось выдать предметы! Ошибка: " .. tostring(err), 0xff0000)
+  end
+  os.sleep(2.5)
+  currentScreen = "shop_buy"
+  drawBuyStatic()
+  drawBuyItemsList()
+  drawBuyButtons()
+end
 
   -- Извлечение из ME в PIM
   local fingerprint = { id = item.internalName, raw_name = item.displayName }
