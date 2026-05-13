@@ -954,7 +954,7 @@ local function drawReportScreen()
   end
   gpu.setBackground(0x000000)
 
-  local sendBtn = {x=20, y=14, xs=40, ys=1, text="ОТПРАВИТЬ", bg=0x004400, fg=0x00ff88}
+  local sendBtn = {x=20, y=14, xs=20, ys=1, text="[ ОТПРАВИТЬ ]", bg=0x004400, fg=0x00ff88}
   drawFlexButton(sendBtn)
   drawFlexButton(backButton)
   gpu.setForeground(0x888888)
@@ -1043,7 +1043,7 @@ local function drawAuthScreen()
   gpu.setBackground(0x000000) gpu.fill(1,1,80,25," ")
   drawBigTitle()
   gpu.setForeground(0xFFFFFF)
-  drawCenteredText(19, "Авторизация....", 0xFFFFFF)
+  drawCenteredText(18, "Авторизация....", 0xFFFFFF)
   gpu.setForeground(0x414243)
   drawCenteredText(22, "По любым вопросам пишите в Telegram: f0rb4ik", 0x414243)
   gpu.setBackground(0x000000)
