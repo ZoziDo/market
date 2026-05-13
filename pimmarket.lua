@@ -155,9 +155,9 @@ end
 
 local function drawBottomPanel()
   gpu.setForeground(0xcc3342) 
-  gpu.set(4, 23, "[Сообщить о проблеме]")   -- левая кнопка
-  gpu.set(31, 23, "[Соглашение]")           -- теперь посередине
-  gpu.set(70, 23, "[Отзывы]")               -- без изменений
+  gpu.set(4, 23, "[Сообщить о проблеме]")
+  gpu.set(33, 23, "[Соглашение]")           -- правее, например 33
+  gpu.set(70, 23, "[Отзывы]")
 end
 
 local function drawFlexButton(btn)
@@ -1457,7 +1457,7 @@ while true do
         if x >= 4 and x <= 25 then          -- [Сообщить о проблеме]
           showShopDenied = false
           goToReport()
-        elseif x >= 30 and x <= 40 then     -- [Соглашение] (30 - начало, ~40 - конец)
+        elseif x >= 33 and x <= 44 then     -- [Соглашение] (30 - начало, ~40 - конец)
           showShopDenied = false
           goToHelp()
         elseif x >= 70 and x <= 78 then     -- [Отзывы]
