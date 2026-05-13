@@ -82,7 +82,7 @@ local function saveGlobalStats()
     file:close()
 end
 
--- ========== РЕАЛЬНОЕ ВРЕМЯ (необязательно для статистики) ==========
+-- ========== РЕАЛЬНОЕ ВРЕМЯ ==========
 local function getRealTime()
     if component.isAvailable("internet") then
         local ok, result = pcall(function()
@@ -110,39 +110,20 @@ local function getRealTime()
     return os.date("%d.%m.%Y %H:%M:%S")
 end
 
--- ========== ДАННЫЕ ИЗ ME СИСТЕМЫ ==========
-local function getMeStats()
-    if not component.isAvailable("me_interface") then
-        return "Компонент не найден", "Проверь подключение"
-    end
-
-    local me = component.me_interface
-    local success, items = pcall(me.getItemsInNetwork, me)
-
-    if not success or not items then
-        return "Ошибка доступа", "Нет данных"
-    end
-
-    local totalItems = 0
-    local uniqueItems = 0
-
-    for _, it in ipairs(items) do
-        totalItems = totalItems + (it.size or 0)
-        uniqueItems = uniqueItems + 1
-    end
-
-    return tostring(totalItems), tostring(uniqueItems)
-end
-
 -- ========== ПЕРЕМЕННЫЕ ОБЩИЕ ==========
 local owner = nil
 local sessions = {}
-local SESSION_TIMEOUT = 31536000   -- 1 год (игрок на PIM не потеряет сессию)
+local SESSION_TIMEOUT = 31536000   -- 1 год
 local marketConnected = false
 local logBuffer = {}
 
+-- Кеш для ME статистики (обновляется асинхронно, раз в 10 секунд)
+local cachedMeTotal = "Загрузка..."
+local cachedMeUnique = "Загрузка..."
+local meStatsTimer = nil
+
 local screenW, screenH = 80, 25
-local colX = {5, 30, 55, 80}  -- четыре столбца
+local colX = {5, 30, 55, 80}
 local colWidth = 25
 local logStartY = 20
 local maxLogLines = 14
@@ -178,6 +159,40 @@ local function fill(x, y, w, h, char)
     end
 end
 
+-- ========== ДАННЫЕ ИЗ ME СИСТЕМЫ (асинхронное обновление) ==========
+local function updateMeStats()
+    if not component.isAvailable("me_interface") then
+        cachedMeTotal = "Компонент не найден"
+        cachedMeUnique = "Проверь подключение"
+        return
+    end
+
+    local me = component.me_interface
+    local success, items = pcall(me.getItemsInNetwork, me)
+
+    if not success or not items then
+        cachedMeTotal = "Ошибка доступа"
+        cachedMeUnique = "Нет данных"
+        return
+    end
+
+    local totalItems = 0
+    local uniqueItems = 0
+
+    for _, it in ipairs(items) do
+        totalItems = totalItems + (it.size or 0)
+        uniqueItems = uniqueItems + 1
+    end
+
+    cachedMeTotal = tostring(totalItems)
+    cachedMeUnique = tostring(uniqueItems)
+end
+
+-- Запускаем периодическое обновление кеша (раз в 10 секунд)
+meStatsTimer = event.timer(10, updateMeStats, math.huge)
+updateMeStats() -- сразу заполняем кеш
+
+-- ========== ОТРИСОВКА ИНТЕРФЕЙСА ==========
 function drawInterface()
     io.write(ansi.hide_cursor .. ansi.clear)
     updateScreenSize()
@@ -233,13 +248,12 @@ function drawInterface()
     end
     resetColor()
     
-    -- 2) ME система (реальная статистика)
+    -- 2) ME система (кешированные данные – быстро)
     setColor(ansi.cyan)
-    local total, unique = getMeStats()
     gotoxy(colX[2], 6)
-    io.write("Всего предметов: " .. total)
+    io.write("Всего предметов: " .. cachedMeTotal)
     gotoxy(colX[2], 7)
-    io.write("Уникальных типов: " .. unique)
+    io.write("Уникальных типов: " .. cachedMeUnique)
     resetColor()
     
     -- 3) Безопасность
@@ -299,9 +313,10 @@ pcall(function()
     event.listen("term_resize", function() drawInterface() end)
 end)
 
+-- Таймер перерисовки интерфейса (раз в секунду, но без обращения к ME)
 event.timer(1, function() drawInterface() end, math.huge)
 
--- ========== БАЗОВЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ С ИГРОКАМИ ==========
+-- ========== БАЗОВЫЕ ФУНКЦИИ ==========
 local function getOrCreatePlayer(name)
     if not players[name] then
         local realDate = getRealTime()
