@@ -90,6 +90,22 @@ local reportInput = ""
 local lastReportTime = nil
 local showShopDenied = false   -- флаг для смены сообщения
 
+-- ==================== ОБНОВЛЕНИЕ СЕЛЕКТОРА ====================
+local function updateSelectorDisplay(item)
+    if not selector then return end
+    if not item then
+        pcall(selector.setStackInSlot, selector, 0, nil)
+        return
+    end
+    local stack = {
+        name = item.internalName,
+        size = 1,
+        damage = 0,
+        label = item.displayName
+    }
+    pcall(selector.setStackInSlot, selector, 0, stack)
+end
+
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
 gpu.setBackground(0x000000)
@@ -1083,7 +1099,7 @@ local function drawMainMenu()
     local full2 = resText .. emText
     local x2 = math.floor((80 - unicode.len(full2))/2)+1
     gpu.setForeground(0x00FF88)
-    gpu.set(x2, 6, resText)
+    gpu.set(x2, 5, resText)
     gpu.setForeground(0xFF7300)
     gpu.set(x2 + unicode.len(resText), 6, emText)
 
@@ -1231,6 +1247,7 @@ local function goBackToMenu()
   showShopDenied = false
   currentScreen = "menu"
   drawMainMenu()
+  updateSelectorDisplay(nil)   -- очищаем селектор
 end
 
 local function goToHelp()
@@ -1311,6 +1328,7 @@ while true do
           hoveredIndex = 0
           drawBuyItemsList()
           drawBuyButtons()
+          updateSelectorDisplay(selectedItem)   -- <-- добавить эту строку
         end
       end
 
@@ -1645,6 +1663,7 @@ while true do
     currentToken = nil
     alreadyAuthorized = false
     currentScreen = "welcome"
+    updateSelectorDisplay(nil)   -- очищаем при уходе игрока
     drawWelcomeScreen()
 
   elseif e == "modem_message" then
