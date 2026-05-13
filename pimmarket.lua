@@ -130,7 +130,7 @@ local function updateSelectorDisplay(item)
             return
         end
 
-        local raw = item.internalName or item.name
+        local raw = item.internalName or item.name or item.displayName
         if not raw then return end
 
         -- нормализация ID
@@ -158,6 +158,7 @@ local function updateSelectorDisplay(item)
 
     if not ok then
         print("Selector error: "..tostring(err))
+        print("SELECTOR ITEM:", item.internalName, item.name, item.displayName)
     end
 end
 
@@ -353,11 +354,13 @@ end
 local function loadSellItems()
   shopItems = {}
   for _, item in ipairs(sellItems) do
+  local internal = item.internalName or item.name
+  if internal then
     table.insert(shopItems, {
-      displayName = item.displayName or item.name,
-      internalName = item.internalName or item.name,
-      qty = item.qty,
-      price = item.price
+      displayName = item.displayName or item.name or internal,
+      internalName = internal,
+      qty = item.qty or 0,
+      price = item.price or 0
     })
   end
 end
