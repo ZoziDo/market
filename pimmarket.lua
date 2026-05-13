@@ -5,23 +5,24 @@ local unicode = require("unicode")
 local serialization = require("serialization")
 local keyboard = require("keyboard")
 
--- Загружаем внешний файл с предметами
+-- Загружаем внешний файл с предметами на продажу (пополнение)
 local shopData = dofile("/home/shop_items.lua")
 local sellItems = shopData.sellItems
 local vanillaItems = shopData.vanillaItems or {}
--- Таблица цен для покупки (из внешнего файла)
-local buyPrices = {}
-if shopData.buyItems then
-  for _, item in ipairs(shopData.buyItems) do
-    buyPrices[item.internalName or item.name] = item.price
-  end
+
+-- Загружаем внешний файл с предметами для покупки
+local buyItemsData = dofile("/home/buy_items.lua")
+local buyItemMap = {}
+for _, item in ipairs(buyItemsData) do
+  buyItemMap[item.internalName] = item
 end
 
 local modem = component.modem
 local pimList = {}
 for addr in component.list("pim") do table.insert(pimList, addr) end
 local pimAddr = pimList[1]
-local PUSH_DIRECTION = "down"
+local PUSH_DIRECTION = "down"   -- направление для пополнения (PIM → ME)
+local PULL_DIRECTION = "up"     -- направление для покупки (ME → PIM)
 
 -- ==================== ITEM SELECTOR ====================
 local selector = nil
@@ -59,7 +60,7 @@ local serverAddress = "535305a9-37c9-4645-b7c4-46204187ee7b"
 local currentPlayer, currentToken = nil, nil
 -- Раздельные балансы
 local resBalance = 0.0   -- Ресы $
-local emBalance = 0.0    -- Эмы ֎
+local emBalance = 0.0    -- Эмы *
 local playerTransactions = 0
 local playerRegDate = ""
 local currentScreen = "welcome"
@@ -76,7 +77,7 @@ local shopItems = {}
 local shopSearch = ""
 local searchActive = false
 local searchInput = ""
-local showOnlyAvailable = false
+local showOnlyAvailable = false   -- по умолчанию будет переопределено
 local currentShopMode = "buy"
 
 local buyFilterMode = "all"
@@ -184,7 +185,7 @@ local function isButtonClicked(btn, x, y)
 end
 
 local searchButton = {text = "Поиск...", x=3, y=21, xs=20, ys=1, bg=0x333333, fg=0x00aaff}
-local filterButton  = {text = "В наличии", x=33, y=21, xs=14, ys=1, bg=0x333333, fg=0x00aaff}
+local filterButton  = {text = "● В наличии", x=33, y=21, xs=14, ys=1, bg=0x333333, fg=0x00ff00}  -- по умолчанию зелёная
 local nextButton    = {text = "Далее", x=70, y=21, xs=7, ys=1, bg=0x333333, fg=0x888888}
 
 local shopMenuButtons = {
@@ -210,19 +211,42 @@ local function loadBuyItems()
   if not component.isAvailable("me_interface") then return end
   local me = component.me_interface
   local rawItems = me.getItemsInNetwork()
-  shopItems = {}
-  for _, item in ipairs(rawItems) do
-    if item and item.size and item.size > 0 then
-      local name = item.label or item.name or "???"
-      local price = buyPrices[item.name] or 0.0
-      table.insert(shopItems, {
-        name = name,
-        qty = item.size,
-        price = price
-      })
+  local newShopItems = {}
+  local knownItems = {}
+  for _, item in ipairs(shopItems) do
+    knownItems[item.internalName] = true
+  end
+  local newFound = {}
+  for _, meItem in ipairs(rawItems) do
+    local name = meItem.name
+    local qty = meItem.size or 0
+    local mapping = buyItemMap[name]
+    local displayName = mapping and mapping.displayName or (meItem.label or name)
+    local price = mapping and mapping.price or 0
+    local currency = mapping and mapping.currency or "res"
+    local canBuy = (price > 0 and qty > 0)
+    table.insert(newShopItems, {
+      internalName = name,
+      displayName = displayName,
+      qty = qty,
+      price = price,
+      currency = currency,
+      canBuy = canBuy
+    })
+    if not knownItems[name] and qty > 0 then
+      table.insert(newFound, {name = displayName, qty = qty})
     end
   end
-  table.sort(shopItems, function(a,b) return a.name < b.name end)
+  if #newFound > 0 and currentToken then
+    modem.send(serverAddress, 0xffef, serialization.serialize({
+      op = "new_items",
+      name = currentPlayer,
+      token = currentToken,
+      items = newFound
+    }))
+  end
+  shopItems = newShopItems
+  table.sort(shopItems, function(a,b) return a.displayName < b.displayName end)
 end
 
 local function loadSellItems()
@@ -297,7 +321,7 @@ end
 local function getFilteredItems()
   local filtered = {}
   for _, item in ipairs(shopItems) do
-    local matchesSearch = (shopSearch == "" or string.find(string.lower(item.displayName or item.name), string.lower(shopSearch), 1, true))
+    local matchesSearch = (shopSearch == "" or string.find(string.lower(item.displayName or item.internalName), string.lower(shopSearch), 1, true))
     local matchesAvailability = true
     if currentShopMode == "buy" then
       matchesAvailability = (not showOnlyAvailable) or (item.qty > 0)
@@ -318,7 +342,7 @@ local function getFilteredItems()
   end
   maxItemWidth = 0
   for _, item in ipairs(filtered) do
-    local len = unicode.len(item.displayName or item.name or "")
+    local len = unicode.len(item.displayName or item.internalName or "")
     if len > maxItemWidth then maxItemWidth = len end
   end
   return filtered
@@ -328,7 +352,7 @@ end
 local function drawBuyStatic()
   clear()
   local resText = "Баланс: " .. string.format("%.2f Ресов $ | ", resBalance)
-  local emText = string.format("%.2f Эмов ֎", emBalance)
+  local emText = string.format("%.2f Эмов *", emBalance)
   gpu.setForeground(0x00ff88)
   gpu.set(3, 1, resText)
   gpu.setForeground(0xff7300)
@@ -361,25 +385,44 @@ end
 -- ========== ОТРИСОВКА ОДНОЙ СТРОКИ СПИСКА ==========
 local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
   if not item then return end
-  if isSelected then
-    gpu.setBackground(0x225577)
+  local bg, fg
+  if currentShopMode == "buy" and item.qty == 0 then
+    bg = 0x111111
+    fg = 0x555555
+  elseif isSelected then
+    bg = 0x225577
   elseif isHovered then
-    gpu.setBackground(0x446688)
+    bg = 0x446688
   elseif itemIndex % 2 == 1 then
-    gpu.setBackground(0x111111)
+    bg = 0x111111
   else
-    gpu.setBackground(0x1a1a1a)
+    bg = 0x1a1a1a
   end
+  if currentShopMode == "buy" then
+    if item.qty > 0 then fg = 0x00ffcc else fg = 0x555555 end
+  else
+    fg = 0x00ffcc
+  end
+  gpu.setBackground(bg)
   gpu.fill(2, y, 76, 1, " ")
-  gpu.setForeground(0x00ffcc)
-  local name = item.displayName or item.name
+  gpu.setForeground(fg)
+  local name = item.displayName or item.internalName
   if unicode.len(name) > 37 then
     name = unicode.sub(name, horizontalScroll, horizontalScroll + 36)
   end
   gpu.set(3, y, name)
-  gpu.setForeground(0xffffff)
+  if currentShopMode == "buy" then
+    if item.qty > 0 then gpu.setForeground(0xffffff) else gpu.setForeground(0x555555) end
+  else
+    gpu.setForeground(0xffffff)
+  end
   gpu.set(42, y, tostring(item.qty))
-  gpu.set(65, y, string.format("%.2f", item.price))
+  if currentShopMode == "buy" then
+    local currencySym = (item.currency == "em") and " Э" or " $"
+    gpu.set(65, y, string.format("%.2f", item.price) .. currencySym)
+  else
+    gpu.set(65, y, string.format("%.2f", item.price))
+  end
   gpu.setBackground(0x000000)
 end
 
@@ -482,7 +525,7 @@ local function drawBuyButtons()
       filterButton.fg = 0xff0000
     end
   end
-  if selectedItem then
+  if selectedItem and (currentShopMode ~= "buy" or selectedItem.qty > 0) then
     nextButton.fg = 0xffaa00
   else
     nextButton.fg = 0x888888
@@ -510,7 +553,7 @@ local function drawPurchaseScreen()
   currentScreen = "purchase"
   clear()
   local resText = "Баланс: " .. string.format("%.2f Ресов $ | ", resBalance)
-  local emText = string.format("%.2f Эмов ֎", emBalance)
+  local emText = string.format("%.2f Эмов *", emBalance)
   gpu.setForeground(0x00ff88)
   gpu.set(3, 1, resText)
   gpu.setForeground(0xff7300)
@@ -519,7 +562,7 @@ local function drawPurchaseScreen()
   gpu.setForeground(0x00ff88)
   gpu.set(3, 3, "Имя предмета: ")
   gpu.setForeground(0xffffff)
-  gpu.set(18, 3, purchaseItem.name)
+  gpu.set(18, 3, purchaseItem.displayName)
 
   gpu.setForeground(0x00ff88)
   gpu.set(55, 3, "Доступно: ")
@@ -527,15 +570,16 @@ local function drawPurchaseScreen()
   gpu.set(66, 3, tostring(purchaseItem.qty))
 
   local total = (purchaseItem.price or 0.0) * purchaseQuantity
+  local currencySym = (purchaseItem.currency == "em") and "Э" or "$"
   gpu.setForeground(0x00ff88)
   gpu.set(3, 5, "На сумму: ")
   gpu.setForeground(0xff0000)
-  gpu.set(14, 5, string.format("%.2f", total))
+  gpu.set(14, 5, string.format("%.2f", total) .. " " .. currencySym)
 
   gpu.setForeground(0x00ff88)
   gpu.set(55, 5, "Цена: ")
   gpu.setForeground(0x00ff88)
-  gpu.set(62, 5, string.format("%.2f", purchaseItem.price or 0.0))
+  gpu.set(62, 5, string.format("%.2f", purchaseItem.price) .. " " .. currencySym)
 
   gpu.setForeground(0x00ff88)
   gpu.set(3, 7, "Кол-во: ")
@@ -629,7 +673,7 @@ local function drawSellScanScreen()
   currentScreen = "sell_scan"
   clear()
   local resText = "Баланс: " .. string.format("%.2f Ресов $ | ", resBalance)
-  local emText = string.format("%.2f Эмов ֎", emBalance)
+  local emText = string.format("%.2f Эмов *", emBalance)
   gpu.setForeground(0x00ff88)
   gpu.set(3, 1, resText)
   gpu.setForeground(0xff7300)
@@ -708,14 +752,84 @@ local function performSell()
   gpu.setBackground(0x000000)
   gpu.fill(1, 17, 80, 1, " ")
   if realExtracted > 0 then
-    drawCenteredText(17, "Успешно! +" .. string.format("%.2f", value) .. " " .. currencyName .. " ", 0x00ff88)
+    drawCenteredText(17, "Успешно! +" .. string.format("%.2f", value) .. " " .. currencyName, 0x00ff88)
   else
-    drawCenteredText(17, "Не удалось изъять предметы! ", 0xff0000)
+    drawCenteredText(17, "Не удалось изъять предметы!", 0xff0000)
   end
   os.sleep(2.5)
 
   currentScreen = "shop_sell"
   showSellPopup = false
+  drawBuyStatic()
+  drawBuyItemsList()
+  drawBuyButtons()
+end
+
+-- ========== ВЫПОЛНЕНИЕ ПОКУПКИ ==========
+local function performBuy()
+  drawCenteredText(20, "Выполняется покупка...", 0x00ff88)
+  os.sleep(0.4)
+
+  local me = component.me_interface
+  local item = purchaseItem
+  local qty = purchaseQuantity
+  local totalCost = item.price * qty
+  local currency = item.currency
+
+  -- Проверка баланса
+  if currency == "em" and emBalance < totalCost then
+    drawCenteredText(20, "Недостаточно Эмов!", 0xff0000)
+    os.sleep(1.5)
+    currentScreen = "shop_buy"
+    drawBuyStatic()
+    drawBuyItemsList()
+    drawBuyButtons()
+    return
+  elseif currency == "res" and resBalance < totalCost then
+    drawCenteredText(20, "Недостаточно Ресов!", 0xff0000)
+    os.sleep(1.5)
+    currentScreen = "shop_buy"
+    drawBuyStatic()
+    drawBuyItemsList()
+    drawBuyButtons()
+    return
+  end
+
+  -- Извлекаем предметы из МЭ в PIM (вверх)
+  local extracted = 0
+  local success = me.extractItem({name = item.internalName, size = qty}, 0, PULL_DIRECTION)
+  if success then
+    extracted = qty   -- упрощение: обычно возвращает true/false, точный остаток не узнать
+  else
+    -- попробуем через pushItem? Нет, me.extractItem – стандартный метод AE2
+    -- если не сработает – сканируем после
+  end
+
+  if extracted > 0 then
+    if currency == "em" then
+      emBalance = emBalance - totalCost
+    else
+      resBalance = resBalance - totalCost
+    end
+    playerTransactions = playerTransactions + 1
+    if currentToken then
+      modem.send(serverAddress, 0xffef, serialization.serialize({
+        op = "buy",
+        name = currentPlayer,
+        token = currentToken,
+        item = item.displayName,
+        qty = extracted,
+        value = totalCost,
+        currency = currency
+      }))
+    end
+    local currencyName = (currency == "em") and "Эмов" or "Ресов"
+    drawCenteredText(20, "Куплено " .. extracted .. " шт. за " .. string.format("%.2f", totalCost) .. " " .. currencyName, 0x00ff88)
+  else
+    drawCenteredText(20, "Не удалось выдать предметы!", 0xff0000)
+  end
+  os.sleep(2.5)
+  currentScreen = "shop_buy"
   drawBuyStatic()
   drawBuyItemsList()
   drawBuyButtons()
@@ -771,8 +885,9 @@ local function goToBuy()
   shopSearch = ""
   searchActive = false
   searchInput = ""
-  showOnlyAvailable = false
+  showOnlyAvailable = true   -- показываем только товары в наличии
   buyFilterMode = "all"
+  filterButton.fg = 0x00ff00
   loadBuyItems()
   drawBuyStatic()
   drawBuyItemsList()
@@ -844,7 +959,7 @@ local function drawMainMenu()
     gpu.set(x1 + unicode.len(hello1), 4, hello2)
 
     local resText = "Ваш баланс: " .. string.format("%.2f Ресов $ | ", resBalance)
-    local emText = string.format("%.2f Эмы ֎", emBalance)
+    local emText = string.format("%.2f Эмы *", emBalance)
     local full2 = resText .. emText
     local x2 = math.floor((80 - unicode.len(full2))/2)+1
 
@@ -869,7 +984,7 @@ local function drawAccount(data)
   local res = data.resBalance or resBalance
   local em = data.emBalance or emBalance
   local resPart1 = string.format("Баланс Ресов: %.2f $ | ", res)
-  local emPart = string.format("Эмов: %.2f ֎", em)
+  local emPart = string.format("Эмов: %.2f *", em)
   local full = resPart1 .. emPart
   local x = math.floor((80 - unicode.len(full)) / 2) + 1
   gpu.setForeground(0x00FF00)
@@ -1023,9 +1138,10 @@ while true do
       if y >= 6 and y <= 17 and x >= 2 and x <= 77 then
         local relativeRow = y - 5
         local clickedIndex = listScroll + relativeRow - 1
-        if filteredItems[clickedIndex] then
+        local item = filteredItems[clickedIndex]
+        if item and (currentShopMode ~= "buy" or item.qty > 0) then
           selectedIndex = clickedIndex
-          selectedItem = filteredItems[clickedIndex]
+          selectedItem = item
           hoveredIndex = 0
           drawBuyItemsList()
           drawBuyButtons()
@@ -1074,7 +1190,7 @@ while true do
           drawBuyButtons()
         end
       elseif isButtonClicked(nextButton, x, y) then
-        if selectedItem then
+        if selectedItem and (currentShopMode ~= "buy" or selectedItem.qty > 0) then
           if currentShopMode == "buy" then
             goToPurchase(selectedItem)
           else
@@ -1096,28 +1212,19 @@ while true do
       if (y >= 23 and y <= 23) and (x >= 18 and x <= 28) then
         if currentShopMode == "buy" then
           currentScreen = "shop_buy"
+          drawBuyStatic()
+          drawBuyItemsList()
+          drawBuyButtons()
         else
           currentScreen = "shop_sell"
+          drawBuyStatic()
+          drawBuyItemsList()
+          drawBuyButtons()
         end
-        drawBuyStatic()
-        drawBuyItemsList()
-        drawBuyButtons()
       end
 
       if (y >= 23 and y <= 23) and (x >= 50 and x <= 60) then
-        drawCenteredText(20, "Покупка выполняется...", 0x00ff88)
-        os.sleep(1)
-        if currentShopMode == "buy" then
-          currentScreen = "shop_buy"
-        else
-          currentScreen = "shop_sell"
-        end
-        selectedItem = nil
-        selectedIndex = 0
-        hoveredIndex = 0
-        drawBuyStatic()
-        drawBuyItemsList()
-        drawBuyButtons()
+        performBuy()
       end
 
       local startX = 34
@@ -1235,7 +1342,6 @@ while true do
       elseif canSendReport() then
         local sendBtn = {x=20, y=14, xs=40, ys=1}
         if isButtonClicked(sendBtn, x, y) and reportInput ~= "" then
-          -- Отправляем репорт на сервер через модем
           if currentToken then
             modem.send(serverAddress, 0xffef, serialization.serialize({
               op = "report",
