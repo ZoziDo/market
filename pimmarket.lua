@@ -844,15 +844,14 @@ local function performSell()
   end
 
   showSellPopup = false
-  drawSellScanScreen()
+  drawSellScanScreen()                               -- перерисовываем экран (убираем попап)
   drawCenteredText(17, "Выполняется пополнение...", 0x00ff88)
-  os.sleep(0.6)
+  os.sleep(0.2)                                      -- короткая пауза для отображения
 
   local realExtracted = extractToME(sellConfirmItem.internalName, foundAmount, sellConfirmItem.damage or 0)
-  print("performSell: realExtracted =", realExtracted)
   if realExtracted == 0 then
     drawCenteredText(17, "Не удалось изъять предметы! Проверьте инвентарь.", 0xff0000)
-    os.sleep(2.5)
+    os.sleep(2)
     currentScreen = "shop_sell"
     drawBuyStatic()
     drawBuyItemsList()
@@ -883,10 +882,11 @@ local function performSell()
   end
 
   local currencyName = (sellConfirmItem.internalName == "npcMoney") and "Эмов" or "Ресов"
+  -- Очищаем строку и выводим успех
   gpu.setBackground(0x000000)
   gpu.fill(1, 17, 80, 1, " ")
   drawCenteredText(17, "Успешно! +" .. string.format("%.2f", value) .. " " .. currencyName, 0x00ff88)
-  os.sleep(2.5)
+  os.sleep(0.8)                                      -- быстрый переход (0.8 секунды)
 
   currentScreen = "shop_sell"
   showSellPopup = false
