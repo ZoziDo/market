@@ -7,7 +7,7 @@ local modem = component.modem
 modem.open(0xffef)
 modem.open(0xfffe)
 
--- ========== ANSI ЦВЕТА (безопасные последовательности) ==========
+-- ========== ANSI ЦВЕТА ==========
 local ansi = {
     reset   = "\27[0m",
     bold    = "\27[1m",
@@ -125,7 +125,7 @@ function drawInterface()
     local titles = {"👥 ИГРОКИ", "📦 ME СИСТЕМА", "🔒 БЕЗОПАСНОСТЬ"}
     setColor(ansi.bold, ansi.yellow)
     for i=1,3 do
-        io.write(string.format("\27[5;%dH%-*s", colX[i], 24, titles[i]))
+        io.write(string.format("\27[5;%dH%s", colX[i], titles[i]))
     end
     resetColor()
     
@@ -138,22 +138,24 @@ function drawInterface()
         end
     end
     for i=1, math.min(12, #playerList) do
-        io.write(string.format("\27[%d;%dH%s", 5+i, colX[1], playerList[i]))
+        local y = 5 + i
+        local x = colX[1]
+        io.write(string.format("\27[%d;%dH%-24s", y, x, playerList[i] or ""))
     end
     resetColor()
     
-    -- 2) ME система (заглушка, можно расширить)
+    -- 2) ME система (заглушка)
     setColor(ansi.cyan)
-    io.write(string.format("\27[6;%dHДанные ME не доступны", colX[2]))
-    io.write(string.format("\27[7;%dH(требуется компонент)", colX[2]))
+    io.write(string.format("\27[6;%dH%-24s", colX[2], "Данные ME не доступны"))
+    io.write(string.format("\27[7;%dH%-24s", colX[2], "(требуется компонент)"))
     resetColor()
     
     -- 3) Безопасность
     setColor(ansi.magenta)
-    io.write(string.format("\27[6;%dHЛимит сессии: %d сек", colX[3], SESSION_TIMEOUT))
+    io.write(string.format("\27[6;%dH%-24s", colX[3], "Лимит сессии: " .. SESSION_TIMEOUT .. " сек"))
     local playersCount = 0
     for _ in pairs(players) do playersCount = playersCount + 1 end
-    io.write(string.format("\27[7;%dHИгроков в БД: %d", colX[3], playersCount))
+    io.write(string.format("\27[7;%dH%-24s", colX[3], "Игроков в БД: " .. playersCount))
     resetColor()
     
     -- Область логов
