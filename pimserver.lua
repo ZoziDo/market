@@ -2,7 +2,7 @@ local component = require("component")
 local event = require("event")
 local serialization = require("serialization")
 local filesystem = require("filesystem")
-local term = require("term")   -- для размера терминала
+local gpu = component.gpu   -- получаем GPU
 
 local modem = component.modem
 modem.open(0xffef)
@@ -54,7 +54,7 @@ local function saveDB()
     file:close()
 end
 
--- ========== РЕАЛЬНОЕ ВРЕМЯ (оставляем как есть) ==========
+-- ========== РЕАЛЬНОЕ ВРЕМЯ ==========
 local function getRealTime()
     if component.isAvailable("internet") then
         local ok, result = pcall(function()
@@ -89,27 +89,27 @@ local SESSION_TIMEOUT = 1800
 local marketConnected = false
 local logBuffer = {}
 
--- Динамические размеры
-local screenW, screenH = 80, 25   -- значения по умолчанию
-local colX = {5, 30, 55}          -- будут пересчитаны
+-- Динамические размеры экрана
+local screenW, screenH = 80, 25
+local colX = {5, 30, 55}
 local colWidth = 25
 local logStartY = 20
 local maxLogLines = 14
 
 local function updateScreenSize()
-    screenW, screenH = term.getSize()
+    screenW, screenH = gpu.getResolution()
     if screenW < 40 then screenW = 40 end
     if screenH < 15 then screenH = 15 end
 
-    -- Равномерное распределение ширины на 3 столбца с отступами по краям
-    local usable = screenW - 8         -- отступы слева 4, справа 4
+    -- Равномерное распределение ширины на 3 столбца
+    local usable = screenW - 8
     colWidth = math.floor(usable / 3)
     colX = {
         4,
         4 + colWidth,
         4 + colWidth * 2
     }
-    -- Область логов: с 18 строки до screenH-2
+    -- Область логов: с 18 строки до низа
     logStartY = math.min(18, screenH - 5)
     maxLogLines = screenH - logStartY - 3
     if maxLogLines < 3 then maxLogLines = 3 end
@@ -118,8 +118,6 @@ end
 -- ========== ОТРИСОВКА ИНТЕРФЕЙСА ==========
 function drawInterface()
     io.write(ansi.hide_cursor .. ansi.clear)
-    
-    -- Проверяем размер терминала при каждой перерисовке (на случай изменения)
     updateScreenSize()
     
     -- Верхняя панель
@@ -148,8 +146,7 @@ function drawInterface()
     local titles = {"👥 ИГРОКИ", "📦 ME СИСТЕМА", "🔒 БЕЗОПАСНОСТЬ"}
     setColor(ansi.bold, ansi.yellow)
     for i=1,3 do
-        local x = colX[i]
-        io.write(string.format("\27[5;%dH%-*s", x, colWidth, titles[i]))
+        io.write(string.format("\27[5;%dH%-*s", colX[i], colWidth, titles[i]))
     end
     resetColor()
     
@@ -161,13 +158,13 @@ function drawInterface()
             table.insert(playerList, name)
         end
     end
-    local rowsAvailable = logStartY - 7   -- строки с 6 по logStartY-1
+    local rowsAvailable = logStartY - 7
     for i=1, math.min(rowsAvailable, #playerList) do
         io.write(string.format("\27[%d;%dH%s", 5+i, colX[1], playerList[i]))
     end
     resetColor()
     
-    -- 2) ME система (заглушка, можно расширить)
+    -- 2) ME система (заглушка)
     setColor(ansi.cyan)
     io.write(string.format("\27[6;%dHДанные ME не доступны", colX[2]))
     io.write(string.format("\27[7;%dH(требуется компонент)", colX[2]))
@@ -185,8 +182,8 @@ function drawInterface()
     setColor(ansi.white)
     io.write(string.format("\27[%d;1H" .. string.rep("─", screenW), logStartY-1))
     resetColor()
-    for i=1, #logBuffer do
-        local entry = logBuffer[#logBuffer - maxLogLines + i]  -- показываем последние maxLogLines
+    for i=1, maxLogLines do
+        local entry = logBuffer[#logBuffer - maxLogLines + i]
         if entry then
             setColor(entry.color)
             local line = entry.text
@@ -200,12 +197,10 @@ end
 
 function addLog(text, fg)
     table.insert(logBuffer, {text = text, color = fg or ansi.white})
-    -- Ограничиваем размер буфера (храним не более 200 записей)
     while #logBuffer > 200 do table.remove(logBuffer, 1) end
-    drawInterface()  -- сразу обновляем экран
+    drawInterface()
 end
 
--- ========== ЛОГИРОВАНИЕ ==========
 local function log(level, msg)
     local color = ansi.white
     if level == "INFO" then color = ansi.green
@@ -214,11 +209,13 @@ local function log(level, msg)
     addLog("[" .. os.date("%H:%M:%S") .. "] [" .. level .. "] " .. msg, color)
 end
 
--- Событие изменения размера окна
-event.listen("term_resize", function()
-    updateScreenSize()
-    drawInterface()
+-- Обработчик изменения размера окна (если есть)
+pcall(function() 
+    event.listen("term_resize", function() drawInterface() end) 
 end)
+
+-- Таймер обновления (каждую секунду)
+event.timer(1, function() drawInterface() end, math.huge)
 
 -- ========== БАЗОВЫЕ ФУНКЦИИ ==========
 local function getOrCreatePlayer(name)
@@ -239,15 +236,10 @@ local function validateSession(name, token)
     return s and s.token == token and os.time() - (s.lastAction or 0) < SESSION_TIMEOUT
 end
 
--- Таймер для обновления часов (каждую секунду)
-event.timer(1, function()
-    drawInterface()
-end, math.huge)
-
 log("INFO", "Сервер запущен. Ожидание терминалов...")
 drawInterface()
 
--- ========== ОСНОВНОЙ ЦИКЛ ОБРАБОТКИ СООБЩЕНИЙ ==========
+-- ========== ОСНОВНОЙ ЦИКЛ (обработка сообщений) ==========
 while true do
     local ev = {event.pull(0.5)}
     local etype = ev[1]
