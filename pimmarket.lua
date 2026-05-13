@@ -101,6 +101,7 @@ local showSellPopup = false
 -- Переменные репорта
 local reportInput = ""
 local lastReportTime = nil
+local showShopDenied = false   -- флаг для смены сообщения
 
 -- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
@@ -154,9 +155,9 @@ end
 
 local function drawBottomPanel()
   gpu.setForeground(0xcc3342) 
-  gpu.set(4, 23, "[Соглашение]")
-  gpu.set(22, 23, "[Сообщить о проблеме]")
-  gpu.set(70, 23, "[Отзывы]")
+  gpu.set(4, 23, "[Сообщить о проблеме]")   -- левая кнопка
+  gpu.set(28, 23, "[Соглашение]")           -- теперь посередине
+  gpu.set(70, 23, "[Отзывы]")               -- без изменений
 end
 
 local function drawFlexButton(btn)
@@ -763,7 +764,11 @@ local function performSell()
   -- Проверка согласия
   if not playerAgreed then
     gpu.setForeground(0xFFAA00)
-    drawCenteredText(8, "Вы не приняли пользовательское соглашение! Нажмите [Соглашение]", 0xFFAA00)
+    if showShopDenied then
+      drawCenteredText(8, "Доступ запрещён. Примите соглашение [Соглашение]", 0xFFAA00)
+    else
+      drawCenteredText(8, "Вы не приняли пользовательское соглашение! Нажмите [Соглашение]", 0xFFAA00)
+    end
   end
   showSellPopup = false
   drawSellScanScreen()
@@ -1068,7 +1073,7 @@ local function drawMainMenu()
     -- Предупреждение, если не принято соглашение
     if not playerAgreed then
       gpu.setForeground(0xFFAA00)
-      drawCenteredText(8, "⚠️ Вы не приняли пользовательское соглашение! Нажмите [Помощь]", 0xFFAA00)
+      drawCenteredText(8, "Вы не приняли пользовательское соглашение! Нажмите [Соглашение]", 0xFFAA00)
     end
 
     for _,btn in pairs(menuButtons) do
@@ -1211,6 +1216,7 @@ local function goToHelp()
 end
 
 local function goBackToMenu()
+  showShopDenied = false
   currentScreen = "menu"
   drawMainMenu()
 end
@@ -1426,18 +1432,32 @@ while true do
     elseif currentScreen == "menu" then
       for name,btn in pairs(menuButtons) do
         if x>=btn.x and x<btn.x+btn.xs and y>=btn.y and y<btn.y+btn.ys then
-          if name=="shop" then goToShop()
-          elseif name=="util" then goToUtility()
-          elseif name=="account" then goToAccount() end
+          if name=="shop" then
+            if playerAgreed then
+              goToShop()
+            else
+              showShopDenied = true
+              drawMainMenu()   -- просто обновляем меню с новым текстом
+            end
+          elseif name=="util" then
+            showShopDenied = false
+            goToUtility()
+          elseif name=="account" then
+            showShopDenied = false
+            goToAccount()
+          end
           break
         end
       end
       if y == 23 then
-        if x >= 4 and x <= 20 then
-          goToHelp()
-        elseif x >= 22 and x <= 52 then
+        if x >= 4 and x <= 25 then          -- [Сообщить о проблеме]
+          showShopDenied = false
           goToReport()
-        elseif x >= 70 and x <= 78 then
+        elseif x >= 28 and x <= 40 then     -- [Соглашение]
+          showShopDenied = false
+          goToHelp()
+        elseif x >= 70 and x <= 78 then     -- [Отзывы]
+          showShopDenied = false
           drawCenteredText(18, "Отзывы в разработке", 0x888888)
           os.sleep(1)
           drawMainMenu()
@@ -1649,9 +1669,11 @@ while true do
         elseif msg.op == "agree" then
           if msg.success then
             playerAgreed = true
+            showShopDenied = false
             drawCenteredText(20, "Спасибо! Теперь вам доступен магазин.", 0x00FF88)
             os.sleep(1.5)
-            goBackToMenu()
+            drawMainMenu()
+            currentScreen = "menu"
           elseif msg.error and msg.message == "Токен устарел" then
             drawCenteredText(20, "Сессия устарела. Обновление...", 0xffaa00)
             os.sleep(1)
@@ -1687,12 +1709,14 @@ while true do
             else
               drawCenteredText(20, "Не удалось обновить сессию", 0xFF0000)
               os.sleep(2)
-              goBackToMenu()
+              drawMainMenu()
+              currentScreen = "menu"
             end
           else
             drawCenteredText(20, "Ошибка: " .. (msg.message or "неизвестная"), 0xFF0000)
             os.sleep(2)
-            goBackToMenu()
+            drawMainMenu()
+            currentScreen = "menu"
           end
         end
       end
