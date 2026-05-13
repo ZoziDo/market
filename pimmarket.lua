@@ -947,7 +947,7 @@ local function drawReportScreen()
   gpu.fill(10, 9, 60, 3, " ")
   gpu.setForeground(0xffffff)
   if reportInput ~= "" then
-    gpu.set(11, 10, unicode.sub(reportInput, -39))
+    gpu.set(11, 10, unicode.sub(reportInput, -58))
   else
     gpu.setForeground(0x888888)
     gpu.set(11, 10, "Введите текст сообщения...")
