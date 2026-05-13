@@ -344,7 +344,9 @@ local function extractToME(targetName, amount)
             if qty > 0 then
                 local rawName = stack.label or stack.name or ""
                 local cleanName = rawName:gsub("§.", "")
-                if cleanName == targetName or string.find(cleanName, targetName, 1, true) then
+                -- Сравниваем имена: пробуем точное совпадение, затем очистка от minecraft:
+                local match = (cleanName == targetName) or (cleanName == "minecraft:" .. targetName) or (cleanName:find(targetName, 1, true) and cleanName:match(targetName))
+                if match then
                     local toTake = math.min(qty, amount - extracted)
                     if toTake > 0 then
                         local moved = component.invoke(pimAddr, "pushItem", PUSH_DIRECTION, slot, toTake)
@@ -761,21 +763,30 @@ local function goToSellConfirm(item)
 end
 
 local function performSell()
-  -- Проверка согласия
   if not playerAgreed then
-    gpu.setForeground(0xFFAA00)
-    if showShopDenied then
-        drawCenteredText(8, "Доступ запрещён. Примите соглашение [Соглашение]", 0xFFAA00)
-    else
-        drawCenteredText(8, "Вы не приняли пользовательское соглашение! Нажмите [Соглашение]", 0xFFAA00)
-    end
-end
+    drawCenteredText(17, "Сначала примите пользовательское соглашение", 0xff0000)
+    os.sleep(2)
+    currentScreen = "menu"
+    drawMainMenu()
+    return
+  end
+
   showSellPopup = false
   drawSellScanScreen()
   drawCenteredText(17, "Выполняется пополнение...", 0x00ff88)
   os.sleep(0.6)
 
   local realExtracted = extractToME(sellConfirmItem.internalName, foundAmount)
+  if realExtracted == 0 then
+    drawCenteredText(17, "Не удалось изъять предметы! Проверьте инвентарь.", 0xff0000)
+    os.sleep(2.5)
+    currentScreen = "shop_sell"
+    drawBuyStatic()
+    drawBuyItemsList()
+    drawBuyButtons()
+    return
+  end
+
   local value = realExtracted * sellConfirmItem.price
   local currency = (sellConfirmItem.internalName == "npcMoney") and "em" or "res"
 
@@ -801,11 +812,7 @@ end
   local currencyName = (sellConfirmItem.internalName == "npcMoney") and "Эмов" or "Ресов"
   gpu.setBackground(0x000000)
   gpu.fill(1, 17, 80, 1, " ")
-  if realExtracted > 0 then
-    drawCenteredText(17, "Успешно! +" .. string.format("%.2f", value) .. " " .. currencyName, 0x00ff88)
-  else
-    drawCenteredText(17, "Не удалось изъять предметы!", 0xff0000)
-  end
+  drawCenteredText(17, "Успешно! +" .. string.format("%.2f", value) .. " " .. currencyName, 0x00ff88)
   os.sleep(2.5)
 
   currentScreen = "shop_sell"
