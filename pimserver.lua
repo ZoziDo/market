@@ -95,9 +95,10 @@ local logBuffer = {}
 local shopPaused = false
 local adminMode = false
 local adminPlayerList = {}
-local adminScroll = 0
-local selectedAdminIndex = 1
-local adminViewHeight = 20
+local adminScroll = 0            -- смещение в списке игроков
+local selectedAdminIndex = 1     -- индекс в adminPlayerList (1-based)
+local adminViewHeight = 20       -- сколько строк списка показывать (зависит от высоты экрана)
+local adminPanelActive = false   -- флаг, что окно админки открыто
 
 -- Кеш для ME статистики
 local cachedMeTotal = "Загрузка..."
@@ -110,16 +111,18 @@ local activityBuffer = {}
 for i=1, ACTIVITY_SIZE do activityBuffer[i] = 0 end
 local activityIndex = 0
 
--- Размеры экрана
+-- Размеры экрана (будут обновлены)
 local screenW, screenH = 80, 25
 local colX = {5, 30, 55, 80}
 local colWidth = 25
 local logStartY = 20
 local maxLogLines = 14
 
--- Имя админа и текущий игрок на PIM
+-- Для мыши: координаты клика по игроку
+local lastClickX, lastClickY = 0, 0
+
+-- Имя админа (кто может управлять через PIM)
 local ADMIN_NAME = "ZoziDo"
-local currentPIMPlayer = nil   -- кто сейчас стоит на PIM
 
 -- ========== ФУНКЦИИ ОБНОВЛЕНИЯ ЭКРАНА ==========
 local function updateScreenSize()
@@ -134,8 +137,8 @@ local function updateScreenSize()
     logStartY = math.min(18, screenH - 5)
     maxLogLines = screenH - logStartY - 3
     if maxLogLines < 3 then maxLogLines = 3 end
+    -- высота админ-панели = screenH - 6 (заголовок, подсказки)
     adminViewHeight = screenH - 8
-    if adminViewHeight < 3 then adminViewHeight = 3
 end
 
 local function gotoxy(x, y)
@@ -200,7 +203,7 @@ end
 meStatsTimer = event.timer(10, updateMeStats, math.huge)
 updateMeStats()
 
--- ========== АДМИН-ПАНЕЛЬ ==========
+-- ========== АДМИН-ПАНЕЛЬ (полноэкранная) ==========
 local function updateAdminPlayerList()
     adminPlayerList = {}
     for name, data in pairs(players) do
@@ -209,13 +212,15 @@ local function updateAdminPlayerList()
     table.sort(adminPlayerList, function(a,b) return a.name < b.name end)
 end
 
+-- Отрисовка админ-панели
 local function drawAdminPanel()
     io.write(ansi.hide_cursor .. ansi.clear)
     updateScreenSize()
 
+    -- Рамка во весь экран
     setColor(ansi.white)
-    fill(1, 1, screenW, 1, "─")
-    fill(1, screenH, screenW, 1, "─")
+    fill(1, 1, screenW, 1, "─")                -- верх
+    fill(1, screenH, screenW, 1, "─")          -- низ
     for y=2, screenH-1 do
         gotoxy(1, y) io.write("│")
         gotoxy(screenW, y) io.write("│")
@@ -224,16 +229,20 @@ local function drawAdminPanel()
     gotoxy(1,screenH) io.write("└"..string.rep("─", screenW-2).."┘")
     resetColor()
 
+    -- Заголовок
     setColor(ansi.bg_blue, ansi.white)
     fill(2, 1, screenW-2, 1, " ")
     gotoxy(2,1) io.write(" АДМИН-ПАНЕЛЬ (нажмите A для выхода) ")
     resetColor()
 
+    -- Список игроков
     local startIdx = adminScroll + 1
     local endIdx = math.min(#adminPlayerList, adminScroll + adminViewHeight)
+    local lineY = 3
     setColor(ansi.yellow)
-    gotoxy(2, 3) io.write("Игроки (↑↓ выбор, клик мышкой, D - бан, R - сброс статистики, P - пауза, E - редактировать баланс)")
+    gotoxy(2, lineY) io.write("Игроки (↑↓ выбор, клик мышкой, D - бан, R - сброс статистики, P - пауза, E - редактировать баланс)")
     resetColor()
+    lineY = lineY + 1
 
     for i=startIdx, endIdx do
         local ply = adminPlayerList[i]
@@ -241,13 +250,13 @@ local function drawAdminPanel()
         local line = string.format("%-20s | Ресы: %8.2f | Эмы: %8.2f | Транз: %d%s",
             ply.name, ply.data.resBalance or 0, ply.data.balance or 0, ply.data.transactions or 0, bannedStr)
         if #line > screenW - 4 then line = line:sub(1, screenW-4) end
-        local y = 4 + (i - startIdx)
         setColor((i == selectedAdminIndex) and ansi.bg_blue or ansi.white, (i == selectedAdminIndex) and ansi.white or nil)
-        gotoxy(2, y)
+        gotoxy(2, 3 + (i - startIdx) + 1)
         io.write(line)
         resetColor()
     end
 
+    -- Подсказки
     setColor(ansi.cyan)
     gotoxy(2, screenH-2)
     io.write("BAN: D | UNBAN: U | RESET STATS: R | PAUSE: P | EDIT BALANCE: E | SCROLL: ↑↓ | MOUSE CLICK")
@@ -255,11 +264,31 @@ local function drawAdminPanel()
     io.flush()
 end
 
+-- Обработка мыши в админ-панели
+local function handleAdminClick(x, y)
+    if y < 4 or y > 3 + adminViewHeight then return end
+    local lineIndex = y - 4  -- 0-based в пределах видимой области
+    local realIndex = adminScroll + lineIndex + 1
+    if realIndex >= 1 and realIndex <= #adminPlayerList then
+        selectedAdminIndex = realIndex
+        drawAdminPanel()
+    end
+end
+
+-- Изменение баланса игрока (вызывается из админ-панели)
+local function editPlayerBalance(ply)
+    -- здесь можно организовать ввод суммы с клавиатуры
+    log("INFO", "Редактирование баланса игрока " .. ply.name .. " (функция в разработке)")
+    -- Для простоты пока просто сообщаем, но можно реализовать через диалог
+    -- Пока оставим заглушку. Можно будет добавить ввод через event.pull.
+end
+
 -- ========== ОТРИСОВКА ОСНОВНОГО ИНТЕРФЕЙСА ==========
 function drawInterface()
     io.write(ansi.hide_cursor .. ansi.clear)
     updateScreenSize()
     
+    -- Верхняя панель
     setColor(ansi.bg_blue, ansi.white)
     fill(1, 2, screenW, 1, " ")
     gotoxy(1, 2)
@@ -268,6 +297,7 @@ function drawInterface()
     io.write(title .. string.rep(" ", screenW - #title))
     resetColor()
     
+    -- Часы
     setColor(ansi.cyan)
     gotoxy(1, 3)
     io.write("Время: " .. os.date("%H:%M:%S") .. "  До сброса репортов: " .. timeToMidnight())
@@ -279,10 +309,12 @@ function drawInterface()
     io.write("Активных сессий: " .. activeCount)
     resetColor()
     
+    -- Разделитель
     setColor(ansi.white)
     fill(1, 4, screenW, 1, "─")
     resetColor()
     
+    -- Заголовки
     local titles = {"👥 ИГРОКИ", "📦 ME СИСТЕМА", "🔒 БЕЗОПАСНОСТЬ", "📊 СТАТИСТИКА"}
     setColor(ansi.bold, ansi.yellow)
     for i=1,4 do
@@ -291,6 +323,7 @@ function drawInterface()
     end
     resetColor()
     
+    -- Игроки
     setColor(ansi.green)
     local playerList = {}
     for name, s in pairs(sessions) do
@@ -305,6 +338,7 @@ function drawInterface()
     end
     resetColor()
     
+    -- ME система
     setColor(ansi.cyan)
     gotoxy(colX[2], 6)
     io.write("Всего предметов: " .. cachedMeTotal)
@@ -312,6 +346,7 @@ function drawInterface()
     io.write("Уникальных типов: " .. cachedMeUnique)
     resetColor()
     
+    -- Безопасность + график
     setColor(ansi.magenta)
     gotoxy(colX[3], 6)
     io.write("Лимит сессии: " .. SESSION_TIMEOUT .. " сек")
@@ -336,6 +371,7 @@ function drawInterface()
     end
     resetColor()
     
+    -- Статистика
     setColor(ansi.yellow)
     gotoxy(colX[4], 6)
     io.write("Репортов: " .. globalStats.totalReports)
@@ -345,11 +381,13 @@ function drawInterface()
     io.write("Продаж: " .. globalStats.totalSells)
     resetColor()
     
+    -- Подсказки
     setColor(ansi.white)
     gotoxy(1, screenH-1)
     io.write("P - Пауза магазина | A - Админ-панель (только для " .. ADMIN_NAME .. " на PIM)")
     resetColor()
     
+    -- Логи
     setColor(ansi.white)
     fill(1, logStartY-1, screenW, 1, "─")
     resetColor()
@@ -382,31 +420,21 @@ local function log(level, msg)
     addLog("[" .. os.date("%H:%M:%S") .. "] [" .. level .. "] " .. msg, color)
 end
 
--- ========== ОБРАБОТКА СОБЫТИЙ PIM (запоминаем игрока) ==========
-local function onPlayerEnter(playerName, playerUUID)
-    currentPIMPlayer = playerName
-    log("INFO", "Игрок " .. playerName .. " встал на PIM")
-end
-
-local function onPlayerLeave()
-    currentPIMPlayer = nil
-    -- если админ-панель была открыта и админ ушёл – закрываем её
-    if adminMode then
-        adminMode = false
-        drawInterface()
-    end
-    log("INFO", "Игрок ушёл с PIM")
-end
-
 -- ========== ОБРАБОТКА КЛАВИШ И МЫШИ ==========
-local function handleKey(keyCode, char, playerFromEvent)
-    local currentPlayer = currentPIMPlayer
+local function handleKey(key, char, player)
+    -- Проверка: админ-режим доступен только если текущий игрок на PIM равен ADMIN_NAME
+    -- Для простоты будем проверять по имени из сессии (передаётся в player).
+    -- В OC событие key_down содержит имя игрока, нажавшего клавишу на PIM.
+    if not player or player ~= ADMIN_NAME then
+        log("WARN", "Попытка управления сервером не админом: " .. tostring(player))
+        return
+    end
 
-    if keyCode == 97 or keyCode == 65 then   -- A / a
-        if currentPlayer ~= ADMIN_NAME then
-            log("WARN", "Попытка открыть админ-панель не админом: " .. tostring(currentPlayer))
-            return
-        end
+    if key == 112 or key == 80 then   -- P / p
+        shopPaused = not shopPaused
+        log("INFO", "Магазин " .. (shopPaused and "приостановлен" or "возобновлён"))
+        if adminMode then drawAdminPanel() else drawInterface() end
+    elseif key == 97 or key == 65 then -- A / a
         if adminMode then
             adminMode = false
             drawInterface()
@@ -417,22 +445,8 @@ local function handleKey(keyCode, char, playerFromEvent)
             adminScroll = 0
             drawAdminPanel()
         end
-        return
-    end
-
-    if keyCode == 112 or keyCode == 80 then   -- P / p
-        if currentPlayer ~= ADMIN_NAME then
-            log("WARN", "Попытка изменить паузу не админом")
-            return
-        end
-        shopPaused = not shopPaused
-        log("INFO", "Магазин " .. (shopPaused and "приостановлен" or "возобновлён"))
-        if adminMode then drawAdminPanel() else drawInterface() end
-        return
-    end
-
-    if adminMode then
-        if keyCode == 200 then -- стрелка вверх
+    elseif adminMode then
+        if key == 200 then -- стрелка вверх
             if selectedAdminIndex > 1 then
                 selectedAdminIndex = selectedAdminIndex - 1
                 if selectedAdminIndex < adminScroll + 1 then
@@ -440,7 +454,7 @@ local function handleKey(keyCode, char, playerFromEvent)
                 end
                 drawAdminPanel()
             end
-        elseif keyCode == 208 then -- стрелка вниз
+        elseif key == 208 then -- стрелка вниз
             if selectedAdminIndex < #adminPlayerList then
                 selectedAdminIndex = selectedAdminIndex + 1
                 if selectedAdminIndex > adminScroll + adminViewHeight then
@@ -448,15 +462,20 @@ local function handleKey(keyCode, char, playerFromEvent)
                 end
                 drawAdminPanel()
             end
-        elseif keyCode == 100 or keyCode == 68 then -- D / d
+        elseif key == 100 or key == 68 then -- D / d (бан)
             local ply = adminPlayerList[selectedAdminIndex]
             if ply then
-                ply.data.banned = not ply.data.banned
-                log("INFO", "Игрок " .. ply.name .. (ply.data.banned and " забанен" or " разбанен"))
+                if ply.data.banned then
+                    ply.data.banned = false
+                    log("INFO", "Игрок " .. ply.name .. " разбанен")
+                else
+                    ply.data.banned = true
+                    log("INFO", "Игрок " .. ply.name .. " забанен")
+                end
                 saveDB()
                 drawAdminPanel()
             end
-        elseif keyCode == 114 or keyCode == 82 then -- R / r
+        elseif key == 114 or key == 82 then -- R / r (сброс статистики игрока)
             local ply = adminPlayerList[selectedAdminIndex]
             if ply then
                 ply.data.transactions = 0
@@ -466,20 +485,24 @@ local function handleKey(keyCode, char, playerFromEvent)
                 log("INFO", "Статистика игрока " .. ply.name .. " сброшена")
                 drawAdminPanel()
             end
-        elseif keyCode == 101 or keyCode == 69 then -- E / e
+        elseif key == 101 or key == 69 then -- E / e (редактировать баланс)
             local ply = adminPlayerList[selectedAdminIndex]
             if ply then
-                log("INFO", "Редактирование баланса игрока " .. ply.name .. " (функция в разработке)")
+                -- Заглушка, можно расширить
+                log("INFO", "Редактирование баланса игрока " .. ply.name .. " (будет реализовано)")
+                -- Здесь можно вызвать диалог ввода суммы и изменить ply.data.resBalance и ply.data.balance
                 drawAdminPanel()
             end
         end
     end
 end
 
-local function handleTouch(x, y, playerFromEvent)
+local function handleTouch(x, y, player)
     if not adminMode then return end
-    if currentPIMPlayer ~= ADMIN_NAME then return end
-    if y >= 4 and y <= 4 + adminViewHeight - 1 then
+    -- Проверка, что кликнул админ на PIM
+    if player ~= ADMIN_NAME then return end
+    -- Проверка, что клик в области списка
+    if y >= 4 and y <= 3 + adminViewHeight then
         local lineIndex = y - 4
         local realIndex = adminScroll + lineIndex + 1
         if realIndex >= 1 and realIndex <= #adminPlayerList then
@@ -508,8 +531,11 @@ local function validateSession(name, token)
 end
 
 -- ========== ОСНОВНОЙ ЦИКЛ ==========
+-- Таймер перерисовки основного интерфейса (каждые 3 секунды, чтобы не мерцало)
 local refreshTimer = event.timer(3, function()
-    if not adminMode then drawInterface() end
+    if not adminMode then
+        drawInterface()
+    end
 end, math.huge)
 
 log("INFO", "Сервер запущен. Ожидание терминалов...")
@@ -520,19 +546,10 @@ while true do
     local etype = ev[1]
 
     if etype == "key_down" then
-        local keyCode = ev[4]
-        local char = ev[3]
-        handleKey(keyCode, char, ev[5])
+        handleKey(ev[3], ev[4], ev[5])   -- key, char, player
     elseif etype == "touch" then
-        local x, y = ev[3], ev[4]
-        local player = ev[5]
+        local x, y, player = ev[3], ev[4], ev[5]
         handleTouch(x, y, player)
-    elseif etype == "player_on" or etype == "pim_player_enter" then
-        local playerName = ev[2] or ev[3]
-        if type(playerName) ~= "string" then playerName = tostring(playerName) end
-        onPlayerEnter(playerName, ev[3])
-    elseif etype == "player_off" or etype == "pim_player_leave" then
-        onPlayerLeave()
     elseif etype == "modem_message" then
         local from = ev[3]
         local raw = ev[6]
