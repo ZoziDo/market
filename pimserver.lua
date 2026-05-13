@@ -456,7 +456,6 @@ local function handleKey(key, char, player)
             local ply = adminPlayerList[selectedAdminIndex]
             if ply then
                 log("INFO", "Редактирование баланса игрока " .. ply.name .. " (функция в разработке)")
-                -- Здесь можно добавить диалог ввода суммы
                 drawAdminPanel()
             end
         end
@@ -466,9 +465,8 @@ end
 local function handleTouch(x, y, player)
     if not adminMode then return end
     if player ~= ADMIN_NAME then return end
-    -- Определяем, кликнут ли в области списка игроков
     if y >= 4 and y <= 4 + adminViewHeight - 1 then
-        local lineIndex = y - 4   -- 0-based в пределах видимой области
+        local lineIndex = y - 4
         local realIndex = adminScroll + lineIndex + 1
         if realIndex >= 1 and realIndex <= #adminPlayerList then
             selectedAdminIndex = realIndex
@@ -702,6 +700,4 @@ while true do
         end
     end
     ::continue::
-end
--- добавим закрывающий end для while
 end
