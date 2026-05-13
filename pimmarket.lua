@@ -25,19 +25,6 @@ local pimAddr = pimList[1]
 local PUSH_DIRECTION = "down"
 local PULL_DIRECTION = "up"
 
--- ==================== ITEM SELECTOR ====================
-local selector = nil
-for addr in component.list("openperipheral_selector") do
-    selector = component.proxy(addr)
-    break
-end
-if not selector then
-    for addr in component.list("item_selector") do
-        selector = component.proxy(addr)
-        break
-    end
-end
-
 local function debugPlayerInventory()
     if not pimAddr then return end
     print("=== СОДЕРЖИМОЕ ИНВЕНТАРЯ (PIM) ===")
