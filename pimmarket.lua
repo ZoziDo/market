@@ -765,11 +765,11 @@ local function performSell()
   if not playerAgreed then
     gpu.setForeground(0xFFAA00)
     if showShopDenied then
-      drawCenteredText(8, "Доступ запрещён. Примите соглашение [Соглашение]", 0xFFAA00)
+        drawCenteredText(8, "Доступ запрещён. Примите соглашение [Соглашение]", 0xFFAA00)
     else
-      drawCenteredText(8, "Вы не приняли пользовательское соглашение! Нажмите [Соглашение]", 0xFFAA00)
+        drawCenteredText(8, "Вы не приняли пользовательское соглашение! Нажмите [Соглашение]", 0xFFAA00)
     end
-  end
+end
   showSellPopup = false
   drawSellScanScreen()
   drawCenteredText(17, "Выполняется пополнение...", 0x00ff88)
@@ -1070,10 +1070,14 @@ local function drawMainMenu()
     gpu.setForeground(0xFF7300)
     gpu.set(x2 + unicode.len(resText), 6, emText)
 
-    -- Предупреждение, если не принято соглашение
+    -- Предупреждение, если не принято соглашение (с учётом флага showShopDenied)
     if not playerAgreed then
       gpu.setForeground(0xFFAA00)
-      drawCenteredText(8, "Вы не приняли пользовательское соглашение! Нажмите [Соглашение]", 0xFFAA00)
+      if showShopDenied then
+        drawCenteredText(8, "Доступ запрещён. Примите соглашение [Соглашение]", 0xFFAA00)
+      else
+        drawCenteredText(8, "Вы не приняли пользовательское соглашение! Нажмите [Соглашение]", 0xFFAA00)
+      end
     end
 
     for _,btn in pairs(menuButtons) do
