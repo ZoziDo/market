@@ -153,9 +153,10 @@ local function drawButton(btn)
 end
 
 local function drawBottomPanel()
-  gpu.setForeground(0xcc3342) gpu.set(4,23,"[Помощь]")
-  gpu.setForeground(0xcc3342) gpu.set(30,23,"[Сообщить о проблеме]")
-  gpu.setForeground(0xcc3342) gpu.set(70,23,"[Отзывы]")
+  gpu.setForeground(0xcc3342) 
+  gpu.set(4, 23, "[Соглашение]")
+  gpu.set(22, 23, "[Сообщить о проблеме]")
+  gpu.set(70, 23, "[Отзывы]")
 end
 
 local function drawFlexButton(btn)
@@ -761,13 +762,9 @@ end
 local function performSell()
   -- Проверка согласия
   if not playerAgreed then
-    drawCenteredText(17, "Сначала примите пользовательское соглашение (Помощь)", 0xff0000)
-    os.sleep(2)
-    currentScreen = "menu"
-    drawMainMenu()
-    return
+    gpu.setForeground(0xFFAA00)
+    drawCenteredText(8, "Вы не приняли пользовательское соглашение! Нажмите [Соглашение]", 0xFFAA00)
   end
-
   showSellPopup = false
   drawSellScanScreen()
   drawCenteredText(17, "Выполняется пополнение...", 0x00ff88)
@@ -1014,13 +1011,14 @@ local function goToSell()
 end
 
 local function drawShopMenu()
+  clear()
+  drawCenteredText(4, "МАГАЗИН", 0xff7300)
   if not playerAgreed then
-    drawCenteredText(12, "❌ Доступ запрещён. Примите соглашение в [Помощь]", 0xff5555)
+    drawCenteredText(9, "Доступ запрещён.", 0xff5555)
+    drawCenteredText(10, "Примите соглашение, нажав [Соглашение] в главном меню.", 0xffaa00)
     drawFlexButton(backButton)
     return
   end
-  clear()
-  drawCenteredText(4, "МАГАЗИН", 0xff7300)
   for _,btn in pairs(shopMenuButtons) do drawButton(btn) end
   drawFlexButton(backButton)
 end
@@ -1204,6 +1202,10 @@ local function goToUtility()
 end
 
 local function goToHelp()
+  if playerAgreed then
+    goBackToMenu()
+    return
+  end
   currentScreen = "agreement"
   drawAgreementScreen()
 end
@@ -1211,6 +1213,23 @@ end
 local function goBackToMenu()
   currentScreen = "menu"
   drawMainMenu()
+end
+
+local function refreshAndAgree()
+  if playerAgreed then 
+    goBackToMenu()
+    return 
+  end
+  if currentToken then
+    modem.send(serverAddress, 0xffef, serialization.serialize({
+      op = "agree",
+      name = currentPlayer,
+      token = currentToken
+    }))
+    drawCenteredText(20, "Отправка подтверждения...", 0x00FF88)
+  else
+    goBackToMenu()
+  end
 end
 
 -- ======== ИНИЦИАЛИЗАЦИЯ ========
@@ -1414,8 +1433,15 @@ while true do
         end
       end
       if y == 23 then
-        if x >= 4 and x <= 13 then goToHelp()
-        elseif x >= 27 and x <= 52 then goToReport() end
+        if x >= 4 and x <= 20 then
+          goToHelp()
+        elseif x >= 22 and x <= 52 then
+          goToReport()
+        elseif x >= 70 and x <= 78 then
+          drawCenteredText(18, "Отзывы в разработке", 0x888888)
+          os.sleep(1)
+          drawMainMenu()
+        end
       end
 
     elseif currentScreen == "agreement" then
@@ -1423,16 +1449,7 @@ while true do
       local btnW = unicode.len(btnText) + 4
       local btnX = math.floor((80 - btnW)/2)
       if y == 22 and x >= btnX and x <= btnX + btnW then
-        if currentToken then
-          modem.send(serverAddress, 0xffef, serialization.serialize({
-            op = "agree",
-            name = currentPlayer,
-            token = currentToken
-          }))
-          drawCenteredText(20, "Отправка подтверждения...", 0x00FF88)
-        else
-          goBackToMenu()
-        end
+        refreshAndAgree()
       end
       if isButtonClicked(backButton, x, y) then
         goBackToMenu()
@@ -1635,6 +1652,43 @@ while true do
             drawCenteredText(20, "Спасибо! Теперь вам доступен магазин.", 0x00FF88)
             os.sleep(1.5)
             goBackToMenu()
+          elseif msg.error and msg.message == "Токен устарел" then
+            drawCenteredText(20, "Сессия устарела. Обновление...", 0xffaa00)
+            os.sleep(1)
+            modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
+            local start = os.clock()
+            local refreshed = false
+            while os.clock() - start < 3 do
+              local evt = {event.pull(0.3)}
+              if evt[1] == "modem_message" then
+                local s, d = evt[3], evt[6]
+                if s == serverAddress then
+                  local ok, m = pcall(serialization.unserialize, d)
+                  if ok and m and m.op == "welcome" and m.token then
+                    currentToken = m.token
+                    emBalance = m.balance or 0.0
+                    resBalance = m.resBalance or 0.0
+                    playerAgreed = m.agreed or false
+                    refreshed = true
+                    break
+                  end
+                end
+              elseif evt[1] == "player_off" or evt[1] == "pim_player_leave" then
+                break
+              end
+            end
+            if refreshed then
+              modem.send(serverAddress, 0xffef, serialization.serialize({
+                op = "agree",
+                name = currentPlayer,
+                token = currentToken
+              }))
+              drawCenteredText(20, "Повторная отправка...", 0x00FF88)
+            else
+              drawCenteredText(20, "Не удалось обновить сессию", 0xFF0000)
+              os.sleep(2)
+              goBackToMenu()
+            end
           else
             drawCenteredText(20, "Ошибка: " .. (msg.message or "неизвестная"), 0xFF0000)
             os.sleep(2)
