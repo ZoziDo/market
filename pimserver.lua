@@ -110,10 +110,34 @@ local function getRealTime()
     return os.date("%d.%m.%Y %H:%M:%S")
 end
 
+-- ========== ДАННЫЕ ИЗ ME СИСТЕМЫ ==========
+local function getMeStats()
+    if not component.isAvailable("me_interface") then
+        return "Компонент не найден", "Проверь подключение"
+    end
+
+    local me = component.me_interface
+    local success, items = pcall(me.getItemsInNetwork, me)
+
+    if not success or not items then
+        return "Ошибка доступа", "Нет данных"
+    end
+
+    local totalItems = 0
+    local uniqueItems = 0
+
+    for _, it in ipairs(items) do
+        totalItems = totalItems + (it.size or 0)
+        uniqueItems = uniqueItems + 1
+    end
+
+    return tostring(totalItems), tostring(uniqueItems)
+end
+
 -- ========== ПЕРЕМЕННЫЕ ОБЩИЕ ==========
 local owner = nil
 local sessions = {}
-local SESSION_TIMEOUT = 31536000
+local SESSION_TIMEOUT = 31536000   -- 1 год (игрок на PIM не потеряет сессию)
 local marketConnected = false
 local logBuffer = {}
 
@@ -183,7 +207,7 @@ function drawInterface()
     fill(1, 4, screenW, 1, "─")
     resetColor()
     
-    -- Заголовки столбцов (теперь 4)
+    -- Заголовки столбцов
     local titles = {"👥 ИГРОКИ", "📦 ME СИСТЕМА", "🔒 БЕЗОПАСНОСТЬ", "📊 СТАТИСТИКА"}
     setColor(ansi.bold, ansi.yellow)
     for i=1,4 do
@@ -209,12 +233,13 @@ function drawInterface()
     end
     resetColor()
     
-    -- 2) ME система (заглушка – можно расширить)
+    -- 2) ME система (реальная статистика)
     setColor(ansi.cyan)
+    local total, unique = getMeStats()
     gotoxy(colX[2], 6)
-    io.write("Данные ME не доступны")
+    io.write("Всего предметов: " .. total)
     gotoxy(colX[2], 7)
-    io.write("(требуется компонент)")
+    io.write("Уникальных типов: " .. unique)
     resetColor()
     
     -- 3) Безопасность
@@ -411,7 +436,6 @@ while true do
             player.transactions = (player.transactions or 0) + 1
             sessions[msg.name].lastAction = os.time()
 
-            -- глобальная статистика продаж
             globalStats.totalSells = (globalStats.totalSells or 0) + 1
             saveGlobalStats()
 
@@ -435,7 +459,6 @@ while true do
             player.transactions = (player.transactions or 0) + 1
             sessions[msg.name].lastAction = os.time()
 
-            -- глобальная статистика покупок
             globalStats.totalBuys = (globalStats.totalBuys or 0) + 1
             saveGlobalStats()
 
@@ -456,7 +479,6 @@ while true do
                 log("WARN", "Неверный токен для report")
                 goto continue
             end
-            -- глобальная статистика репортов
             globalStats.totalReports = (globalStats.totalReports or 0) + 1
             saveGlobalStats()
 
