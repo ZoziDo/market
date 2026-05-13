@@ -513,8 +513,10 @@ local function drawBuyItemsList()
   filteredItems = filtered
   local maxScroll = math.max(1, #filtered - visibleRows + 1)
   listScroll = math.max(1, math.min(listScroll, maxScroll))
+  
   gpu.setBackground(0x000000)
   gpu.fill(2, 6, 78, visibleRows, " ")
+  
   for i = 1, visibleRows do
     local itemIndex = listScroll + i - 1
     local item = filtered[itemIndex]
@@ -525,6 +527,13 @@ local function drawBuyItemsList()
     drawSingleRow(y, item, isHovered, isSelected, itemIndex)
   end
   drawScrollBar()
+
+  -- ←←← ДОБАВЬ ЭТО ←←←
+  if selectedItem then
+    updateSelectorDisplay(selectedItem)
+  elseif #filteredItems > 0 then
+    updateSelectorDisplay(filteredItems[listScroll])
+  end
 end
 
 local function smoothScroll(steps)
