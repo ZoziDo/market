@@ -17,6 +17,8 @@ for _, item in ipairs(buyItemsData) do
   buyItemMap[item.internalName] = item
 end
 
+local drawAgreementScreen = dofile("/home/agreement.lua")
+
 local modem = component.modem
 local pimList = {}
 for addr in component.list("pim") do table.insert(pimList, addr) end
@@ -69,8 +71,6 @@ local AUTH_TIMEOUT = 3
 local accountRequestTime = 0
 local ACCOUNT_TIMEOUT = 3
 local alreadyAuthorized = false
-local helpPage = 1
-local HELP_PAGES = 3
 
 -- Переменные магазина
 local shopItems = {}
@@ -160,7 +160,7 @@ end
 
 local function drawBottomPanel()
   gpu.setForeground(0xcc3342) gpu.set(4,23,"[Помощь]")
-  gpu.setForeground(0xcc3342) gpu.set(27,23,"[Сообщить о проблеме]")
+  gpu.setForeground(0xcc3342) gpu.set(30,23,"[Сообщить о проблеме]")
   gpu.setForeground(0xcc3342) gpu.set(70,23,"[Отзывы]")
 end
 
@@ -1015,8 +1015,6 @@ local function drawShopMenu()
   drawFlexButton(backButton)
 end
 
-local drawHelpScreen = dofile("/home/help_screen.lua")
-
 local function drawWelcomeScreen()
   gpu.setBackground(0x000000) gpu.fill(1,1,80,25," ")
   drawBigTitle()
@@ -1176,9 +1174,8 @@ local function goToShop()
 end
 local function goToUtility() currentScreen="utility" clear() drawCenteredText(8,"Полезности (в разработке)",0x00FF00) end
 local function goToHelp()
-  currentScreen = "help"
-  helpPage = 1
-  drawHelpScreen(helpPage, gpu, unicode, drawCenteredText, drawFlexButton, backButton)
+    currentScreen = "agreement"
+    drawAgreementScreen()
 end
 local function goBackToMenu() currentScreen="menu" drawMainMenu() end
 
@@ -1389,17 +1386,12 @@ while true do
         if x >= 4 and x <= 13 then goToHelp()
         elseif x >= 27 and x <= 52 then goToReport() end
       end
-    elseif currentScreen == "help" then
-      local pageStr = "⟵  " .. helpPage .. "  ⟶"
-      local pageX = math.floor((80 - unicode.len(pageStr)) / 2) + 1
-      if y == 20 then
-        if x >= pageX and x < pageX + 5 and helpPage > 1 then
-          helpPage = helpPage - 1
-          drawHelpScreen(helpPage, gpu, unicode, drawCenteredText, drawFlexButton, backButton)
-        elseif x >= pageX + unicode.len(pageStr) - 5 and x < pageX + unicode.len(pageStr) and helpPage < HELP_PAGES then
-          helpPage = helpPage + 1
-          drawHelpScreen(helpPage, gpu, unicode, drawCenteredText, drawFlexButton, backButton)
-        end
+    elseif currentScreen == "agreement" then
+      local btnText = "[ ПОНЯТНО ]"
+      local btnW = unicode.len(btnText) + 4
+      local btnX = math.floor((80 - btnW)/2)
+      if y == 22 and x >= btnX and x <= btnX + btnW then
+        goBackToMenu()
       end
       if isButtonClicked(backButton, x, y) then
         goBackToMenu()
