@@ -113,7 +113,7 @@ end
 -- ========== ПЕРЕМЕННЫЕ ОБЩИЕ ==========
 local owner = nil
 local sessions = {}
-local SESSION_TIMEOUT = 1800
+local SESSION_TIMEOUT = 31536000
 local marketConnected = false
 local logBuffer = {}
 
