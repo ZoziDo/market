@@ -703,3 +703,5 @@ while true do
     end
     ::continue::
 end
+-- добавим закрывающий end для while
+end
