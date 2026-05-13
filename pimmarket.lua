@@ -546,39 +546,34 @@ local function drawScrollBar()
 end
 
 local function drawBuyItemsList()
-  local filtered = getFilteredItems()
-  filteredItems = filtered
-  local maxScroll = math.max(1, #filtered - visibleRows + 1)
-  listScroll = math.max(1, math.min(listScroll, maxScroll))
-  
-  gpu.setBackground(0x000000)
-  gpu.fill(2, 6, 78, visibleRows, " ")
-  
-  for i = 1, visibleRows do
-    local itemIndex = listScroll + i - 1
-    local item = filtered[itemIndex]
-    if not item then break end
+    filteredItems = getFilteredItems()
 
-    local y = 5 + i
-    local isSelected = (itemIndex == selectedIndex)
-    local isHovered = (itemIndex == hoveredIndex)
+    local maxScroll = math.max(1, #filteredItems - visibleRows + 1)
+    listScroll = math.max(1, math.min(listScroll, maxScroll))
 
-    drawSingleRow(y, item, isHovered, isSelected, itemIndex)
-  end
+    gpu.setBackground(0x000000)
+    gpu.fill(2, 6, 78, visibleRows, " ")
 
-  drawScrollBar()
+    for i = 1, visibleRows do
+        local itemIndex = listScroll + i - 1
+        local item = filteredItems[itemIndex]
+        if not item then break end
 
-  local showItem = nil
+        drawSingleRow(
+            5 + i,
+            item,
+            itemIndex == hoveredIndex,
+            itemIndex == selectedIndex,
+            itemIndex
+        )
+    end
 
-  if selectedItem then
-    showItem = selectedItem
-  elseif hoveredIndex > 0 and filteredItems[hoveredIndex] then
-    showItem = filteredItems[hoveredIndex]
-  elseif filteredItems[listScroll] then
-    showItem = filteredItems[listScroll]
-  end
+    drawScrollBar()
 
-  updateSelectorDisplay(showItem)
+    -- СЕЛЕКТОР ТОЛЬКО ПО ВЫБРАННОМУ ПРЕДМЕТУ
+    if selectedItem then
+        updateSelectorDisplay(selectedItem)
+    end
 end
 
 local function smoothScroll(steps)
@@ -1117,10 +1112,6 @@ local function goToSell()
   drawBuyStatic()
   drawBuyItemsList()
   drawBuyButtons()
-
-  if #filteredItems > 0 then
-      updateSelectorDisplay(filteredItems[1])
-  end
 end
 
 local function drawShopMenu()
@@ -1410,13 +1401,18 @@ while true do
         local relativeRow = y - 5
         local clickedIndex = listScroll + relativeRow - 1
         local item = filteredItems[clickedIndex]
+    
         if item and (currentShopMode ~= "buy" or item.qty > 0) then
+    
           selectedIndex = clickedIndex
           selectedItem = item
           hoveredIndex = 0
+    
+          -- 🔥 ВАЖНО: обновляем только по клику
+          updateSelectorDisplay(selectedItem)
+    
           drawBuyItemsList()
           drawBuyButtons()
-          updateSelectorDisplay(selectedItem)
         end
       end
 
@@ -1663,12 +1659,6 @@ while true do
         elseif direction == 1 then
             smoothScroll(-1)
         end
-
-        -- показываем первый видимый предмет
-        local item = filteredItems[listScroll]
-        if item then
-            updateSelectorDisplay(item)
-        end
     end
 
   elseif e == "mouse_move" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
@@ -1678,27 +1668,14 @@ while true do
         local rel = y - 5
         local newHover = listScroll + rel - 1
 
-        if newHover <= #filteredItems then
-            if newHover ~= hoveredIndex then
-                hoveredIndex = newHover
-                drawBuyItemsList()
-
-                local hoveredItem = filteredItems[newHover]
-                if hoveredItem then
-                    updateSelectorDisplay(hoveredItem)
-                end
-            end
+        if newHover <= #filteredItems and newHover ~= hoveredIndex then
+            hoveredIndex = newHover
+            drawBuyItemsList()
         end
     else
         if hoveredIndex ~= 0 then
             hoveredIndex = 0
             drawBuyItemsList()
-
-            if selectedItem then
-                updateSelectorDisplay(selectedItem)
-            elseif filteredItems[listScroll] then
-                updateSelectorDisplay(filteredItems[listScroll])
-            end
         end
     end
 
