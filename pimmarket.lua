@@ -154,7 +154,6 @@ local function updateSelectorDisplay(item)
         os.sleep(0.05)
         pcall(selector.setSlot, 1, stack)
 
-        print("[SELECTOR] "..serialization.serialize(stack))
     end)
 
     if not ok then
@@ -835,7 +834,6 @@ local function goToSellConfirm(item)
   sellConfirmItem = item
   foundAmount = 0
   showSellPopup = false
-  updateSelectorDisplay(nil)
   drawSellScanScreen()
 end
 
@@ -1100,6 +1098,7 @@ local function goToSell()
     drawMainMenu()
     return
   end
+
   currentScreen = "shop_sell"
   currentShopMode = "sell"
   listScroll = 1
@@ -1112,10 +1111,15 @@ local function goToSell()
   searchInput = ""
   showOnlyAvailable = false
   buyFilterMode = "all"
+
   loadSellItems()
   drawBuyStatic()
   drawBuyItemsList()
   drawBuyButtons()
+
+  if #filteredItems > 0 then
+      updateSelectorDisplay(filteredItems[1])
+  end
 end
 
 local function drawShopMenu()
@@ -1314,8 +1318,20 @@ end
 local function goBackToMenu()
   showShopDenied = false
   currentScreen = "menu"
-  drawMainMenu()
+
+  -- очистка селектора
+  selectedItem = nil
+  selectedSellItem = nil
+  hoveredIndex = 0
+  selectedIndex = 0
+  hoveredSellIndex = 0
+  selectedSellIndex = 0
+
   updateSelectorDisplay(nil)
+  pcall(selector.setSlot, 0, nil)
+  pcall(selector.setSlot, 1, nil)
+
+  drawMainMenu()
 end
 
 local function goToHelp()
@@ -1754,7 +1770,15 @@ while true do
     currentToken = nil
     alreadyAuthorized = false
     currentScreen = "welcome"
-    updateSelectorDisplay(nil)
+
+    selectedItem = nil
+    hoveredIndex = 0
+    selectedIndex = 0
+
+    pcall(updateSelectorDisplay, nil)
+    pcall(selector.setSlot, 0, nil)
+    pcall(selector.setSlot, 1, nil)
+
     drawWelcomeScreen()
 
   elseif e == "modem_message" then
