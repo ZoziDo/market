@@ -752,7 +752,7 @@ local function goToPurchase(item)
   if not item then return end
   purchaseItem = item
   purchaseQuantity = 0
-  updateSelectorDisplay(nil)
+  -- НЕ очищаем селектор при переходе в окно количества
   drawPurchaseScreen()
 end
 
@@ -834,6 +834,7 @@ local function goToSellConfirm(item)
   sellConfirmItem = item
   foundAmount = 0
   showSellPopup = false
+  -- НЕ очищаем селектор
   drawSellScanScreen()
 end
 
@@ -1318,8 +1319,13 @@ end
 local function goBackToMenu()
   showShopDenied = false
   currentScreen = "menu"
+  drawMainMenu()
+  updateSelectorDisplay(nil)
+  pcall(selector.setSlot, 0, nil)
+  pcall(selector.setSlot, 1, nil)
+end
 
-  -- очистка селектора
+local function clearSelectorState()
   selectedItem = nil
   selectedSellItem = nil
   hoveredIndex = 0
@@ -1330,8 +1336,6 @@ local function goBackToMenu()
   updateSelectorDisplay(nil)
   pcall(selector.setSlot, 0, nil)
   pcall(selector.setSlot, 1, nil)
-
-  drawMainMenu()
 end
 
 local function goToHelp()
