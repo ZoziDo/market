@@ -28,6 +28,14 @@ local PULL_DIRECTION = "up"
 
 -- ==================== ПОИСК СЕЛЕКТОРА ====================
 local selector = nil
+if selector then
+    print("=== METHODS ===")
+    for k,v in pairs(selector) do
+        if type(v)=="function" then
+            print(k)
+        end
+    end
+end
 for addr in component.list("openperipheral_selector") do
     selector = component.proxy(addr)
     break
@@ -113,27 +121,44 @@ local showShopDenied = false   -- флаг для смены сообщения
 -- ==================== ОБНОВЛЕНИЕ СЕЛЕКТОРА ====================
 local function updateSelectorDisplay(item)
     if not selector then return end
-    
-    local success, err = pcall(function()
+
+    local ok, err = pcall(function()
+        -- очистка
         if not item then
             selector.setSlot(0, nil)
+            selector.setSlot(1, nil)
             return
         end
 
-        -- Защита от плохих данных
-        local id = item.internalName or item.name
-        if not id then return end
+        local raw = item.internalName or item.name
+        if not raw then return end
+
+        -- нормализация ID
+        local id = raw
+        local dmg = item.damage or item.dmg or 0
+
+        -- если формат minecraft:item:0
+        local a,b,c = raw:match("([^:]+):([^:]+):([^:]+)")
+        if a and b and c then
+            id = a .. ":" .. b
+            dmg = tonumber(c) or dmg
+        end
 
         local stack = {
             id = id,
-            dmg = item.damage or 0
+            dmg = dmg
         }
-        
-        selector.setSlot(0, stack)
+
+        -- запись в оба слота
+        pcall(selector.setSlot, 0, stack)
+        os.sleep(0.05)
+        pcall(selector.setSlot, 1, stack)
+
+        print("[SELECTOR] "..serialization.serialize(stack))
     end)
-    
-    if not success then
-        print("❌ Ошибка селектора: " .. tostring(err))
+
+    if not ok then
+        print("Selector error: "..tostring(err))
     end
 end
 
@@ -534,19 +559,27 @@ local function drawBuyItemsList()
     local itemIndex = listScroll + i - 1
     local item = filtered[itemIndex]
     if not item then break end
+
     local y = 5 + i
     local isSelected = (itemIndex == selectedIndex)
     local isHovered = (itemIndex == hoveredIndex)
+
     drawSingleRow(y, item, isHovered, isSelected, itemIndex)
   end
+
   drawScrollBar()
 
-  -- ←←← ДОБАВЬ ЭТО ←←←
+  local showItem = nil
+
   if selectedItem then
-    updateSelectorDisplay(selectedItem)
-  elseif #filteredItems > 0 then
-    updateSelectorDisplay(filteredItems[listScroll])
+    showItem = selectedItem
+  elseif hoveredIndex > 0 and filteredItems[hoveredIndex] then
+    showItem = filteredItems[hoveredIndex]
+  elseif filteredItems[listScroll] then
+    showItem = filteredItems[listScroll]
   end
+
+  updateSelectorDisplay(showItem)
 end
 
 local function smoothScroll(steps)
@@ -1603,41 +1636,50 @@ while true do
     local direction = ev[5]
     local x = ev[3]
     local y = ev[4]
+
     if x >= 2 and x <= 78 and y >= 6 and y <= 17 then
-      if direction == -1 then
-        smoothScroll(1)
-      elseif direction == 1 then
-        smoothScroll(-1)
-      end
-      -- Обновляем селектор после скролла
-      if selectedItem then
-        updateSelectorDisplay(selectedItem)
-      elseif #filteredItems > 0 then
-        updateSelectorDisplay(filteredItems[listScroll])
-      end
+        if direction == -1 then
+            smoothScroll(1)
+        elseif direction == 1 then
+            smoothScroll(-1)
+        end
+
+        -- показываем первый видимый предмет
+        local item = filteredItems[listScroll]
+        if item then
+            updateSelectorDisplay(item)
+        end
     end
 
   elseif e == "mouse_move" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
     local x, y = ev[3], ev[4]
+
     if y >= 6 and y <= 17 and x >= 2 and x <= 77 then
-      local rel = y - 5
-      local newHover = listScroll + rel - 1
-      if newHover ~= hoveredIndex and newHover <= #filteredItems then
-        hoveredIndex = newHover
-        drawBuyItemsList()
-        local hoveredItem = filteredItems[newHover]
-        if hoveredItem then
-          updateSelectorDisplay(hoveredItem)
+        local rel = y - 5
+        local newHover = listScroll + rel - 1
+
+        if newHover <= #filteredItems then
+            if newHover ~= hoveredIndex then
+                hoveredIndex = newHover
+                drawBuyItemsList()
+
+                local hoveredItem = filteredItems[newHover]
+                if hoveredItem then
+                    updateSelectorDisplay(hoveredItem)
+                end
+            end
         end
-      end
     else
-      if hoveredIndex ~= 0 then
-        hoveredIndex = 0
-        drawBuyItemsList()
-        if selectedItem then
-          updateSelectorDisplay(selectedItem)
+        if hoveredIndex ~= 0 then
+            hoveredIndex = 0
+            drawBuyItemsList()
+
+            if selectedItem then
+                updateSelectorDisplay(selectedItem)
+            elseif filteredItems[listScroll] then
+                updateSelectorDisplay(filteredItems[listScroll])
+            end
         end
-      end
     end
 
   elseif e == "key_down" and currentScreen == "report" and canSendReport() then
