@@ -193,31 +193,17 @@ local shopMenuButtons = {
   bundle = {x=31,xs=20,y=17,ys=3,text="Наборы/Квесты",tx=4,ty=1,bg=0x444444,fg=0x00FF88}
 }
 
-
 -- ==================== ПРОВЕРКА СБРОСА РЕПОРТА ====================
-    elseif currentScreen == "report" then
-      if isButtonClicked(backButton, x, y) then
-        goBackToMenu()
-      elseif canSendReport() then
-        local sendBtn = {x=20, y=14, xs=40, ys=1}
-        if isButtonClicked(sendBtn, x, y) and reportInput ~= "" then
-          -- Отправляем репорт на сервер
-          if currentToken then
-            modem.send(serverAddress, 0xffef, serialization.serialize({
-              op = "report",
-              name = currentPlayer,
-              token = currentToken,
-              text = reportInput,
-              time = os.date("%d.%m.%Y %H:%M:%S")
-            }))
-          end
-          lastReportTime = os.time()
-          drawCenteredText(18, "Сообщение успешно отправлено! Ожидайте ответа.", 0x00ff88)
-          os.sleep(2)
-          goBackToMenu()
-        end
-      end
-    end
+local function canSendReport()
+  if not lastReportTime then return true end
+  local now = os.time()
+  local reportDate = os.date("*t", lastReportTime)
+  local nowDate = os.date("*t", now)
+  if reportDate.day ~= nowDate.day or reportDate.month ~= nowDate.month or reportDate.year ~= nowDate.year then
+    return true
+  end
+  return false
+end
 
 -- ==================== ЗАГРУЗКА ПРЕДМЕТОВ ====================
 local function loadBuyItems()
@@ -1249,19 +1235,20 @@ while true do
       elseif canSendReport() then
         local sendBtn = {x=20, y=14, xs=40, ys=1}
         if isButtonClicked(sendBtn, x, y) and reportInput ~= "" then
-          local dateStr = os.date("%d.%m.%Y %H:%M:%S")
-          local message = "Игрок: " .. currentPlayer .. "\nДата: " .. dateStr .. "\nСообщение: " .. reportInput
-          local ok = sendToTelegram(message)
-          if ok then
-            lastReportTime = os.time()
-            drawCenteredText(18, "Сообщение успешно отправлено! Ожидайте ответа.", 0x00ff88)
-            os.sleep(2)
-            goBackToMenu()
-          else
-            drawCenteredText(18, "Ошибка отправки. Проверьте интернет.", 0xff0000)
-            os.sleep(1.5)
-            drawReportScreen()
+          -- Отправляем репорт на сервер через модем
+          if currentToken then
+            modem.send(serverAddress, 0xffef, serialization.serialize({
+              op = "report",
+              name = currentPlayer,
+              token = currentToken,
+              text = reportInput,
+              time = os.date("%d.%m.%Y %H:%M:%S")
+            }))
           end
+          lastReportTime = os.time()
+          drawCenteredText(18, "Сообщение успешно отправлено! Ожидайте ответа.", 0x00ff88)
+          os.sleep(2)
+          goBackToMenu()
         end
       end
     end
