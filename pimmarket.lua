@@ -44,14 +44,6 @@ end
 
 -- ==================== ПОИСК СЕЛЕКТОРА ====================
 local selector = nil
-if selector then
-    print("=== METHODS ===")
-    for k,v in pairs(selector) do
-        if type(v)=="function" then
-            print(k)
-        end
-    end
-end
 for addr in component.list("openperipheral_selector") do
     selector = component.proxy(addr)
     break
@@ -63,11 +55,6 @@ if not selector then
     end
 end
 
-if selector then
-    print("✅ Селектор найден, адрес:", selector.address)
-else
-    print("❌ Селектор не найден! Отображение предметов недоступно.")
-end
 
 local function debugPlayerInventory()
     if not pimAddr then return end
@@ -1356,7 +1343,6 @@ end
 -- ======== ИНИЦИАЛИЗАЦИЯ ========
 drawWelcomeScreen()
 modem.send(serverAddress,0xffef,serialization.serialize({op="register"}))
-print("Терминал отправляет регистрацию...")
 
 -- ======== ГЛАВНЫЙ ЦИКЛ ========
 while true do
