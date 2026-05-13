@@ -1074,9 +1074,9 @@ local function drawMainMenu()
     if not playerAgreed then
       gpu.setForeground(0xFFAA00)
       if showShopDenied then
-        drawCenteredText(8, "Доступ запрещён. Примите соглашение [Соглашение]", 0xFFAA00)
+        drawCenteredText(7, "Доступ запрещён. Примите соглашение [Соглашение]", 0xFFAA00)
       else
-        drawCenteredText(8, "Вы не приняли пользовательское соглашение! Нажмите [Соглашение]", 0xFF5555)
+        drawCenteredText(7, "Вы не приняли пользовательское соглашение! Нажмите [Соглашение]", 0xFF5555)
       end
     end
 
