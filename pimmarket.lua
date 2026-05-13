@@ -117,7 +117,7 @@ local reportInput = ""
 local lastReportTime = nil
 local showShopDenied = false   -- флаг для смены сообщения
 
--- ==================== ОБНОВЛЕНИЕ СЕЛЕКТОРА ====================
+-- ==================== ОБНОВЛЕНИЕ СЕЛЕКТОРА (OpenPeripheral) ====================
 local function updateSelectorDisplay(item)
     if not selector then return end
     
@@ -128,9 +128,8 @@ local function updateSelectorDisplay(item)
         end
         
         local stack = {
-            id = item.internalName,      -- ← главное!
-            dmg = 0,                     -- damage (обычно 0)
-            -- label = item.displayName  -- можно добавить, но не обязательно
+            id = item.internalName,   -- самое важное
+            dmg = 0,
         }
         
         selector.setSlot(0, stack)
