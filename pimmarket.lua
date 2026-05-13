@@ -193,7 +193,7 @@ end
 
 local function drawBottomPanel()
   gpu.setForeground(0xcc3342) 
-  gpu.set(4, 23, "[Сообщить о проблеме]")
+  gpu.set(4, 23, "[Поддержка]")
   gpu.set(35, 23, "[Соглашение]")
   gpu.set(70, 23, "[Отзывы]")
 end
@@ -873,7 +873,7 @@ local function performSell()
   gpu.setBackground(0x000000)
   gpu.fill(1, 17, 80, 1, " ")
   drawCenteredText(17, "Успешно! +" .. string.format("%.2f", value) .. " " .. currencyName, 0x00ff88)
-  os.sleep(0.8)                                      -- быстрый переход (0.8 секунды)
+  os.sleep(0.8)                                     
 
   currentScreen = "shop_sell"
   showSellPopup = false
@@ -898,7 +898,7 @@ local function performBuy()
   local actualQty = getActualItemQuantity(item.internalName)
   if actualQty <= 0 then
     drawCenteredText(20, "Товар закончился! Обновление списка...", 0xff0000)
-    os.sleep(1.5)
+    os.sleep(0.8)
     loadBuyItems()
     drawBuyStatic()
     drawBuyItemsList()
@@ -919,7 +919,7 @@ local function performBuy()
 
   if qty <= 0 then
     drawCenteredText(20, "Выберите количество!", 0xff0000)
-    os.sleep(1.5)
+    os.sleep(0.8)
     currentScreen = "shop_buy"
     drawBuyStatic()
     drawBuyItemsList()
@@ -929,7 +929,7 @@ local function performBuy()
 
   if currency == "em" and emBalance < totalCost then
     drawCenteredText(20, "Недостаточно Эмов!", 0xff0000)
-    os.sleep(1.5)
+    os.sleep(0.8)
     currentScreen = "shop_buy"
     drawBuyStatic()
     drawBuyItemsList()
@@ -937,7 +937,7 @@ local function performBuy()
     return
   elseif currency == "res" and resBalance < totalCost then
     drawCenteredText(20, "Недостаточно Ресов!", 0xff0000)
-    os.sleep(1.5)
+    os.sleep(0.8)
     currentScreen = "shop_buy"
     drawBuyStatic()
     drawBuyItemsList()
@@ -1005,7 +1005,7 @@ local function performBuy()
   else
     drawCenteredText(20, "Не удалось выдать предметы! Ошибка: " .. (lastError or "неизвестная"), 0xff0000)
   end
-  os.sleep(2.5)
+  os.sleep(0.8)
   currentScreen = "shop_buy"
   drawBuyStatic()
   drawBuyItemsList()
@@ -1520,7 +1520,7 @@ while true do
             drawSellScanScreen()
         else
             drawCenteredText(17, "Предмет не найден!", 0xff0000)
-            os.sleep(1.2)
+            os.sleep(0.8)
             drawSellScanScreen()
         end
       elseif y == 15 and x >= 30 and x <= 50 then
@@ -1532,7 +1532,7 @@ while true do
             drawSellScanScreen()
         else
             drawCenteredText(17, "Предмет не найден!", 0xff0000)
-            os.sleep(1.5)
+            os.sleep(0.8)
             drawSellScanScreen()
         end
       end
@@ -1630,7 +1630,7 @@ while true do
           end
           lastReportTime = os.time()
           drawCenteredText(18, "Сообщение успешно отправлено! Ожидайте ответа.", 0x00ff88)
-          os.sleep(2)
+          os.sleep(0.8)
           goBackToMenu()
         end
       end
@@ -1791,7 +1791,7 @@ while true do
             playerAgreed = true
             showShopDenied = false
             drawCenteredText(20, "Спасибо! Теперь вам доступен магазин.", 0x00FF88)
-            os.sleep(1.5)
+            os.sleep(0.8)
             drawMainMenu()
             currentScreen = "menu"
           elseif msg.error and msg.message == "Токен устарел" then
