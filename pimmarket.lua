@@ -682,7 +682,7 @@ end
 -- ========== ПРОДАЖА ==========
 local function drawSellPopup()
   local popupWidth = 40
-  local popupHeight = 9
+  local popupHeight = 10
   local popupX = math.floor((80 - popupWidth) / 2)
   local popupY = 10
 
@@ -705,8 +705,8 @@ local function drawSellPopup()
   gpu.setForeground(0x00ff88)
   gpu.set(popupX+3, popupY+5, "Вы получите: " .. string.format("%.2f", value) .. " " .. currency)
 
-  local yesBtn = {x=popupX+5, y=popupY+7, xs=10, ys=1, text="[ Принять ] ", bg=0x004400, fg=0x00ff88}
-  local noBtn  = {x=popupX+popupWidth-15, y=popupY+7, xs=10, ys=1, text="[ Отмена ]", bg=0x440000, fg=0xff5555}
+  local yesBtn = {x=popupX+5, y=popupY+7, xs=13, ys=1, text="[ Принять ]", bg=0x004400, fg=0x00ff88}
+  local noBtn  = {x=popupX+popupWidth-15, y=popupY+7, xs=12, ys=1, text="[ Отмена ]", bg=0x440000, fg=0xff5555}
   drawFlexButton(yesBtn)
   drawFlexButton(noBtn)
 end
@@ -1033,9 +1033,9 @@ local function drawWelcomeScreen()
   drawBigTitle()
   gpu.setForeground(0x00FF00)
   drawCenteredText(17, "↓   Встаньте на PIM   ↓", 0x00FF00)
-  drawCenteredText(18,  "━━━━━━━━━━━━━━━━━━━", 0x00FF00)
+  drawCenteredText(19,  "━━━━━━━━━━━━━━━━━━━", 0x00FF00)
   gpu.setForeground(0x414243)
-  drawCenteredText(21, "По любым вопросам пишите в Telegram: f0rb4ik", 0x414243)
+  drawCenteredText(22, "По любым вопросам пишите в Telegram: f0rb4ik", 0x414243)
   gpu.setBackground(0x000000)
 end
 
@@ -1043,9 +1043,9 @@ local function drawAuthScreen()
   gpu.setBackground(0x000000) gpu.fill(1,1,80,25," ")
   drawBigTitle()
   gpu.setForeground(0xFFFFFF)
-  drawCenteredText(17, "Авторизация....", 0xFFFFFF)
+  drawCenteredText(19, "Авторизация....", 0xFFFFFF)
   gpu.setForeground(0x414243)
-  drawCenteredText(21, "По любым вопросам пишите в Telegram: f0rb4ik", 0x414243)
+  drawCenteredText(22, "По любым вопросам пишите в Telegram: f0rb4ik", 0x414243)
   gpu.setBackground(0x000000)
 end
 
