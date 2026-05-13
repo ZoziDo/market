@@ -82,6 +82,11 @@ local currentShopMode = "buy"
 
 local buyFilterMode = "all"
 
+local blacklist = {
+    ["customnpcs:npcMoney"] = true,
+    -- при необходимости добавьте другие internalName
+}
+
 local listScroll = 1
 local visibleRows = 12
 local selectedIndex = 0
@@ -206,7 +211,7 @@ local function canSendReport()
   return false
 end
 
--- ==================== ЗАГРУЗКА ПРЕДМЕТОВ ====================
+-- ==================== ЗАГРУЗКА ПРЕДМЕТОВ (с чёрным списком) ====================
 local function loadBuyItems()
   if not component.isAvailable("me_interface") then return end
   local me = component.me_interface
@@ -219,6 +224,12 @@ local function loadBuyItems()
   local newFound = {}
   for _, meItem in ipairs(rawItems) do
     local name = meItem.name
+
+    -- Пропускаем предметы из чёрного списка
+    if blacklist[name] then
+      goto continue
+    end
+
     local qty = meItem.size or 0
     local mapping = buyItemMap[name]
     local displayName = mapping and mapping.displayName or (meItem.label or name)
@@ -236,6 +247,7 @@ local function loadBuyItems()
     if not knownItems[name] and qty > 0 then
       table.insert(newFound, {name = displayName, qty = qty})
     end
+    ::continue::
   end
   if #newFound > 0 and currentToken then
     modem.send(serverAddress, 0xffef, serialization.serialize({
