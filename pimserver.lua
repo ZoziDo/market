@@ -400,8 +400,6 @@ end
 
 -- ========== ОБРАБОТКА КЛАВИШ И МЫШИ ==========
 local function handleKey(keyCode, char, playerFromEvent)
-    -- Игрок, стоящий на PIM, хранится в currentPIMPlayer (обновляется по pim-событиям)
-    -- Для админ-команд проверяем currentPIMPlayer
     local currentPlayer = currentPIMPlayer
 
     if keyCode == 97 or keyCode == 65 then   -- A / a
@@ -522,8 +520,7 @@ while true do
     local etype = ev[1]
 
     if etype == "key_down" then
-        -- ev[2] – адрес, ev[3] – символ (char), ev[4] – скан-код (key), ev[5] – имя игрока (но оно может быть nil)
-        local keyCode = ev[4]   -- скан-код (для стрелок 200,208)
+        local keyCode = ev[4]
         local char = ev[3]
         handleKey(keyCode, char, ev[5])
     elseif etype == "touch" then
@@ -531,7 +528,7 @@ while true do
         local player = ev[5]
         handleTouch(x, y, player)
     elseif etype == "player_on" or etype == "pim_player_enter" then
-        local playerName = ev[2] or ev[3]   -- зависит от версии OC
+        local playerName = ev[2] or ev[3]
         if type(playerName) ~= "string" then playerName = tostring(playerName) end
         onPlayerEnter(playerName, ev[3])
     elseif etype == "player_off" or etype == "pim_player_leave" then
