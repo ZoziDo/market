@@ -797,7 +797,7 @@ local function performBuy()
 
   -- Извлекаем предметы из МЭ в PIM (вверх)
   local extracted = 0
-  local success = me.extractItem({name = item.internalName, size = qty}, 0, PULL_DIRECTION)
+  local extracted = me.extract({name = item.internalName}, qty, PULL_DIRECTION) or 0
   if success then
     extracted = qty   -- упрощение: обычно возвращает true/false, точный остаток не узнать
   else
