@@ -35,7 +35,7 @@ local function resetColor()
     io.write(ansi.reset)
 end
 
--- ========== БАЗА ДАННЫХ ==========
+-- ========== БАЗА ДАННЫХ ИГРОКОВ ==========
 local DB_PATH = "/home/players.db"
 local players = {}
 if filesystem.exists(DB_PATH) then
@@ -54,7 +54,35 @@ local function saveDB()
     file:close()
 end
 
--- ========== РЕАЛЬНОЕ ВРЕМЯ ==========
+-- ========== ГЛОБАЛЬНАЯ СТАТИСТИКА ==========
+local STATS_PATH = "/home/global_stats.db"
+local globalStats = {
+    totalReports = 0,
+    totalBuys = 0,
+    totalSells = 0
+}
+
+if filesystem.exists(STATS_PATH) then
+    local file = io.open(STATS_PATH, "r")
+    local raw = file:read("*a")
+    file:close()
+    if raw and #raw > 0 then
+        local success, data = pcall(serialization.unserialize, raw)
+        if success and data then
+            globalStats.totalReports = data.totalReports or 0
+            globalStats.totalBuys = data.totalBuys or 0
+            globalStats.totalSells = data.totalSells or 0
+        end
+    end
+end
+
+local function saveGlobalStats()
+    local file = io.open(STATS_PATH, "w")
+    file:write(serialization.serialize(globalStats))
+    file:close()
+end
+
+-- ========== РЕАЛЬНОЕ ВРЕМЯ (необязательно для статистики) ==========
 local function getRealTime()
     if component.isAvailable("internet") then
         local ok, result = pcall(function()
@@ -82,7 +110,7 @@ local function getRealTime()
     return os.date("%d.%m.%Y %H:%M:%S")
 end
 
--- ========== ПЕРЕМЕННЫЕ ==========
+-- ========== ПЕРЕМЕННЫЕ ОБЩИЕ ==========
 local owner = nil
 local sessions = {}
 local SESSION_TIMEOUT = 1800
@@ -90,25 +118,25 @@ local marketConnected = false
 local logBuffer = {}
 
 local screenW, screenH = 80, 25
-local colX = {5, 30, 55}
+local colX = {5, 30, 55, 80}  -- четыре столбца
 local colWidth = 25
 local logStartY = 20
 local maxLogLines = 14
 
 local function updateScreenSize()
     local w, h = gpu.getResolution()
-    -- Ограничиваем максимальную ширину, чтобы избежать ошибок формата
     if w > 200 then w = 200 end
-    if w < 40 then w = 40 end
+    if w < 80 then w = 80 end
     if h < 15 then h = 15 end
     screenW, screenH = w, h
 
     local usable = screenW - 8
-    colWidth = math.max(15, math.floor(usable / 3))
+    colWidth = math.max(12, math.floor(usable / 4))
     colX = {
         4,
         4 + colWidth,
-        4 + colWidth * 2
+        4 + colWidth * 2,
+        4 + colWidth * 3
     }
     logStartY = math.min(18, screenH - 5)
     maxLogLines = screenH - logStartY - 3
@@ -155,16 +183,16 @@ function drawInterface()
     fill(1, 4, screenW, 1, "─")
     resetColor()
     
-    -- Заголовки столбцов
-    local titles = {"👥 ИГРОКИ", "📦 ME СИСТЕМА", "🔒 БЕЗОПАСНОСТЬ"}
+    -- Заголовки столбцов (теперь 4)
+    local titles = {"👥 ИГРОКИ", "📦 ME СИСТЕМА", "🔒 БЕЗОПАСНОСТЬ", "📊 СТАТИСТИКА"}
     setColor(ansi.bold, ansi.yellow)
-    for i=1,3 do
+    for i=1,4 do
         gotoxy(colX[i], 5)
         io.write(titles[i] .. string.rep(" ", colWidth - #titles[i]))
     end
     resetColor()
     
-    -- 1) Игроки
+    -- 1) Игроки (активные сессии)
     setColor(ansi.green)
     local playerList = {}
     for name, s in pairs(sessions) do
@@ -181,7 +209,7 @@ function drawInterface()
     end
     resetColor()
     
-    -- 2) ME система (заглушка)
+    -- 2) ME система (заглушка – можно расширить)
     setColor(ansi.cyan)
     gotoxy(colX[2], 6)
     io.write("Данные ME не доступны")
@@ -197,6 +225,16 @@ function drawInterface()
     for _ in pairs(players) do playersCount = playersCount + 1 end
     gotoxy(colX[3], 7)
     io.write("Игроков в БД: " .. playersCount)
+    resetColor()
+    
+    -- 4) Статистика (репорты, покупки, продажи)
+    setColor(ansi.yellow)
+    gotoxy(colX[4], 6)
+    io.write("Репортов: " .. globalStats.totalReports)
+    gotoxy(colX[4], 7)
+    io.write("Покупок: " .. globalStats.totalBuys)
+    gotoxy(colX[4], 8)
+    io.write("Продаж: " .. globalStats.totalSells)
     resetColor()
     
     -- Область логов
@@ -238,7 +276,7 @@ end)
 
 event.timer(1, function() drawInterface() end, math.huge)
 
--- ========== БАЗОВЫЕ ФУНКЦИИ ==========
+-- ========== БАЗОВЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ С ИГРОКАМИ ==========
 local function getOrCreatePlayer(name)
     if not players[name] then
         local realDate = getRealTime()
@@ -260,7 +298,7 @@ end
 log("INFO", "Сервер запущен. Ожидание терминалов...")
 drawInterface()
 
--- ========== ОСНОВНОЙ ЦИКЛ ==========
+-- ========== ОСНОВНОЙ ЦИКЛ ОБРАБОТКИ СООБЩЕНИЙ ==========
 while true do
     local ev = {event.pull(0.5)}
     local etype = ev[1]
@@ -364,6 +402,7 @@ while true do
             local qty = tonumber(msg.qty) or 0
             local value = tonumber(msg.value) or 0
             local currency = msg.currency or "em"
+
             if currency == "em" then
                 player.balance = (player.balance or 0) + value
             else
@@ -371,6 +410,11 @@ while true do
             end
             player.transactions = (player.transactions or 0) + 1
             sessions[msg.name].lastAction = os.time()
+
+            -- глобальная статистика продаж
+            globalStats.totalSells = (globalStats.totalSells or 0) + 1
+            saveGlobalStats()
+
             saveDB()
             log("INFO", string.format("💰 %s пополнил %s: предмет '%s' x%d на сумму %.2f", msg.name, currency, msg.item, qty, value))
 
@@ -390,6 +434,11 @@ while true do
             end
             player.transactions = (player.transactions or 0) + 1
             sessions[msg.name].lastAction = os.time()
+
+            -- глобальная статистика покупок
+            globalStats.totalBuys = (globalStats.totalBuys or 0) + 1
+            saveGlobalStats()
+
             saveDB()
             log("INFO", string.format("🛒 %s купил %s x%d за %.2f %s", msg.name, msg.item, msg.qty, value, currency))
 
@@ -407,6 +456,10 @@ while true do
                 log("WARN", "Неверный токен для report")
                 goto continue
             end
+            -- глобальная статистика репортов
+            globalStats.totalReports = (globalStats.totalReports or 0) + 1
+            saveGlobalStats()
+
             log("INFO", "📩 Репорт от " .. msg.name .. " (" .. msg.time .. ")")
             log("INFO", "   Текст: " .. (msg.text or ""))
             local file = io.open("/home/reports.log", "a")
