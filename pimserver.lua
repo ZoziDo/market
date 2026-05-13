@@ -196,6 +196,24 @@ while true do
       log("INFO", string.format("💰 %s пополнил %s: предмет '%s' x%d на сумму %.2f. Баланс Эмов: %.2f, Ресов: %.2f",
         msg.name, currency, msg.item, qty, value, player.balance or 0, player.resBalance or 0))
 
+    elseif msg.op == "report" then
+      if not validateSession(msg.name, msg.token) then
+        log("WARN", "Неверный токен для report от " .. (msg.name or "?"))
+        goto continue
+      end
+      log("INFO", "📩 Репорт от " .. msg.name .. " (" .. msg.time .. ")")
+      log("INFO", "   Текст: " .. (msg.text or ""))
+      
+      -- Сохраняем в файл
+      local file = io.open("/home/reports.log", "a")
+      if file then
+        file:write("[" .. msg.time .. "] " .. msg.name .. ": " .. msg.text .. "\n")
+        file:close()
+        log("INFO", "✅ Сохранено в reports.log")
+      else
+        log("ERROR", "❌ Не удалось открыть reports.log для записи")
+      end
+
     elseif msg.op == "buy" then   -- зарезервировано
       local player = players[msg.name]
       if not player or not validateSession(msg.name, msg.token) then
