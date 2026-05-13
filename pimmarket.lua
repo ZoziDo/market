@@ -1273,11 +1273,11 @@ while true do
 
     if showSellPopup and currentScreen == "sell_scan" then
       local popupWidth = 40
-      local popupHeight = 9
+      local popupHeight = 10
       local popupX = math.floor((80 - popupWidth) / 2)
-      local popupY = 6
-      local yesBtn = {x=popupX+5, y=popupY+6, xs=10, ys=1}
-      local noBtn = {x=popupX+popupWidth-15, y=popupY+6, xs=10, ys=1}
+      local popupY = 10
+      local yesBtn = {x=popupX+5, y=popupY+7, xs=13, ys=1}
+      local noBtn  = {x=popupX+popupWidth-15, y=popupY+7, xs=12, ys=1}
       if isButtonClicked(yesBtn, x, y) then
         performSell()
       elseif isButtonClicked(noBtn, x, y) then
