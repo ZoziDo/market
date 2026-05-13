@@ -863,43 +863,6 @@ local function performBuy()
   drawBuyButtons()
 end
 
-  -- Извлечение из ME в PIM
-  local fingerprint = { id = item.internalName, raw_name = item.displayName }
-  local ok, err = pcall(function() me.exportItem(fingerprint, PULL_DIRECTION, qty) end)
-  local extracted = ok and qty or 0
-
-  if extracted > 0 then
-    if currency == "em" then
-      emBalance = emBalance - totalCost
-    else
-      resBalance = resBalance - totalCost
-    end
-    playerTransactions = playerTransactions + 1
-
-    if currentToken then
-      modem.send(serverAddress, 0xffef, serialization.serialize({
-        op = "buy",
-        name = currentPlayer,
-        token = currentToken,
-        item = item.displayName,
-        qty = extracted,
-        value = totalCost,
-        currency = currency
-      }))
-    end
-
-    local currencyName = (currency == "em") and "Эмов" or "Ресов"
-    drawCenteredText(20, "Куплено " .. extracted .. " шт. за " .. string.format("%.2f", totalCost) .. " " .. currencyName, 0x00ff88)
-  else
-    drawCenteredText(20, "Не удалось выдать предметы! Ошибка: " .. tostring(err), 0xff0000)
-  end
-  os.sleep(2.5)
-  currentScreen = "shop_buy"
-  drawBuyStatic()
-  drawBuyItemsList()
-  drawBuyButtons()
-end
-
 -- ========== ЭКРАН РЕПОРТА ==========
 local function drawReportScreen()
   currentScreen = "report"
