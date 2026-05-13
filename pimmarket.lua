@@ -954,7 +954,7 @@ local function drawReportScreen()
   end
   gpu.setBackground(0x000000)
 
-  local sendBtn = {x=20, y=14, xs=20, ys=1, text="[ ОТПРАВИТЬ ]", bg=0x004400, fg=0x00ff88}
+  local sendBtn = {x=33, y=14, xs=17, ys=1, text="[ ОТПРАВИТЬ ]", bg=0x004400, fg=0x00ff88}
   drawFlexButton(sendBtn)
   drawFlexButton(backButton)
   gpu.setForeground(0x888888)
