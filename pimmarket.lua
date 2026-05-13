@@ -616,23 +616,31 @@ local function drawPurchaseScreen()
   drawFlexButton(buyBtn)
 end
 
+-- ========== ИЗМЕНЁННАЯ ФУНКЦИЯ ОБРАБОТКИ ЦИФРОВЫХ КНОПОК ==========
 local function handleQuantityButtonClick(btnText)
   if btnText == "C" then
-    purchaseQuantity = 1
+    purchaseQuantity = 0
   elseif btnText == "<" then
     purchaseQuantity = math.floor(purchaseQuantity / 10)
-    if purchaseQuantity < 1 then purchaseQuantity = 1 end
   elseif tonumber(btnText) then
-    purchaseQuantity = purchaseQuantity * 10 + tonumber(btnText)
-    if purchaseQuantity > purchaseItem.qty then purchaseQuantity = purchaseItem.qty end
+    local digit = tonumber(btnText)
+    if purchaseQuantity == 0 then
+      purchaseQuantity = digit
+    else
+      purchaseQuantity = purchaseQuantity * 10 + digit
+    end
+    if purchaseItem and purchaseQuantity > purchaseItem.qty then
+      purchaseQuantity = purchaseItem.qty
+    end
   end
   drawPurchaseScreen()
 end
 
+-- ========== ИЗМЕНЁННАЯ ФУНКЦИЯ ПЕРЕХОДА К ПОКУПКЕ (начальное кол-во 0) ==========
 local function goToPurchase(item)
   if not item then return end
   purchaseItem = item
-  purchaseQuantity = 1
+  purchaseQuantity = 0   -- было 1, стало 0
   drawPurchaseScreen()
 end
 
@@ -765,7 +773,7 @@ local function performSell()
   drawBuyButtons()
 end
 
--- ========== ВЫПОЛНЕНИЕ ПОКУПКИ ==========
+-- ========== ВЫПОЛНЕНИЕ ПОКУПКИ (с проверкой на 0) ==========
 local function performBuy()
   drawCenteredText(20, "Выполняется покупка...", 0x00ff88)
   os.sleep(0.4)
@@ -775,6 +783,17 @@ local function performBuy()
   local qty = purchaseQuantity
   local totalCost = item.price * qty
   local currency = item.currency
+
+  -- Проверка, что количество больше нуля
+  if qty <= 0 then
+    drawCenteredText(20, "Выберите количество!", 0xff0000)
+    os.sleep(1.5)
+    currentScreen = "shop_buy"
+    drawBuyStatic()
+    drawBuyItemsList()
+    drawBuyButtons()
+    return
+  end
 
   -- Проверка баланса
   if currency == "em" and emBalance < totalCost then
@@ -795,8 +814,8 @@ local function performBuy()
     return
   end
 
-    -- Извлечение из ME в PIM
-   local fingerprint = { id = item.internalName, raw_name = item.displayName }
+  -- Извлечение из ME в PIM
+  local fingerprint = { id = item.internalName, raw_name = item.displayName }
   local ok, err = pcall(function() me.exportItem(fingerprint, PULL_DIRECTION, qty) end)
   local extracted = ok and qty or 0
 
@@ -831,6 +850,7 @@ local function performBuy()
   drawBuyItemsList()
   drawBuyButtons()
 end
+
 -- ========== ЭКРАН РЕПОРТА ==========
 local function drawReportScreen()
   currentScreen = "report"
