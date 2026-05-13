@@ -196,6 +196,35 @@ while true do
       log("INFO", string.format("💰 %s пополнил %s: предмет '%s' x%d на сумму %.2f. Баланс Эмов: %.2f, Ресов: %.2f",
         msg.name, currency, msg.item, qty, value, player.balance or 0, player.resBalance or 0))
 
+    elseif msg.op == "buy" then
+      if not validateSession(msg.name, msg.token) then
+        log("WARN", "Неверный токен для buy от " .. (msg.name or "?"))
+        goto continue
+      end
+      local player = players[msg.name]
+      if not player then goto continue end
+      local value = tonumber(msg.value) or 0
+      local currency = msg.currency or "res"
+      if currency == "em" then
+        player.balance = (player.balance or 0) - value
+      else
+        player.resBalance = (player.resBalance or 0) - value
+      end
+      player.transactions = (player.transactions or 0) + 1
+      sessions[msg.name].lastAction = os.time()
+      saveDB()
+      log("INFO", string.format("🛒 %s купил %s x%d за %.2f %s. Баланс Эмов: %.2f, Ресов: %.2f",
+        msg.name, msg.item, msg.qty, value, currency, player.balance or 0, player.resBalance or 0))
+
+    elseif msg.op == "new_items" then
+      if not validateSession(msg.name, msg.token) then
+        log("WARN", "Неверный токен для new_items от " .. (msg.name or "?"))
+        goto continue
+      end
+      for _, item in ipairs(msg.items or {}) do
+        log("INFO", "🆕 Новый предмет: " .. item.name .. " (x" .. item.qty .. ")")
+      end
+
     elseif msg.op == "report" then
       if not validateSession(msg.name, msg.token) then
         log("WARN", "Неверный токен для report от " .. (msg.name or "?"))
@@ -203,8 +232,6 @@ while true do
       end
       log("INFO", "📩 Репорт от " .. msg.name .. " (" .. msg.time .. ")")
       log("INFO", "   Текст: " .. (msg.text or ""))
-      
-      -- Сохраняем в файл
       local file = io.open("/home/reports.log", "a")
       if file then
         file:write("[" .. msg.time .. "] " .. msg.name .. ": " .. msg.text .. "\n")
@@ -213,15 +240,6 @@ while true do
       else
         log("ERROR", "❌ Не удалось открыть reports.log для записи")
       end
-
-    elseif msg.op == "buy" then   -- зарезервировано
-      local player = players[msg.name]
-      if not player or not validateSession(msg.name, msg.token) then
-        log("WARN", "Неверный токен от " .. (msg.name or "?"))
-        goto continue
-      end
-      sessions[msg.name].lastAction = os.time()
-      log("INFO", string.format("%s: %s сумма %s", msg.op, msg.name, tostring(msg.value)))
     end
   end
   ::continue::
