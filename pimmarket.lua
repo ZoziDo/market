@@ -682,7 +682,7 @@ end
 -- ========== ПРОДАЖА ==========
 local function drawSellPopup()
   local popupWidth = 40
-  local popupHeight = 9
+  local popupHeight = 13
   local popupX = math.floor((80 - popupWidth) / 2)
   local popupY = 6
 
@@ -698,15 +698,15 @@ local function drawSellPopup()
   local currency = (sellConfirmItem.internalName == "npcMoney") and "Эмов" or "$"
 
   gpu.setForeground(0xffffff)
-  gpu.set(popupX+6, popupY+1, "Подтверждение")
+  gpu.set(popupX+15, popupY+1, "Подтверждение")
   gpu.setForeground(0xffaa00)
   gpu.set(popupX+3, popupY+2, "Магазин заберёт: " .. totalFound)
   gpu.set(popupX+3, popupY+3, name .. " x" .. totalFound)
   gpu.setForeground(0x00ff88)
   gpu.set(popupX+3, popupY+4, "Вы получите: " .. string.format("%.2f", value) .. " " .. currency)
 
-  local yesBtn = {x=popupX+5, y=popupY+6, xs=10, ys=1, text="[ Принять ] ", bg=0x004400, fg=0x00ff88}
-  local noBtn  = {x=popupX+popupWidth-15, y=popupY+6, xs=10, ys=1, text="[ Отмена ]", bg=0x440000, fg=0xff5555}
+  local yesBtn = {x=popupX+5, y=popupY+6, xs=12, ys=1, text="[ Принять ] ", bg=0x004400, fg=0x00ff88}
+  local noBtn  = {x=popupX+popupWidth-15, y=popupY+6, xs=12, ys=1, text="[ Отмена ]", bg=0x440000, fg=0xff5555}
   drawFlexButton(yesBtn)
   drawFlexButton(noBtn)
 end
