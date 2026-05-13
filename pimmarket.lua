@@ -190,7 +190,7 @@ local function isButtonClicked(btn, x, y)
 end
 
 local searchButton = {text = "Поиск...", x=3, y=21, xs=20, ys=1, bg=0x333333, fg=0x00aaff}
-local filterButton  = {text = "● В наличии", x=33, y=21, xs=14, ys=1, bg=0x333333, fg=0x00ff00}  -- по умолчанию зелёная
+local filterButton  = {text = "● В наличии", x=33, y=21, xs=14, ys=1, bg=0x333333, fg=0x00ff00}
 local nextButton    = {text = "Далее", x=70, y=21, xs=7, ys=1, bg=0x333333, fg=0x888888}
 
 local shopMenuButtons = {
@@ -211,44 +211,78 @@ local function canSendReport()
   return false
 end
 
--- ==================== ЗАГРУЗКА ПРЕДМЕТОВ (с чёрным списком) ====================
+-- ========== ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ ПОЛУЧЕНИЯ РЕАЛЬНОГО КОЛИЧЕСТВА ==========
+local function getActualItemQuantity(internalName)
+    if not component.isAvailable("me_interface") then return 0 end
+    local me = component.me_interface
+    local items = me.getItemsInNetwork()
+    local total = 0
+    for _, meItem in ipairs(items) do
+        if meItem.name == internalName then
+            total = total + (meItem.size or 0)
+        end
+    end
+    return total
+end
+
+-- ==================== ЗАГРУЗКА ПРЕДМЕТОВ (с чёрным списком и объединением) ====================
 local function loadBuyItems()
   if not component.isAvailable("me_interface") then return end
   local me = component.me_interface
   local rawItems = me.getItemsInNetwork()
-  local newShopItems = {}
+  local tempShopItems = {}
   local knownItems = {}
   for _, item in ipairs(shopItems) do
     knownItems[item.internalName] = true
   end
   local newFound = {}
+
   for _, meItem in ipairs(rawItems) do
     local name = meItem.name
 
-    -- Пропускаем предметы из чёрного списка
     if blacklist[name] then
       goto continue
     end
 
     local qty = meItem.size or 0
+    if qty == 0 then goto continue end
+
     local mapping = buyItemMap[name]
-    local displayName = mapping and mapping.displayName or (meItem.label or name)
-    local price = mapping and mapping.price or 0
-    local currency = mapping and mapping.currency or "res"
-    local canBuy = (price > 0 and qty > 0)
-    table.insert(newShopItems, {
-      internalName = name,
-      displayName = displayName,
-      qty = qty,
-      price = price,
-      currency = currency,
-      canBuy = canBuy
-    })
-    if not knownItems[name] and qty > 0 then
-      table.insert(newFound, {name = displayName, qty = qty})
+    if not mapping then
+      goto continue
+    end
+
+    local displayName = mapping.displayName or (meItem.label or name)
+    local price = mapping.price or 0
+    local currency = mapping.currency or "res"
+
+    if price <= 0 then
+      goto continue
+    end
+
+    if tempShopItems[name] then
+      tempShopItems[name].qty = tempShopItems[name].qty + qty
+    else
+      tempShopItems[name] = {
+        internalName = name,
+        displayName = displayName,
+        qty = qty,
+        price = price,
+        currency = currency,
+        canBuy = true
+      }
     end
     ::continue::
   end
+
+  local newShopItems = {}
+  for _, itemData in pairs(tempShopItems) do
+    table.insert(newShopItems, itemData)
+    if not knownItems[itemData.internalName] and itemData.qty > 0 then
+      table.insert(newFound, {name = itemData.displayName, qty = itemData.qty})
+    end
+  end
+
   if #newFound > 0 and currentToken then
     modem.send(serverAddress, 0xffef, serialization.serialize({
       op = "new_items",
@@ -257,8 +291,9 @@ local function loadBuyItems()
       items = newFound
     }))
   end
+
   shopItems = newShopItems
-  table.sort(shopItems, function(a,b) return a.displayName < b.displayName end)
+  table.sort(shopItems, function(a, b) return a.displayName < b.displayName end)
 end
 
 local function loadSellItems()
@@ -785,11 +820,33 @@ local function performSell()
   drawBuyButtons()
 end
 
--- ========== ВЫПОЛНЕНИЕ ПОКУПКИ (сначала проверка баланса) ==========
+-- ========== ВЫПОЛНЕНИЕ ПОКУПКИ (исправленная версия) ==========
 local function performBuy()
   local me = component.me_interface
   local item = purchaseItem
+  
+  -- Получаем актуальное количество предмета в ME сети
+  local actualQty = getActualItemQuantity(item.internalName)
+  
+  if actualQty <= 0 then
+    drawCenteredText(20, "Товар закончился! Обновление списка...", 0xff0000)
+    os.sleep(1.5)
+    loadBuyItems()
+    drawBuyStatic()
+    drawBuyItemsList()
+    drawBuyButtons()
+    currentScreen = "shop_buy"
+    return
+  end
+  
+  -- Корректируем запрашиваемое количество, если оно превышает доступное
   local qty = purchaseQuantity
+  if qty > actualQty then
+    qty = actualQty
+    purchaseQuantity = qty
+    drawPurchaseScreen()
+  end
+  
   local totalCost = item.price * qty
   local currency = item.currency
 
@@ -804,7 +861,7 @@ local function performBuy()
     return
   end
 
-  -- 2. Проверка баланса (сначала!)
+  -- 2. Проверка баланса
   if currency == "em" and emBalance < totalCost then
     drawCenteredText(20, "Недостаточно Эмов!", 0xff0000)
     os.sleep(1.5)
@@ -823,7 +880,7 @@ local function performBuy()
     return
   end
 
-  -- 3. Если баланса хватает – показываем сообщение и выдаём товар
+  -- 3. Выдача товара
   drawCenteredText(20, "Выполняется покупка...", 0x00ff88)
   os.sleep(0.4)
 
@@ -853,6 +910,15 @@ local function performBuy()
 
     local currencyName = (currency == "em") and "Эмов" or "Ресов"
     drawCenteredText(20, "Куплено " .. extracted .. " шт. за " .. string.format("%.2f", totalCost) .. " " .. currencyName, 0x00ff88)
+    
+    -- Обновляем список товаров и выбранный предмет
+    loadBuyItems()
+    for _, newItem in ipairs(shopItems) do
+      if newItem.internalName == item.internalName then
+        purchaseItem = newItem
+        break
+      end
+    end
   else
     drawCenteredText(20, "Не удалось выдать предметы! Ошибка: " .. tostring(err), 0xff0000)
   end
@@ -913,7 +979,7 @@ local function goToBuy()
   shopSearch = ""
   searchActive = false
   searchInput = ""
-  showOnlyAvailable = true   -- показываем только товары в наличии
+  showOnlyAvailable = true
   buyFilterMode = "all"
   filterButton.fg = 0x00ff00
   loadBuyItems()
