@@ -1587,8 +1587,11 @@ while true do
       elseif direction == 1 then
         smoothScroll(-1)
       end
+      -- Обновляем селектор после скролла
       if selectedItem then
         updateSelectorDisplay(selectedItem)
+      elseif #filteredItems > 0 then
+        updateSelectorDisplay(filteredItems[listScroll])
       end
     end
 
