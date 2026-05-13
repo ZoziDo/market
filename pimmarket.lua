@@ -156,7 +156,7 @@ end
 local function drawBottomPanel()
   gpu.setForeground(0xcc3342) 
   gpu.set(4, 23, "[Сообщить о проблеме]")   -- левая кнопка
-  gpu.set(28, 23, "[Соглашение]")           -- теперь посередине
+  gpu.set(30, 23, "[Соглашение]")           -- теперь посередине
   gpu.set(70, 23, "[Отзывы]")               -- без изменений
 end
 
@@ -1076,7 +1076,7 @@ local function drawMainMenu()
       if showShopDenied then
         drawCenteredText(8, "Доступ запрещён. Примите соглашение [Соглашение]", 0xFFAA00)
       else
-        drawCenteredText(8, "Вы не приняли пользовательское соглашение! Нажмите [Соглашение]", 0xFFAA00)
+        drawCenteredText(8, "Вы не приняли пользовательское соглашение! Нажмите [Соглашение]", 0xFF5555)
       end
     end
 
