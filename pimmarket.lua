@@ -378,6 +378,7 @@ local function extractToME(targetName, amount, targetDamage)
     if not pimAddr or amount <= 0 then return 0 end
     targetDamage = targetDamage or 0
     local extracted = 0
+    print("extractToME: target=", targetName, "damage=", targetDamage, "amount=", amount)
     for slot = 1, 36 do
         if extracted >= amount then break end
         local stack = component.invoke(pimAddr, "getStackInSlot", slot)
@@ -387,20 +388,29 @@ local function extractToME(targetName, amount, targetDamage)
                 local rawName = stack.name or stack.label or ""
                 local cleanName = rawName:gsub("§.", "")
                 local damage = stack.damage or 0
-                local match = (cleanName == targetName) or (cleanName == "minecraft:" .. targetName) or (cleanName:find(targetName, 1, true) and cleanName:match(targetName))
-                match = match and (damage == targetDamage)
-                if match then
+                print(string.format("Слот %d: %s x%d, damage %d", slot, cleanName, qty, damage))
+                -- Сравнение имён
+                local nameMatch = (cleanName == targetName) or
+                                 (cleanName == "minecraft:" .. targetName) or
+                                 (targetName == "minecraft:" .. cleanName) or
+                                 (cleanName:find(targetName, 1, true) and targetName:find(cleanName, 1, true))
+                if nameMatch and damage == targetDamage then
                     local toTake = math.min(qty, amount - extracted)
                     if toTake > 0 then
+                        print(string.format("  берём %d из слота %d", toTake, slot))
                         local moved = component.invoke(pimAddr, "pushItem", PUSH_DIRECTION, slot, toTake)
                         if type(moved) == "number" and moved > 0 then
                             extracted = extracted + moved
+                            print(string.format("  перемещено %d, всего %d", moved, extracted))
+                        else
+                            print("  pushItem вернул:", moved, "ошибка")
                         end
                     end
                 end
             end
         end
     end
+    print("extractToME итого извлечено:", extracted)
     return extracted
 end
 
@@ -834,6 +844,7 @@ local function performSell()
   os.sleep(0.6)
 
   local realExtracted = extractToME(sellConfirmItem.internalName, foundAmount, sellConfirmItem.damage or 0)
+  print("performSell: realExtracted =", realExtracted)
   if realExtracted == 0 then
     drawCenteredText(17, "Не удалось изъять предметы! Проверьте инвентарь.", 0xff0000)
     os.sleep(2.5)
