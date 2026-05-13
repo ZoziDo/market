@@ -121,37 +121,20 @@ local showShopDenied = false   -- флаг для смены сообщения
 -- ==================== ОБНОВЛЕНИЕ СЕЛЕКТОРА ====================
 local function updateSelectorDisplay(item)
     if not selector then return end
-
-    print("=== updateSelectorDisplay ===")
     if not item then
-        print("Очистка селектора")
         pcall(selector.setSlot, 0, nil)
         pcall(selector.setSlot, 1, nil)
         return
     end
-
-    print("Имя предмета:", item.displayName or "нет")
-    print("internalName:", item.internalName or "нет")
-    print("name:", item.name or "нет")
-
     local raw = item.internalName or item.name or item.displayName
     if not raw then return end
-
     local id = raw
-    local dmg = item.damage or item.dmg or 0
-
-    -- если формат minecraft:item:0 (с повреждением)
-    local a,b,c = raw:match("([^:]+):([^:]+):([^:]+)")
-    if a and b and c then
-        id = a .. ":" .. b
-        dmg = tonumber(c) or dmg
+    if not id:find(":") then
+        id = "minecraft:" .. id
     end
-
+    local dmg = item.damage or item.dmg or 0   -- именно так
     local stack = { id = id, dmg = dmg }
-    print("Устанавливаем stack:", stack.id, "damage:", stack.dmg)
-
     pcall(selector.setSlot, 0, stack)
-    os.sleep(0.05)
     pcall(selector.setSlot, 1, stack)
 end
 
@@ -353,11 +336,12 @@ local function loadSellItems()
                 displayName = item.displayName or item.name or internal,
                 internalName = internal,
                 qty = item.qty or 0,
-                price = item.price or 0
+                price = item.price or 0,
+                damage = item.damage or 0   -- добавлено
             })
         end
-    end   -- <-- закрытие цикла
-end   -- <-- закрытие функции
+    end
+end
 
 -- ==================== СКАНИРОВАНИЕ И ИЗЪЯТИЕ ====================
 local function scanPlayerInventory(targetName)
