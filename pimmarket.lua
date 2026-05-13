@@ -1,3 +1,4 @@
+--[[ pimmarket.lua – исправленная версия с работающим селектором ]]
 local component = require("component")
 local event = require("event")
 local gpu = component.gpu
@@ -25,7 +26,7 @@ local pimAddr = pimList[1]
 local PUSH_DIRECTION = "down"
 local PULL_DIRECTION = "up"
 
--- ==================== ПОИСК СЕЛЕКТОРА С ОТЛАДКОЙ ====================
+-- ==================== ПОИСК СЕЛЕКТОРА ====================
 local selector = nil
 for addr in component.list("openperipheral_selector") do
     selector = component.proxy(addr)
@@ -40,16 +41,8 @@ end
 
 if selector then
     print("✅ Селектор найден, адрес:", selector.address)
-    -- Выводим все методы компонента
-    local methods = {}
-    for k, v in pairs(selector) do
-        if type(v) == "function" then
-            table.insert(methods, k)
-        end
-    end
-    print("📋 Доступные методы селектора:", table.concat(methods, ", "))
 else
-    print("❌ Селектор не найден! Убедитесь, что блок установлен и подключён к компьютеру.")
+    print("❌ Селектор не найден! Отображение предметов недоступно.")
 end
 
 local function debugPlayerInventory()
@@ -77,7 +70,7 @@ local resBalance = 0.0
 local emBalance = 0.0
 local playerTransactions = 0
 local playerRegDate = ""
-local playerAgreed = false          -- <-- ДОБАВЛЕНО: СТАТУС СОГЛАСИЯ
+local playerAgreed = false
 local currentScreen = "welcome"
 local authStartTime = 0
 local AUTH_TIMEOUT = 3
@@ -117,27 +110,18 @@ local reportInput = ""
 local lastReportTime = nil
 local showShopDenied = false   -- флаг для смены сообщения
 
--- ==================== ОБНОВЛЕНИЕ СЕЛЕКТОРА (OpenPeripheral) ====================
+-- ==================== ОБНОВЛЕНИЕ СЕЛЕКТОРА ====================
 local function updateSelectorDisplay(item)
     if not selector then return end
-    
-    local success, err = pcall(function()
-        if not item then
-            selector.setSlot(0, nil)  -- очистка
-            return
-        end
-        
-        local stack = {
-            id = item.internalName,   -- самое важное
-            dmg = 0,
-        }
-        
-        selector.setSlot(0, stack)
-    end)
-    
-    if not success then
-        print("Ошибка селектора: " .. tostring(err))
+    if not item then
+        pcall(selector.setSlot, 0, nil)
+        return
     end
+    local stack = {
+        id = item.internalName,
+        dmg = 0
+    }
+    pcall(selector.setSlot, 0, stack)
 end
 
 -- ========== ЭКРАН ==========
@@ -193,7 +177,7 @@ end
 local function drawBottomPanel()
   gpu.setForeground(0xcc3342) 
   gpu.set(4, 23, "[Сообщить о проблеме]")
-  gpu.set(35, 23, "[Соглашение]")           -- правее, например 33
+  gpu.set(35, 23, "[Соглашение]")
   gpu.set(70, 23, "[Отзывы]")
 end
 
@@ -381,7 +365,6 @@ local function extractToME(targetName, amount)
             if qty > 0 then
                 local rawName = stack.label or stack.name or ""
                 local cleanName = rawName:gsub("§.", "")
-                -- Сравниваем имена: пробуем точное совпадение, затем очистка от minecraft:
                 local match = (cleanName == targetName) or (cleanName == "minecraft:" .. targetName) or (cleanName:find(targetName, 1, true) and cleanName:match(targetName))
                 if match then
                     local toTake = math.min(qty, amount - extracted)
@@ -862,9 +845,7 @@ local function performSell()
 end
 
 -- ========== ПОКУПКА ==========
--- ========== ПОКУПКА (с поддержкой количества > 64) ==========
 local function performBuy()
-  -- Проверка согласия
   if not playerAgreed then
     drawCenteredText(20, "Сначала примите пользовательское соглашение", 0xff0000)
     os.sleep(2)
@@ -931,9 +912,7 @@ local function performBuy()
 
   local fingerprint = { id = item.internalName, raw_name = item.displayName }
   
-  -- Максимальный размер стака (обычно 64)
   local maxStackSize = 64
-  -- Пытаемся получить точное значение из ME (если метод доступен)
   local ok, detail = pcall(me.getItemDetail, me, item.internalName)
   if ok and detail and detail.maxSize then
     maxStackSize = detail.maxSize
@@ -1139,7 +1118,6 @@ local function drawMainMenu()
     gpu.setForeground(0xFF7300)
     gpu.set(x2 + unicode.len(resText), 5, emText)
 
-    -- Предупреждение, если не принято соглашение (с учётом флага showShopDenied)
     if not playerAgreed then
       gpu.setForeground(0xFFAA00)
       if showShopDenied then
@@ -1190,7 +1168,6 @@ local function drawAccount(data)
   gpu.setForeground(0xFFFFFF)
   gpu.set(regX + unicode.len(regLabel), 14, regDate)
 
-  -- Строка согласия
   local agreeLabel = "Соглашение: "
   local agreeStatus = (data.agreed or playerAgreed) and "ознакомлен" or "не ознакомлен"
   local agreeColor = (data.agreed or playerAgreed) and 0x00FF00 or 0xFF5555
@@ -1283,7 +1260,7 @@ local function goBackToMenu()
   showShopDenied = false
   currentScreen = "menu"
   drawMainMenu()
-  updateSelectorDisplay(nil)   -- очищаем селектор
+  updateSelectorDisplay(nil)
 end
 
 local function goToHelp()
@@ -1364,7 +1341,7 @@ while true do
           hoveredIndex = 0
           drawBuyItemsList()
           drawBuyButtons()
-          updateSelectorDisplay(selectedItem)   -- <-- добавить эту строку
+          updateSelectorDisplay(selectedItem)
         end
       end
 
@@ -1509,7 +1486,7 @@ while true do
               goToShop()
             else
               showShopDenied = true
-              drawMainMenu()   -- просто обновляем меню с новым текстом
+              drawMainMenu()
             end
           elseif name=="util" then
             showShopDenied = false
@@ -1522,13 +1499,13 @@ while true do
         end
       end
       if y == 23 then
-        if x >= 4 and x <= 25 then          -- [Сообщить о проблеме]
+        if x >= 4 and x <= 25 then
           showShopDenied = false
           goToReport()
-        elseif x >= 39 and x <= 45 then     -- [Соглашение] (30 - начало, ~40 - конец)
+        elseif x >= 35 and x <= 47 then
           showShopDenied = false
           goToHelp()
-        elseif x >= 70 and x <= 78 then     -- [Отзывы]
+        elseif x >= 70 and x <= 78 then
           showShopDenied = false
           drawCenteredText(18, "Отзывы в разработке", 0x888888)
           os.sleep(1)
@@ -1600,7 +1577,7 @@ while true do
       end
     end
 
-    elseif e == "scroll" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
+  elseif e == "scroll" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
     local direction = ev[5]
     local x = ev[3]
     local y = ev[4]
@@ -1806,3 +1783,4 @@ while true do
     end
   end
   ::continue::
+end
