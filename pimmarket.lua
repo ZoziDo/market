@@ -1210,6 +1210,12 @@ local function goToUtility()
   drawCenteredText(8,"Полезности (в разработке)",0x00FF00)
 end
 
+local function goBackToMenu()
+  showShopDenied = false
+  currentScreen = "menu"
+  drawMainMenu()
+end
+
 local function goToHelp()
   if playerAgreed then
     goBackToMenu()
@@ -1217,12 +1223,6 @@ local function goToHelp()
   end
   currentScreen = "agreement"
   drawAgreementScreen()
-end
-
-local function goBackToMenu()
-  showShopDenied = false
-  currentScreen = "menu"
-  drawMainMenu()
 end
 
 local function refreshAndAgree()
@@ -1457,7 +1457,7 @@ while true do
         if x >= 4 and x <= 25 then          -- [Сообщить о проблеме]
           showShopDenied = false
           goToReport()
-        elseif x >= 28 and x <= 40 then     -- [Соглашение]
+        elseif x >= 30 and x <= 40 then     -- [Соглашение] (30 - начало, ~40 - конец)
           showShopDenied = false
           goToHelp()
         elseif x >= 70 and x <= 78 then     -- [Отзывы]
