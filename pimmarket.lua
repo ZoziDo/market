@@ -193,67 +193,31 @@ local shopMenuButtons = {
   bundle = {x=31,xs=20,y=17,ys=3,text="Наборы/Квесты",tx=4,ty=1,bg=0x444444,fg=0x00FF88}
 }
 
--- ==================== ОТПРАВКА В TELEGRAM ====================
-local function sendToTelegram(message)
-  local botToken = "8898934085:AAFlDLiWi9HiDqZLsRMnXwRnlwK7-aUPJYE"
-  local chatId = "-1003932869786"
-  
-  local function urlEncode(str)
-    if str then
-      str = string.gsub(str, "\n", "\r\n")
-      str = string.gsub(str, "([^%w %-%_%.%~])", function(c)
-        return string.format("%%%02X", string.byte(c))
-      end)
-      str = string.gsub(str, " ", "+")
-    end
-    return str
-  end
-  
-  local body = "chat_id=" .. chatId .. "&text=" .. urlEncode(message)
-  
-  if component.isAvailable("internet") then
-    local success, result = pcall(function()
-      local internet = require("internet")
-      local conn = internet.open("api.telegram.org", 443)
-      if not conn then error("Не удалось открыть соединение") end
-      
-      local request = "POST /bot" .. botToken .. "/sendMessage HTTP/1.1\r\n"
-      request = request .. "Host: api.telegram.org\r\n"
-      request = request .. "Content-Type: application/x-www-form-urlencoded\r\n"
-      request = request .. "Content-Length: " .. tostring(#body) .. "\r\n"
-      request = request .. "Connection: close\r\n"
-      request = request .. "\r\n"
-      request = request .. body
-      
-      conn:write(request)
-      conn:flush()
-      
-      local response = ""
-      while true do
-        local chunk = conn:read(1024)
-        if not chunk then break end
-        response = response .. chunk
-      end
-      conn:close()
-      
-      return response:find("200 OK") ~= nil
-    end)
-    return success and result
-  end
-  return false
-end
 
 -- ==================== ПРОВЕРКА СБРОСА РЕПОРТА ====================
-local function canSendReport()
-  if not lastReportTime then return true end
-  local now = os.time()
-  local reportDate = os.date("*t", lastReportTime)
-  local nowDate = os.date("*t", now)
-  if reportDate.day ~= nowDate.day or reportDate.month ~= nowDate.month or reportDate.year ~= nowDate.year then
-    return true
-  end
-  return false
-end
+    elseif currentScreen == "report" then
+      if isButtonClicked(backButton, x, y) then
+        goBackToMenu()
+      elseif canSendReport() then
+        local sendBtn = {x=20, y=14, xs=40, ys=1}
+        if isButtonClicked(sendBtn, x, y) and reportInput ~= "" then
+          -- Отправляем репорт на сервер
+          if currentToken then
+            modem.send(serverAddress, 0xffef, serialization.serialize({
+              op = "report",
+              name = currentPlayer,
+              token = currentToken,
+              text = reportInput,
+              time = os.date("%d.%m.%Y %H:%M:%S")
+            }))
+          end
+          lastReportTime = os.time()
+          drawCenteredText(18, "Сообщение успешно отправлено! Ожидайте ответа.", 0x00ff88)
+          os.sleep(2)
+          goBackToMenu()
+        end
+      end
+    end
 
 -- ==================== ЗАГРУЗКА ПРЕДМЕТОВ ====================
 local function loadBuyItems()
