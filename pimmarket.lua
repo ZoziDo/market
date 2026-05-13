@@ -715,6 +715,7 @@ local function goToPurchase(item)
   if not item then return end
   purchaseItem = item
   purchaseQuantity = 0
+  updateSelectorDisplay(nil)
   drawPurchaseScreen()
 end
 
@@ -796,6 +797,7 @@ local function goToSellConfirm(item)
   sellConfirmItem = item
   foundAmount = 0
   showSellPopup = false
+  updateSelectorDisplay(nil)
   drawSellScanScreen()
 end
 
@@ -1380,6 +1382,7 @@ while true do
         selectedIndex = 0
         selectedItem = nil
         hoveredIndex = 0
+        updateSelectorDisplay(nil)
         drawShopMenu()
       elseif isButtonClicked(searchButton, x, y) then
         searchActive = true
@@ -1602,28 +1605,43 @@ while true do
     local x = ev[3]
     local y = ev[4]
     if x >= 2 and x <= 78 and y >= 6 and y <= 17 then
-      if direction == -1 then
-        smoothScroll(1)
-      elseif direction == 1 then
-        smoothScroll(-1)
-      end
+        if direction == -1 then
+            smoothScroll(1)
+        elseif direction == 1 then
+            smoothScroll(-1)
+        end
+        -- Обновляем селектор на выбранный предмет после скролла
+        if selectedItem then
+            updateSelectorDisplay(selectedItem)
+        end
     end
+end
 
   elseif e == "mouse_move" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
     local x, y = ev[3], ev[4]
     if y >= 6 and y <= 17 and x >= 2 and x <= 77 then
-      local rel = y - 5
-      local newHover = listScroll + rel - 1
-      if newHover ~= hoveredIndex and newHover <= #filteredItems then
-        hoveredIndex = newHover
-        drawBuyItemsList()
-      end
+        local rel = y - 5
+        local newHover = listScroll + rel - 1
+        if newHover ~= hoveredIndex and newHover <= #filteredItems then
+            hoveredIndex = newHover
+            drawBuyItemsList()
+            
+            -- Обновляем селектор при наведении
+            local hoveredItem = filteredItems[newHover]
+            if hoveredItem then
+                updateSelectorDisplay(hoveredItem)
+            end
+        end
     else
-      if hoveredIndex ~= 0 then
-        hoveredIndex = 0
-        drawBuyItemsList()
-      end
+        if hoveredIndex ~= 0 then
+            hoveredIndex = 0
+            drawBuyItemsList()
+            if selectedItem then
+                updateSelectorDisplay(selectedItem)
+            end
+        end
     end
+end
 
   elseif e == "key_down" and currentScreen == "report" and canSendReport() then
     local ch = ev[3]
