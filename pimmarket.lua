@@ -120,17 +120,25 @@ local showShopDenied = false   -- флаг для смены сообщения
 -- ==================== ОБНОВЛЕНИЕ СЕЛЕКТОРА ====================
 local function updateSelectorDisplay(item)
     if not selector then return end
-    if not item then
-        pcall(selector.setItem, selector, 0, nil)
-        return
+    
+    local success, err = pcall(function()
+        if not item then
+            selector.setSlot(0, nil)  -- очистка
+            return
+        end
+        
+        local stack = {
+            id = item.internalName,      -- ← главное!
+            dmg = 0,                     -- damage (обычно 0)
+            -- label = item.displayName  -- можно добавить, но не обязательно
+        }
+        
+        selector.setSlot(0, stack)
+    end)
+    
+    if not success then
+        print("Ошибка селектора: " .. tostring(err))
     end
-    local stack = {
-        name = item.internalName,
-        size = 1,
-        damage = 0,
-        label = item.displayName
-    }
-    pcall(selector.setItem, selector, 0, stack)
 end
 
 -- ========== ЭКРАН ==========
