@@ -26,6 +26,22 @@ local pimAddr = pimList[1]
 local PUSH_DIRECTION = "down"
 local PULL_DIRECTION = "up"
 
+-- Вспомогательные функции для сравнения имён предметов (без префикса мода)
+local function normalizeName(name)
+    if not name then return "" end
+    -- Извлекаем часть после последнего двоеточия
+    local lastColon = name:match(".*:([^:]+)$")
+    return lastColon or name
+end
+
+local function namesMatch(name1, name2)
+    if not name1 or not name2 then return false end
+    if name1 == name2 then return true end
+    local short1 = normalizeName(name1)
+    local short2 = normalizeName(name2)
+    return short1 == short2
+end
+
 -- ==================== ПОИСК СЕЛЕКТОРА ====================
 local selector = nil
 if selector then
@@ -356,7 +372,7 @@ local function scanPlayerInventory(targetName, targetDamage)
                 local rawName = stack.name or stack.label or ""
                 local cleanName = rawName:gsub("§.", "")
                 local damage = stack.damage or 0
-                if (cleanName == targetName or cleanName:find(targetName, 1, true) or targetName:find(cleanName, 1, true)) and damage == targetDamage then
+                if namesMatch(cleanName, targetName) and damage == targetDamage then
                     total = total + qty
                 end
             end
@@ -374,11 +390,11 @@ local function scanPlayerInventory(targetName, targetDamage)
     return total
 end
 
+
 local function extractToME(targetName, amount, targetDamage)
     if not pimAddr or amount <= 0 then return 0 end
     targetDamage = targetDamage or 0
     local extracted = 0
-    print("extractToME: target=", targetName, "damage=", targetDamage, "amount=", amount)
     for slot = 1, 36 do
         if extracted >= amount then break end
         local stack = component.invoke(pimAddr, "getStackInSlot", slot)
@@ -388,29 +404,18 @@ local function extractToME(targetName, amount, targetDamage)
                 local rawName = stack.name or stack.label or ""
                 local cleanName = rawName:gsub("§.", "")
                 local damage = stack.damage or 0
-                print(string.format("Слот %d: %s x%d, damage %d", slot, cleanName, qty, damage))
-                -- Сравнение имён
-                local nameMatch = (cleanName == targetName) or
-                                 (cleanName == "minecraft:" .. targetName) or
-                                 (targetName == "minecraft:" .. cleanName) or
-                                 (cleanName:find(targetName, 1, true) and targetName:find(cleanName, 1, true))
-                if nameMatch and damage == targetDamage then
+                if namesMatch(cleanName, targetName) and damage == targetDamage then
                     local toTake = math.min(qty, amount - extracted)
                     if toTake > 0 then
-                        print(string.format("  берём %d из слота %d", toTake, slot))
                         local moved = component.invoke(pimAddr, "pushItem", PUSH_DIRECTION, slot, toTake)
                         if type(moved) == "number" and moved > 0 then
                             extracted = extracted + moved
-                            print(string.format("  перемещено %d, всего %d", moved, extracted))
-                        else
-                            print("  pushItem вернул:", moved, "ошибка")
                         end
                     end
                 end
             end
         end
     end
-    print("extractToME итого извлечено:", extracted)
     return extracted
 end
 
