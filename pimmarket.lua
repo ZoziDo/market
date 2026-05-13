@@ -25,6 +25,33 @@ local pimAddr = pimList[1]
 local PUSH_DIRECTION = "down"
 local PULL_DIRECTION = "up"
 
+-- ==================== ПОИСК СЕЛЕКТОРА С ОТЛАДКОЙ ====================
+local selector = nil
+for addr in component.list("openperipheral_selector") do
+    selector = component.proxy(addr)
+    break
+end
+if not selector then
+    for addr in component.list("item_selector") do
+        selector = component.proxy(addr)
+        break
+    end
+end
+
+if selector then
+    print("✅ Селектор найден, адрес:", selector.address)
+    -- Выводим все методы компонента
+    local methods = {}
+    for k, v in pairs(selector) do
+        if type(v) == "function" then
+            table.insert(methods, k)
+        end
+    end
+    print("📋 Доступные методы селектора:", table.concat(methods, ", "))
+else
+    print("❌ Селектор не найден! Убедитесь, что блок установлен и подключён к компьютеру.")
+end
+
 local function debugPlayerInventory()
     if not pimAddr then return end
     print("=== СОДЕРЖИМОЕ ИНВЕНТАРЯ (PIM) ===")
@@ -94,7 +121,7 @@ local showShopDenied = false   -- флаг для смены сообщения
 local function updateSelectorDisplay(item)
     if not selector then return end
     if not item then
-        pcall(selector.setStackInSlot, selector, 0, nil)
+        pcall(selector.setItem, selector, 0, nil)
         return
     end
     local stack = {
@@ -103,7 +130,7 @@ local function updateSelectorDisplay(item)
         damage = 0,
         label = item.displayName
     }
-    pcall(selector.setStackInSlot, selector, 0, stack)
+    pcall(selector.setItem, selector, 0, stack)
 end
 
 -- ========== ЭКРАН ==========
@@ -1101,7 +1128,7 @@ local function drawMainMenu()
     gpu.setForeground(0x00FF88)
     gpu.set(x2, 5, resText)
     gpu.setForeground(0xFF7300)
-    gpu.set(x2 + unicode.len(resText), 6, emText)
+    gpu.set(x2 + unicode.len(resText), 5, emText)
 
     -- Предупреждение, если не принято соглашение (с учётом флага showShopDenied)
     if not playerAgreed then
