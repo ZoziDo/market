@@ -122,44 +122,37 @@ local showShopDenied = false   -- флаг для смены сообщения
 local function updateSelectorDisplay(item)
     if not selector then return end
 
-    local ok, err = pcall(function()
-        -- очистка
-        if not item then
-            selector.setSlot(0, nil)
-            selector.setSlot(1, nil)
-            return
-        end
-
-        local raw = item.internalName or item.name or item.displayName
-        if not raw then return end
-
-        -- нормализация ID
-        local id = raw
-        local dmg = item.damage or item.dmg or 0
-
-        -- если формат minecraft:item:0
-        local a,b,c = raw:match("([^:]+):([^:]+):([^:]+)")
-        if a and b and c then
-            id = a .. ":" .. b
-            dmg = tonumber(c) or dmg
-        end
-
-        local stack = {
-            id = id,
-            dmg = dmg
-        }
-
-        -- запись в оба слота
-        pcall(selector.setSlot, 0, stack)
-        os.sleep(0.05)
-        pcall(selector.setSlot, 1, stack)
-
-    end)
-
-    if not ok then
-        print("Selector error: "..tostring(err))
-        print("SELECTOR ITEM:", item.internalName, item.name, item.displayName)
+    print("=== updateSelectorDisplay ===")
+    if not item then
+        print("Очистка селектора")
+        pcall(selector.setSlot, 0, nil)
+        pcall(selector.setSlot, 1, nil)
+        return
     end
+
+    print("Имя предмета:", item.displayName or "нет")
+    print("internalName:", item.internalName or "нет")
+    print("name:", item.name or "нет")
+
+    local raw = item.internalName or item.name or item.displayName
+    if not raw then return end
+
+    local id = raw
+    local dmg = item.damage or item.dmg or 0
+
+    -- если формат minecraft:item:0 (с повреждением)
+    local a,b,c = raw:match("([^:]+):([^:]+):([^:]+)")
+    if a and b and c then
+        id = a .. ":" .. b
+        dmg = tonumber(c) or dmg
+    end
+
+    local stack = { id = id, dmg = dmg }
+    print("Устанавливаем stack:", stack.id, "damage:", stack.dmg)
+
+    pcall(selector.setSlot, 0, stack)
+    os.sleep(0.05)
+    pcall(selector.setSlot, 1, stack)
 end
 
 -- ========== ЭКРАН ==========
