@@ -264,7 +264,7 @@ return {
   { internalName = "minecraft:lever", displayName = "Рычаг", price = 0.011, currency = "res" },
   { internalName = "ExtraTrees:sapling", displayName = "Саженец гевеи", price = 0.011, currency = "res" },
 
-  -- === Новые предметы из изображений 24-30 ===
+  -- === Новые предметы из 24-30.png (с правильными internalName) ===
   { internalName = "ThermalFoundation:material", displayName = "Самородок вибрирующего сплава", price = 0.099, currency = "res" },
   { internalName = "Thaumcraft:ItemResource", displayName = "Саннариум", price = 13.5, currency = "res" },
   { internalName = "minecraft:sugar", displayName = "Сахар", price = 0.033, currency = "res" },
@@ -391,4 +391,11 @@ return {
   { internalName = "ThermalExpansion:Cell", displayName = "Энергохранилище", price = 1.122, currency = "res" },
   { internalName = "IC2:blockNuclearReactor", displayName = "Ядерный реактор", price = 41.469, currency = "res" },
   { internalName = "DraconicEvolution:draconicCore", displayName = "Ядро истребления", price = 0.322, currency = "res" },
+
+  -- === Дополнительные предметы из твоего большого ME списка ===
+  { internalName = "AFSU:AFSU:0", displayName = "AFSU", price = 1.0, currency = "res" },
+  { internalName = "AdvancedSolarPanel:asp_crafting_items:0", displayName = "Sunnarium", price = 13.5, currency = "res" },
+  { internalName = "DraconicEvolution:draconicCore", displayName = "Awakened Core", price = 20.0, currency = "res" },
+  { internalName = "minecraft:wool", displayName = "Шерсть", price = 0.10, currency = "res" },
+  { internalName = "minecraft:stone", displayName = "Камень", price = 0.02, currency = "res" }
 }
