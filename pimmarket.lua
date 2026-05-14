@@ -1,5 +1,3 @@
-```lua
---[[ pimmarket.lua – исправленная версия с новыми цветами ]]
 local component = require("component")
 local event = require("event")
 local gpu = component.gpu
@@ -1841,4 +1839,3 @@ while true do
     end
     ::continue::
 end
-```
