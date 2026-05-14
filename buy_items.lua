@@ -100,6 +100,7 @@ return {
   { internalName = "IC2:blockMetal", displayName = "Свинцовый блок", price = 0.90, currency = "res" },
   { internalName = "IC2:itemDust", displayName = "Оловянная пыль", price = 0.10, currency = "res" },
   { internalName = "IC2:itemIngot", displayName = "Оловянный слиток", price = 0.10, currency = "res" },
+  { internalName = "IC2:itemUran238", displayName = "Уран-238", price = 0.10, currency = "res" },
   { internalName = "MineFactoryReloaded:plastic.raw", displayName = "Сырой пластик", price = 0.10, currency = "res" },
   { internalName = "MineFactoryReloaded:rubberwood.log", displayName = "Резиновая древесина", price = 0.10, currency = "res" },
   { internalName = "MineFactoryReloaded:rubberwood.sapling", displayName = "Саженец резинового дерева", price = 0.10, currency = "res" },
@@ -273,6 +274,7 @@ return {
   { internalName = "IC2:itemIngot", displayName = "Свинцовый слиток", price = 0.15, currency = "res" },
   { internalName = "ThermalDynamics:duct", displayName = "Связующий элемент труб", price = 0.006, currency = "res" },
   { internalName = "Thaumcraft:ItemResource", displayName = "Связыватель душ", price = 10.56, currency = "res" },
+  { internalName = "minecraft:slime_ball", displayName = "Сгусток слизи", price = 0.65, currency = "res" },
   { internalName = "IC2:itemUran238", displayName = "Сдвоенный топливный стержень (Уран)", price = 3.63, currency = "res" },
   { internalName = "minecraft:dye", displayName = "Селитра", price = 0.055, currency = "res" },
   { internalName = "minecraft:wheat_seeds", displayName = "Семена пшеницы", price = 0.011, currency = "res" },
@@ -379,6 +381,7 @@ return {
   { internalName = "ThermalFoundation:material", displayName = "Эндериумная пластина", price = 0.99, currency = "res" },
   { internalName = "ThermalExpansion:Cell", displayName = "Эндериумный конденсатор", price = 298.782, currency = "res" },
   { internalName = "ThermalFoundation:bucket", displayName = "Эндериумный хладагент", price = 3.335, currency = "res" },
+  { internalName = "ThermalFoundation:material", displayName = "Эндерняк", price = 0.11, currency = "res" },
   { internalName = "ThermalExpansion:Cell", displayName = "Энергетическая ячейка", price = 2.185, currency = "res" },
   { internalName = "IC2:itemArmorBronze", displayName = "Энергетический ранец", price = 13.903, currency = "res" },
   { internalName = "ThermalFoundation:material", displayName = "Энергетический сплав", price = 0.288, currency = "res" },
@@ -388,6 +391,13 @@ return {
   { internalName = "ThermalExpansion:Cell", displayName = "Энергохранилище", price = 1.122, currency = "res" },
   { internalName = "IC2:blockNuclearReactor", displayName = "Ядерный реактор", price = 41.469, currency = "res" },
   { internalName = "DraconicEvolution:draconicCore", displayName = "Ядро истребления", price = 0.322, currency = "res" },
+
+  -- === Дополнительные предметы из твоего большого ME списка ===
+  { internalName = "AFSU:AFSU:0", displayName = "AFSU", price = 1.0, currency = "res" },
+  { internalName = "AdvancedSolarPanel:asp_crafting_items:0", displayName = "Sunnarium", price = 13.5, currency = "res" },
+  { internalName = "DraconicEvolution:draconicCore", displayName = "Awakened Core", price = 20.0, currency = "res" },
+  { internalName = "minecraft:wool", displayName = "Шерсть", price = 0.10, currency = "res" },
+  { internalName = "minecraft:stone", displayName = "Камень", price = 0.02, currency = "res" },
 
   -- === Дополнительные предметы из твоего большого ME списка ===
   { internalName = "AFSU:AFSU:0", displayName = "AFSU", price = 1.0, currency = "res" },
