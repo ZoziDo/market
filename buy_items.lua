@@ -395,7 +395,6 @@ return {
   { internalName = "DraconicEvolution:draconicCore", displayName = "Awakened Core", price = 20.0, currency = "res" },
   { internalName = "minecraft:wool", displayName = "Шерсть", price = 0.10, currency = "res" },
   { internalName = "minecraft:stone", displayName = "Камень", price = 0.02, currency = "res" },
-  
   { internalName = "minecraft:blaze_rod", displayName = "Стержень ифрита", price = 0.60, currency = "res" },
   { internalName = "minecraft:ender_pearl", displayName = "Жемчуг Эндера", price = 0.75, currency = "res" },
   { internalName = "IC2:itemUran238", displayName = "Уран-238", price = 0.10, currency = "res" },
