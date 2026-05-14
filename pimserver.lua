@@ -95,10 +95,15 @@ local logBuffer = {}
 local shopPaused = false
 local adminMode = false
 local adminPlayerList = {}
-local adminScroll = 0            -- смещение в списке игроков
-local selectedAdminIndex = 1     -- индекс в adminPlayerList (1-based)
-local adminViewHeight = 20       -- сколько строк списка показывать (зависит от высоты экрана)
-local adminPanelActive = false   -- флаг, что окно админки открыто
+local adminScroll = 0
+local selectedAdminIndex = 1
+local adminViewHeight = 20
+
+-- Режим редактирования баланса
+local editBalanceMode = false
+local editingPlayer = nil
+local editCurrency = nil   -- "em" или "res"
+local editInput = ""       -- вводимая сумма
 
 -- Кеш для ME статистики
 local cachedMeTotal = "Загрузка..."
@@ -111,15 +116,12 @@ local activityBuffer = {}
 for i=1, ACTIVITY_SIZE do activityBuffer[i] = 0 end
 local activityIndex = 0
 
--- Размеры экрана (будут обновлены)
+-- Размеры экрана
 local screenW, screenH = 80, 25
 local colX = {5, 30, 55, 80}
 local colWidth = 25
 local logStartY = 20
 local maxLogLines = 14
-
--- Для мыши: координаты клика по игроку
-local lastClickX, lastClickY = 0, 0
 
 -- Имя админа (кто может управлять через PIM)
 local ADMIN_NAME = "ZoziDo"
@@ -137,8 +139,8 @@ local function updateScreenSize()
     logStartY = math.min(18, screenH - 5)
     maxLogLines = screenH - logStartY - 3
     if maxLogLines < 3 then maxLogLines = 3 end
-    -- высота админ-панели = screenH - 6 (заголовок, подсказки)
     adminViewHeight = screenH - 8
+    if adminViewHeight < 3 then adminViewHeight = 3
 end
 
 local function gotoxy(x, y)
@@ -203,7 +205,7 @@ end
 meStatsTimer = event.timer(10, updateMeStats, math.huge)
 updateMeStats()
 
--- ========== АДМИН-ПАНЕЛЬ (полноэкранная) ==========
+-- ========== АДМИН-ПАНЕЛЬ ==========
 local function updateAdminPlayerList()
     adminPlayerList = {}
     for name, data in pairs(players) do
@@ -212,15 +214,13 @@ local function updateAdminPlayerList()
     table.sort(adminPlayerList, function(a,b) return a.name < b.name end)
 end
 
--- Отрисовка админ-панели
 local function drawAdminPanel()
     io.write(ansi.hide_cursor .. ansi.clear)
     updateScreenSize()
 
-    -- Рамка во весь экран
     setColor(ansi.white)
-    fill(1, 1, screenW, 1, "─")                -- верх
-    fill(1, screenH, screenW, 1, "─")          -- низ
+    fill(1, 1, screenW, 1, "─")
+    fill(1, screenH, screenW, 1, "─")
     for y=2, screenH-1 do
         gotoxy(1, y) io.write("│")
         gotoxy(screenW, y) io.write("│")
@@ -229,20 +229,16 @@ local function drawAdminPanel()
     gotoxy(1,screenH) io.write("└"..string.rep("─", screenW-2).."┘")
     resetColor()
 
-    -- Заголовок
     setColor(ansi.bg_blue, ansi.white)
     fill(2, 1, screenW-2, 1, " ")
     gotoxy(2,1) io.write(" АДМИН-ПАНЕЛЬ (нажмите A для выхода) ")
     resetColor()
 
-    -- Список игроков
     local startIdx = adminScroll + 1
     local endIdx = math.min(#adminPlayerList, adminScroll + adminViewHeight)
-    local lineY = 3
     setColor(ansi.yellow)
-    gotoxy(2, lineY) io.write("Игроки (↑↓ выбор, клик мышкой, D - бан, R - сброс статистики, P - пауза, E - редактировать баланс)")
+    gotoxy(2, 3) io.write("Игроки (↑↓ выбор, клик мышкой, D - бан, R - сброс статистики, P - пауза, E - редактировать баланс)")
     resetColor()
-    lineY = lineY + 1
 
     for i=startIdx, endIdx do
         local ply = adminPlayerList[i]
@@ -250,13 +246,13 @@ local function drawAdminPanel()
         local line = string.format("%-20s | Ресы: %8.2f | Эмы: %8.2f | Транз: %d%s",
             ply.name, ply.data.resBalance or 0, ply.data.balance or 0, ply.data.transactions or 0, bannedStr)
         if #line > screenW - 4 then line = line:sub(1, screenW-4) end
+        local y = 4 + (i - startIdx)
         setColor((i == selectedAdminIndex) and ansi.bg_blue or ansi.white, (i == selectedAdminIndex) and ansi.white or nil)
-        gotoxy(2, 3 + (i - startIdx) + 1)
+        gotoxy(2, y)
         io.write(line)
         resetColor()
     end
 
-    -- Подсказки
     setColor(ansi.cyan)
     gotoxy(2, screenH-2)
     io.write("BAN: D | UNBAN: U | RESET STATS: R | PAUSE: P | EDIT BALANCE: E | SCROLL: ↑↓ | MOUSE CLICK")
@@ -264,31 +260,69 @@ local function drawAdminPanel()
     io.flush()
 end
 
--- Обработка мыши в админ-панели
-local function handleAdminClick(x, y)
-    if y < 4 or y > 3 + adminViewHeight then return end
-    local lineIndex = y - 5
-    local realIndex = adminScroll + lineIndex + 1
-    if realIndex >= 1 and realIndex <= #adminPlayerList then
-        selectedAdminIndex = realIndex
-        drawAdminPanel()
-    end
-end
+-- ========== ОКНО РЕДАКТИРОВАНИЯ БАЛАНСА ==========
+local function drawEditBalanceWindow()
+    io.write(ansi.hide_cursor .. ansi.clear)
+    updateScreenSize()
 
--- Изменение баланса игрока (вызывается из админ-панели)
-local function editPlayerBalance(ply)
-    -- здесь можно организовать ввод суммы с клавиатуры
-    log("INFO", "Редактирование баланса игрока " .. ply.name .. " (функция в разработке)")
-    -- Для простоты пока просто сообщаем, но можно реализовать через диалог
-    -- Пока оставим заглушку. Можно будет добавить ввод через event.pull.
+    -- Рамка окна (по центру)
+    local w = 50
+    local h = 10
+    local x = math.floor((screenW - w) / 2)
+    local y = math.floor((screenH - h) / 2)
+
+    setColor(ansi.white)
+    fill(x, y, w, h, " ")
+    setColor(ansi.bg_black, ansi.white)
+    for i = 0, h-1 do
+        gotoxy(x, y+i) io.write("█")
+        gotoxy(x+w-1, y+i) io.write("█")
+    end
+    fill(x+1, y, w-2, 1, "─")
+    fill(x+1, y+h-1, w-2, 1, "─")
+    setColor(ansi.bg_blue, ansi.white)
+    fill(x+2, y, w-4, 1, " ")
+    gotoxy(x+2, y) io.write(" РЕДАКТИРОВАНИЕ БАЛАНСА ")
+    resetColor()
+
+    -- Информация об игроке
+    setColor(ansi.yellow)
+    gotoxy(x+2, y+2)
+    io.write("Игрок: " .. editingPlayer.name)
+    gotoxy(x+2, y+3)
+    io.write("Текущий баланс: Ресы: " .. string.format("%.2f", editingPlayer.data.resBalance) .. "  Эмы: " .. string.format("%.2f", editingPlayer.data.balance))
+    resetColor()
+
+    -- Выбор валюты
+    setColor(ansi.green)
+    gotoxy(x+2, y+5)
+    io.write("Выберите валюту: 1 - Ресы ($)   2 - Эмы (*)")
+    resetColor()
+
+    if editCurrency then
+        setColor(ansi.cyan)
+        gotoxy(x+2, y+6)
+        io.write("Введите сумму: " .. editInput .. "_")
+        resetColor()
+    end
+
+    setColor(ansi.white)
+    gotoxy(x+2, y+8)
+    io.write("Enter - подтвердить | Esc - отмена")
+    resetColor()
+
+    io.flush()
 end
 
 -- ========== ОТРИСОВКА ОСНОВНОГО ИНТЕРФЕЙСА ==========
 function drawInterface()
+    if editBalanceMode then
+        drawEditBalanceWindow()
+        return
+    end
     io.write(ansi.hide_cursor .. ansi.clear)
     updateScreenSize()
     
-    -- Верхняя панель
     setColor(ansi.bg_blue, ansi.white)
     fill(1, 2, screenW, 1, " ")
     gotoxy(1, 2)
@@ -297,7 +331,6 @@ function drawInterface()
     io.write(title .. string.rep(" ", screenW - #title))
     resetColor()
     
-    -- Часы
     setColor(ansi.cyan)
     gotoxy(1, 3)
     io.write("Время: " .. os.date("%H:%M:%S") .. "  До сброса репортов: " .. timeToMidnight())
@@ -309,12 +342,10 @@ function drawInterface()
     io.write("Активных сессий: " .. activeCount)
     resetColor()
     
-    -- Разделитель
     setColor(ansi.white)
     fill(1, 4, screenW, 1, "─")
     resetColor()
     
-    -- Заголовки
     local titles = {"👥 ИГРОКИ", "📦 ME СИСТЕМА", "🔒 БЕЗОПАСНОСТЬ", "📊 СТАТИСТИКА"}
     setColor(ansi.bold, ansi.yellow)
     for i=1,4 do
@@ -323,7 +354,6 @@ function drawInterface()
     end
     resetColor()
     
-    -- Игроки
     setColor(ansi.green)
     local playerList = {}
     for name, s in pairs(sessions) do
@@ -338,7 +368,6 @@ function drawInterface()
     end
     resetColor()
     
-    -- ME система
     setColor(ansi.cyan)
     gotoxy(colX[2], 6)
     io.write("Всего предметов: " .. cachedMeTotal)
@@ -346,7 +375,6 @@ function drawInterface()
     io.write("Уникальных типов: " .. cachedMeUnique)
     resetColor()
     
-    -- Безопасность + график
     setColor(ansi.magenta)
     gotoxy(colX[3], 6)
     io.write("Лимит сессии: " .. SESSION_TIMEOUT .. " сек")
@@ -371,7 +399,6 @@ function drawInterface()
     end
     resetColor()
     
-    -- Статистика
     setColor(ansi.yellow)
     gotoxy(colX[4], 6)
     io.write("Репортов: " .. globalStats.totalReports)
@@ -381,13 +408,11 @@ function drawInterface()
     io.write("Продаж: " .. globalStats.totalSells)
     resetColor()
     
-    -- Подсказки
     setColor(ansi.white)
     gotoxy(1, screenH-1)
     io.write("P - Пауза магазина | A - Админ-панель (только для " .. ADMIN_NAME .. " на PIM)")
     resetColor()
     
-    -- Логи
     setColor(ansi.white)
     fill(1, logStartY-1, screenW, 1, "─")
     resetColor()
@@ -409,7 +434,7 @@ end
 function addLog(text, fg)
     table.insert(logBuffer, {text = text, color = fg or ansi.white})
     while #logBuffer > 200 do table.remove(logBuffer, 1) end
-    if not adminMode then drawInterface() end
+    if not adminMode and not editBalanceMode then drawInterface() end
 end
 
 local function log(level, msg)
@@ -420,34 +445,83 @@ local function log(level, msg)
     addLog("[" .. os.date("%H:%M:%S") .. "] [" .. level .. "] " .. msg, color)
 end
 
--- ========== ОБРАБОТКА КЛАВИШ И МЫШИ ==========
+-- ========== ОБРАБОТКА КЛАВИШ ==========
 local function handleKey(key, char, player)
-    if not player or player ~= ADMIN_NAME then
-        log("WARN", "Попытка управления сервером не админом: " .. tostring(player))
-        return
+    -- Если в режиме редактирования баланса
+    if editBalanceMode then
+        if char == 27 then -- Esc
+            editBalanceMode = false
+            editingPlayer = nil
+            editCurrency = nil
+            editInput = ""
+            drawAdminPanel()
+            return
+        elseif char == 13 then -- Enter
+            if editCurrency and editInput ~= "" then
+                local amount = tonumber(editInput)
+                if amount then
+                    if editCurrency == "res" then
+                        editingPlayer.data.resBalance = amount
+                        log("INFO", "Баланс Ресов игрока " .. editingPlayer.name .. " изменён на " .. amount)
+                    else
+                        editingPlayer.data.balance = amount
+                        log("INFO", "Баланс Эмов игрока " .. editingPlayer.name .. " изменён на " .. amount)
+                    end
+                    saveDB()
+                else
+                    log("WARN", "Некорректная сумма: " .. editInput)
+                end
+            end
+            editBalanceMode = false
+            editingPlayer = nil
+            editCurrency = nil
+            editInput = ""
+            drawAdminPanel()
+            return
+        elseif not editCurrency then
+            -- Ожидаем выбор валюты
+            if char == 49 then -- 1
+                editCurrency = "res"
+            elseif char == 50 then -- 2
+                editCurrency = "em"
+            end
+            drawEditBalanceWindow()
+            return
+        else
+            -- Ввод суммы (цифры, точка)
+            if char >= 48 and char <= 57 then -- цифры
+                editInput = editInput .. string.char(char)
+            elseif char == 46 then -- точка
+                if not editInput:find("%.") then
+                    editInput = editInput .. "."
+                end
+            elseif char == 8 then -- Backspace
+                editInput = editInput:sub(1, -2)
+            end
+            drawEditBalanceWindow()
+            return
+        end
     end
 
-    -- БУКВЫ = char
-    if char == 112 or char == 80 then   -- P / p
-        shopPaused = not shopPaused
-        log("INFO", "Магазин " .. (shopPaused and "приостановлен" or "возобновлён"))
-        if adminMode then drawAdminPanel() else drawInterface() end
-
-    elseif char == 97 or char == 65 then -- A / a
-        if adminMode then
-            adminMode = false
-            drawInterface()
-        else
-            adminMode = true
-            updateAdminPlayerList()
-            selectedAdminIndex = 1
-            adminScroll = 0
-            drawAdminPanel()
+    -- Обычный режим админ-панели
+    if adminMode then
+        if not player or player ~= ADMIN_NAME then
+            log("WARN", "Попытка управления сервером не админом: " .. tostring(player))
+            return
         end
 
-    elseif adminMode then
-        -- СТРЕЛКИ = key
-        if key == 200 then -- вверх
+        if char == 112 or char == 80 then   -- P / p
+            shopPaused = not shopPaused
+            log("INFO", "Магазин " .. (shopPaused and "приостановлен" or "возобновлён"))
+            drawAdminPanel()
+            return
+
+        elseif char == 97 or char == 65 then -- A / a
+            adminMode = false
+            drawInterface()
+            return
+
+        elseif key == 200 then -- стрелка вверх
             if selectedAdminIndex > 1 then
                 selectedAdminIndex = selectedAdminIndex - 1
                 if selectedAdminIndex < adminScroll + 1 then
@@ -455,8 +529,9 @@ local function handleKey(key, char, player)
                 end
                 drawAdminPanel()
             end
+            return
 
-        elseif key == 208 then -- вниз
+        elseif key == 208 then -- стрелка вниз
             if selectedAdminIndex < #adminPlayerList then
                 selectedAdminIndex = selectedAdminIndex + 1
                 if selectedAdminIndex > adminScroll + adminViewHeight then
@@ -464,6 +539,7 @@ local function handleKey(key, char, player)
                 end
                 drawAdminPanel()
             end
+            return
 
         elseif char == 100 or char == 68 then -- D / d
             local ply = adminPlayerList[selectedAdminIndex]
@@ -473,6 +549,7 @@ local function handleKey(key, char, player)
                 saveDB()
                 drawAdminPanel()
             end
+            return
 
         elseif char == 114 or char == 82 then -- R / r
             local ply = adminPlayerList[selectedAdminIndex]
@@ -484,24 +561,27 @@ local function handleKey(key, char, player)
                 log("INFO", "Статистика игрока " .. ply.name .. " сброшена")
                 drawAdminPanel()
             end
+            return
 
         elseif char == 101 or char == 69 then -- E / e
             local ply = adminPlayerList[selectedAdminIndex]
             if ply then
-                log("INFO", "Редактирование баланса игрока " .. ply.name .. " (будет реализовано)")
-                drawAdminPanel()
+                editingPlayer = ply
+                editCurrency = nil
+                editInput = ""
+                editBalanceMode = true
+                drawEditBalanceWindow()
             end
+            return
         end
     end
 end
 
 local function handleTouch(x, y, player)
-    if not adminMode then return end
-    -- Проверка, что кликнул админ на PIM
+    if not adminMode or editBalanceMode then return end
     if player ~= ADMIN_NAME then return end
-    -- Проверка, что клик в области списка
     if y >= 4 and y <= 3 + adminViewHeight then
-        local lineIndex = y - 5
+        local lineIndex = y - 4
         local realIndex = adminScroll + lineIndex + 1
         if realIndex >= 1 and realIndex <= #adminPlayerList then
             selectedAdminIndex = realIndex
@@ -529,9 +609,8 @@ local function validateSession(name, token)
 end
 
 -- ========== ОСНОВНОЙ ЦИКЛ ==========
--- Таймер перерисовки основного интерфейса (каждые 3 секунды, чтобы не мерцало)
 local refreshTimer = event.timer(3, function()
-    if not adminMode then
+    if not adminMode and not editBalanceMode then
         drawInterface()
     end
 end, math.huge)
@@ -544,14 +623,14 @@ while true do
     local etype = ev[1]
 
     if etype == "key_down" then
-    local key = ev[4]
-    local char = ev[3]
-    local player = ev[5]
-    handleKey(key, char, player)
+        local key = ev[4]
+        local char = ev[3]
+        local player = ev[5]
+        handleKey(key, char, player)
     elseif etype == "touch" then
         local x = ev[3]
         local y = ev[4]
-        local player = ev[6]
+        local player = ev[5]
         handleTouch(x, y, player)
     elseif etype == "modem_message" then
         local from = ev[3]
@@ -582,7 +661,7 @@ while true do
                 log("INFO", "✅ АДМИН ЗАРЕГИСТРИРОВАН: " .. from)
             end
             modem.send(from, 0xffef, serialization.serialize({op="welcome", owner=(from==owner), shopPaused=shopPaused}))
-            if not adminMode then drawInterface() end
+            if not adminMode and not editBalanceMode then drawInterface() end
 
         elseif msg.op == "enter" then
             if shopPaused then
@@ -621,7 +700,7 @@ while true do
                 agreed = player.agreed or false,
                 shopPaused = shopPaused
             }))
-            if not adminMode then drawInterface() end
+            if not adminMode and not editBalanceMode then drawInterface() end
 
         elseif msg.op == "getAccount" then
             if not validateSession(msg.name, msg.token) then
