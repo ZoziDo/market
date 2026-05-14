@@ -126,6 +126,15 @@ local maxLogLines = 14
 -- Имя админа (кто может управлять через PIM)
 local ADMIN_NAME = "ZoziDo"
 
+-- ========== ПРОВЕРКА, ЧТО АДМИН РЕАЛЬНО ПОДКЛЮЧЁН ==========
+local function isAdminConnected()
+    local sess = sessions[ADMIN_NAME]
+    if sess and sess.token and os.time() - (sess.lastAction or 0) < SESSION_TIMEOUT then
+        return true
+    end
+    return false
+end
+
 -- ========== ФУНКЦИИ ОБНОВЛЕНИЯ ЭКРАНА ==========
 local function updateScreenSize()
     local w, h = gpu.getResolution()
@@ -466,8 +475,8 @@ end
 
 -- ========== ОБРАБОТКА КЛАВИШ ==========
 local function handleKey(key, char, player)
-    -- Только игрок с именем ADMIN_NAME имеет права администратора
-    local isAdmin = (player == ADMIN_NAME)
+    -- Админ только если имя совпадает И есть активная сессия (стоит на PIM)
+    local isAdmin = (player == ADMIN_NAME) and isAdminConnected()
 
     -- Если в режиме редактирования баланса – обрабатываем только его клавиши
     if editBalanceMode then
@@ -529,7 +538,10 @@ local function handleKey(key, char, player)
     -- Сначала проверяем специальные клавиши по key (стрелки и т.п.)
     if adminMode then
         if not isAdmin then
-            log("WARN", "Попытка управления сервером не админом: " .. tostring(player))
+            -- Если админ потерял сессию, выходим из админ-панели
+            adminMode = false
+            drawInterface()
+            log("WARN", "Сессия администратора истекла, выход из панели")
             return
         end
 
@@ -631,8 +643,8 @@ end
 
 local function handleTouch(x, y, player)
     if not adminMode or editBalanceMode then return end
-    -- Только игрок с именем ADMIN_NAME может кликать в админ-панели
-    if player ~= ADMIN_NAME then return end
+    -- Только админ с активной сессией может кликать
+    if player ~= ADMIN_NAME or not isAdminConnected() then return end
     if y >= 4 and y <= 3 + adminViewHeight then
         local lineIndex = y - 4
         local realIndex = adminScroll + lineIndex + 1
@@ -665,6 +677,11 @@ end
 local refreshTimer = event.timer(3, function()
     if not adminMode and not editBalanceMode then
         drawInterface()
+    elseif adminMode and not isAdminConnected() then
+        -- Автоматически выходим из админ-панели, если сессия админа пропала
+        adminMode = false
+        drawInterface()
+        log("WARN", "Автоматический выход из админ-панели (потеря связи с PIM)")
     end
 end, math.huge)
 
