@@ -218,7 +218,7 @@ local function drawBottomPanel()
     gpu.setForeground(colors.error)
     gpu.set(4, 23, "[ ПОДДЕРЖКА ]")
     gpu.set(35, 23, "[ СОГЛАШЕНИЕ ]")
-    gpu.set(70, 23, "[ ОТЗЫВЫ ]")
+    gpu.set(69, 23, "[ ОТЗЫВЫ ]")
 end
 
 local function drawFlexButton(btn)
@@ -675,7 +675,7 @@ local function drawPurchaseScreen()
 
     gpu.setForeground(colors.success)
     gpu.set(55, 5, "Цена: ")
-    gpu.setForeground(colors.success)
+    gpu.setForeground(colors.text_bright)
     gpu.set(62, 5, string.format("%.2f", purchaseItem.price) .. " " .. currencySym)
 
     gpu.setForeground(colors.success)
@@ -778,7 +778,7 @@ local function drawSellScanScreen()
     local emText = string.format("%.2f Эмов *", emBalance)
     gpu.setForeground(colors.success)
     gpu.set(3, 1, resText)
-    gpu.setForeground(colors.accent_secondary)
+    gpu.setForeground(colors.accent_main)
     gpu.set(3 + unicode.len(resText), 1, emText)
 
     gpu.setForeground(colors.success)
@@ -1027,7 +1027,7 @@ local function drawReportScreen()
         return
     end
 
-    gpu.setBackground(colors.bg_main)
+    gpu.setBackground(colors.error)
     gpu.fill(10, 9, 60, 3, " ")
     gpu.setForeground(colors.text_bright)
     if reportInput ~= "" then
@@ -1157,7 +1157,7 @@ local function drawMainMenu()
         local x2 = math.floor((80 - unicode.len(full2))/2) + 1
         gpu.setForeground(colors.success)
         gpu.set(x2, 5, resText)
-        gpu.setForeground(colors.accent_secondary)
+        gpu.setForeground(colors.accent_main)
         gpu.set(x2 + unicode.len(resText), 5, emText)
 
         if not playerAgreed then
