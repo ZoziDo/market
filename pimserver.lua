@@ -256,7 +256,7 @@ local function drawAdminPanel()
     local startIdx = adminScroll + 1
     local endIdx = math.min(#adminPlayerList, adminScroll + adminViewHeight)
     setColor(ansi.yellow)
-    gotoxy(2, 3) io.write("Игроки (↑↓ выбор, клик мышкой, D - бан, R - сброс статистики, P - пауза, E - редактировать баланс)")
+    gotoxy(2, 3) io.write("Игроки (↑↓ выбор, клик мышкой, D - бан/разбан, R - сброс статистики, P - пауза, E - редактировать баланс)")
     resetColor()
 
     for i=startIdx, endIdx do
@@ -274,7 +274,7 @@ local function drawAdminPanel()
 
     setColor(ansi.cyan)
     gotoxy(2, screenH-2)
-    io.write("BAN: D | UNBAN: U | RESET STATS: R | PAUSE: P | EDIT BALANCE: E | SCROLL: ↑↓ | MOUSE CLICK")
+    io.write("BAN/UNBAN: D | RESET STATS: R | PAUSE: P | EDIT BALANCE: E | SCROLL: ↑↓ | MOUSE CLICK")
     resetColor()
     io.flush()
 end
@@ -466,7 +466,10 @@ end
 
 -- ========== ОБРАБОТКА КЛАВИШ ==========
 local function handleKey(key, char, player)
-    -- Если в режиме редактирования баланса
+    -- Разрешаем управление, если игрок nil (консоль) или ADMIN_NAME
+    local isAdmin = (player == nil) or (player == ADMIN_NAME)
+
+    -- Если в режиме редактирования баланса – обрабатываем только его клавиши
     if editBalanceMode then
         if char == 27 then -- Esc
             editBalanceMode = false
@@ -522,85 +525,104 @@ local function handleKey(key, char, player)
         end
     end
 
-    -- Обычный режим админ-панели
-    if adminMode then
-    if not player or player ~= ADMIN_NAME then
-        log("WARN", "Попытка управления сервером не админом: " .. tostring(player))
-        return
-    end
-
-    local pressed = string.lower(string.char(char > 0 and char or key))
-
-    if pressed == "p" then
-        shopPaused = not shopPaused
-        log("INFO", "Магазин " .. (shopPaused and "приостановлен" or "возобновлён"))
-        drawAdminPanel()
-        return
-
-    elseif pressed == "a" then
-        adminMode = false
-        drawInterface()
-        return
-
-    elseif key == 200 then -- ↑
-        if selectedAdminIndex > 1 then
-            selectedAdminIndex = selectedAdminIndex - 1
-            if selectedAdminIndex < adminScroll + 1 then
-                adminScroll = math.max(0, selectedAdminIndex - 1)
+    -- Обработка глобальных клавиш (A, P), работающих в основном интерфейсе
+    if not adminMode then
+        local pressed = string.lower(string.char(char > 0 and char or key))
+        if pressed == "a" then
+            if isAdmin then
+                adminMode = true
+                adminScroll = 0
+                selectedAdminIndex = 1
+                updateAdminPlayerList()
+                drawAdminPanel()
+            else
+                log("WARN", "Попытка входа в админ-панель не админом: " .. tostring(player))
             end
-            drawAdminPanel()
-        end
-        return
-
-    elseif key == 208 then -- ↓
-        if selectedAdminIndex < #adminPlayerList then
-            selectedAdminIndex = selectedAdminIndex + 1
-            if selectedAdminIndex > adminScroll + adminViewHeight then
-                adminScroll = selectedAdminIndex - adminViewHeight
+            return
+        elseif pressed == "p" then
+            if isAdmin then
+                shopPaused = not shopPaused
+                log("INFO", "Магазин " .. (shopPaused and "приостановлен" or "возобновлён"))
+                drawInterface()
+            else
+                log("WARN", "Попытка паузы магазина не админом: " .. tostring(player))
             end
-            drawAdminPanel()
+            return
         end
-        return
+    else -- adminMode == true
+        -- В админ-панели проверяем права
+        if not isAdmin then
+            log("WARN", "Попытка управления сервером не админом: " .. tostring(player))
+            return
+        end
 
-    elseif pressed == "d" then
-        local ply = adminPlayerList[selectedAdminIndex]
-        if ply then
-            ply.data.banned = not ply.data.banned
-            saveDB()
-            log("INFO", "Игрок " .. ply.name .. (ply.data.banned and " забанен" or " разбанен"))
+        local pressed = string.lower(string.char(char > 0 and char or key))
+        if pressed == "p" then
+            shopPaused = not shopPaused
+            log("INFO", "Магазин " .. (shopPaused and "приостановлен" or "возобновлён"))
             drawAdminPanel()
-        end
-        return
-
-    elseif pressed == "r" then
-        local ply = adminPlayerList[selectedAdminIndex]
-        if ply then
-            ply.data.transactions = 0
-            ply.data.balance = 0
-            ply.data.resBalance = 0
-            saveDB()
-            log("INFO", "Статистика игрока " .. ply.name .. " сброшена")
-            drawAdminPanel()
-        end
-        return
-
-    elseif pressed == "e" then
-        local ply = adminPlayerList[selectedAdminIndex]
-        if ply then
-            editingPlayer = ply
-            editCurrency = nil
-            editInput = ""
-            editBalanceMode = true
-            drawEditBalanceWindow()
-        end
-        return
+            return
+        elseif pressed == "a" then
+            adminMode = false
+            drawInterface()
+            return
+        elseif key == 200 then -- ↑
+            if selectedAdminIndex > 1 then
+                selectedAdminIndex = selectedAdminIndex - 1
+                if selectedAdminIndex < adminScroll + 1 then
+                    adminScroll = math.max(0, selectedAdminIndex - 1)
+                end
+                drawAdminPanel()
+            end
+            return
+        elseif key == 208 then -- ↓
+            if selectedAdminIndex < #adminPlayerList then
+                selectedAdminIndex = selectedAdminIndex + 1
+                if selectedAdminIndex > adminScroll + adminViewHeight then
+                    adminScroll = selectedAdminIndex - adminViewHeight
+                end
+                drawAdminPanel()
+            end
+            return
+        elseif pressed == "d" then
+            local ply = adminPlayerList[selectedAdminIndex]
+            if ply then
+                ply.data.banned = not ply.data.banned
+                saveDB()
+                log("INFO", "Игрок " .. ply.name .. (ply.data.banned and " забанен" or " разбанен"))
+                drawAdminPanel()
+            end
+            return
+        elseif pressed == "r" then
+            local ply = adminPlayerList[selectedAdminIndex]
+            if ply then
+                ply.data.transactions = 0
+                ply.data.balance = 0
+                ply.data.resBalance = 0
+                saveDB()
+                log("INFO", "Статистика игрока " .. ply.name .. " сброшена")
+                drawAdminPanel()
+            end
+            return
+        elseif pressed == "e" then
+            local ply = adminPlayerList[selectedAdminIndex]
+            if ply then
+                editingPlayer = ply
+                editCurrency = nil
+                editInput = ""
+                editBalanceMode = true
+                drawEditBalanceWindow()
+            end
+            return
         end
     end
 end
 
 local function handleTouch(x, y, player)
     if not adminMode or editBalanceMode then return end
-    if player ~= ADMIN_NAME then return end
+    -- Разрешаем клики только админу (консоль или ZoziDo)
+    local isAdmin = (player == nil) or (player == ADMIN_NAME)
+    if not isAdmin then return end
     if y >= 4 and y <= 3 + adminViewHeight then
         local lineIndex = y - 4
         local realIndex = adminScroll + lineIndex + 1
