@@ -594,6 +594,7 @@ local function handleKey(key, char, player)
             drawEditBalanceWindow()
         end
         return
+        end
     end
 end
 
