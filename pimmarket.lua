@@ -1180,7 +1180,7 @@ end
 
 local function drawAccount(data)
     clear()
-    drawCenteredText(10, currentPlayer .. ":", colors.accent_secondary)
+    drawCenteredText(10, currentPlayer .. ":", colors.text_bright)
     local res = data.resBalance or resBalance
     local em = data.emBalance or emBalance
     local resPart1 = string.format("Баланс Ресов: %.2f $ | ", res)
@@ -1189,7 +1189,7 @@ local function drawAccount(data)
     local x = math.floor((80 - unicode.len(full)) / 2) + 1
     gpu.setForeground(colors.success)
     gpu.set(x, 12, resPart1)
-    gpu.setForeground(colors.accent_secondary)
+    gpu.setForeground(colors.accent_main)
     gpu.set(x + unicode.len(resPart1), 12, emPart)
 
     local transLabel = "Совершенно транзакций: "
@@ -1212,7 +1212,7 @@ local function drawAccount(data)
 
     local agreeLabel = "Соглашение: "
     local agreeStatus = (data.agreed or playerAgreed) and "ознакомлен" or "не ознакомлен"
-    local agreeColor = (data.agreed or playerAgreed) and colors.success or colors.error
+    local agreeColor = (data.agreed or playerAgreed) and colors.text_bright or colors.error
     local fullAgree = agreeLabel .. agreeStatus
     local agreeX = math.floor((80 - unicode.len(fullAgree)) / 2) + 1
     gpu.setForeground(colors.success)
