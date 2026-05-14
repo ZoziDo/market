@@ -126,6 +126,9 @@ local maxLogLines = 14
 -- Имя админа (кто может управлять через PIM)
 local ADMIN_NAME = "ZoziDo"
 
+-- Флаг для предотвращения рекурсивной отрисовки
+local drawing = false
+
 -- ========== ПРОВЕРКА, ЧТО АДМИН РЕАЛЬНО ПОДКЛЮЧЁН ==========
 local function isAdminConnected()
     local sess = sessions[ADMIN_NAME]
@@ -243,6 +246,8 @@ local function updateAdminPlayerList()
 end
 
 local function drawAdminPanel()
+    if drawing then return end
+    drawing = true
     io.write(ansi.hide_cursor .. ansi.clear)
     updateScreenSize()
 
@@ -286,10 +291,13 @@ local function drawAdminPanel()
     io.write("BAN/UNBAN: D | RESET STATS: R | PAUSE: P | EDIT BALANCE: E | SCROLL: ↑↓ | MOUSE CLICK")
     resetColor()
     io.flush()
+    drawing = false
 end
 
 -- ========== ОКНО РЕДАКТИРОВАНИЯ БАЛАНСА ==========
 local function drawEditBalanceWindow()
+    if drawing then return end
+    drawing = true
     io.write(ansi.hide_cursor .. ansi.clear)
     updateScreenSize()
 
@@ -303,8 +311,8 @@ local function drawEditBalanceWindow()
     fill(x, y, w, h, " ")
     setColor(ansi.bg_black, ansi.white)
     for i = 0, h-1 do
-        gotoxy(x, y+i) io.write("│")
-        gotoxy(x+w-1, y+i) io.write("│")
+        gotoxy(x, y+i) io.write("█")
+        gotoxy(x+w-1, y+i) io.write("█")
     end
     fill(x+1, y, w-2, 1, "─")
     fill(x+1, y+h-1, w-2, 1, "─")
@@ -340,6 +348,7 @@ local function drawEditBalanceWindow()
     resetColor()
 
     io.flush()
+    drawing = false
 end
 
 -- ========== ОТРИСОВКА ОСНОВНОГО ИНТЕРФЕЙСА ==========
@@ -348,6 +357,8 @@ function drawInterface()
         drawEditBalanceWindow()
         return
     end
+    if drawing then return end
+    drawing = true
     io.write(ansi.hide_cursor .. ansi.clear)
     updateScreenSize()
     
@@ -456,13 +467,14 @@ function drawInterface()
         end
     end
     io.flush()
+    drawing = false
 end
 
 -- ========== ЛОГИРОВАНИЕ ==========
 function addLog(text, fg)
     table.insert(logBuffer, {text = text, color = fg or ansi.white})
     while #logBuffer > 200 do table.remove(logBuffer, 1) end
-    if not adminMode and not editBalanceMode then drawInterface() end
+    -- Перерисовка больше не вызывается здесь — только по таймеру
 end
 
 local function log(level, msg)
@@ -674,7 +686,7 @@ local function validateSession(name, token)
 end
 
 -- ========== ОСНОВНОЙ ЦИКЛ ==========
-local refreshTimer = event.timer(3, function()
+local refreshTimer = event.timer(1, function()
     if not adminMode and not editBalanceMode then
         drawInterface()
     elseif adminMode and not isAdminConnected() then
@@ -731,7 +743,7 @@ while true do
                 log("INFO", "✅ АДМИН ЗАРЕГИСТРИРОВАН: " .. from)
             end
             modem.send(from, 0xffef, serialization.serialize({op="welcome", owner=(from==owner), shopPaused=shopPaused}))
-            if not adminMode and not editBalanceMode then drawInterface() end
+            -- Перерисовка через таймер
 
         elseif msg.op == "enter" then
             if shopPaused then
@@ -770,7 +782,7 @@ while true do
                 agreed = player.agreed or false,
                 shopPaused = shopPaused
             }))
-            if not adminMode and not editBalanceMode then drawInterface() end
+            -- Перерисовка через таймер
 
         elseif msg.op == "getAccount" then
             if not validateSession(msg.name, msg.token) then
