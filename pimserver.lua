@@ -303,8 +303,8 @@ local function drawEditBalanceWindow()
     fill(x, y, w, h, " ")
     setColor(ansi.bg_black, ansi.white)
     for i = 0, h-1 do
-        gotoxy(x, y+i) io.write("█")
-        gotoxy(x+w-1, y+i) io.write("█")
+        gotoxy(x, y+i) io.write("│")
+        gotoxy(x+w-1, y+i) io.write("│")
     end
     fill(x+1, y, w-2, 1, "─")
     fill(x+1, y+h-1, w-2, 1, "─")
