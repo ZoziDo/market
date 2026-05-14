@@ -422,19 +422,18 @@ end
 
 -- ========== ОБРАБОТКА КЛАВИШ И МЫШИ ==========
 local function handleKey(key, char, player)
-    -- Проверка: админ-режим доступен только если текущий игрок на PIM равен ADMIN_NAME
-    -- Для простоты будем проверять по имени из сессии (передаётся в player).
-    -- В OC событие key_down содержит имя игрока, нажавшего клавишу на PIM.
     if not player or player ~= ADMIN_NAME then
         log("WARN", "Попытка управления сервером не админом: " .. tostring(player))
         return
     end
 
-    if key == 112 or key == 80 then   -- P / p
+    -- БУКВЫ = char
+    if char == 112 or char == 80 then   -- P / p
         shopPaused = not shopPaused
         log("INFO", "Магазин " .. (shopPaused and "приостановлен" or "возобновлён"))
         if adminMode then drawAdminPanel() else drawInterface() end
-    elseif key == 97 or key == 65 then -- A / a
+
+    elseif char == 97 or char == 65 then -- A / a
         if adminMode then
             adminMode = false
             drawInterface()
@@ -445,8 +444,10 @@ local function handleKey(key, char, player)
             adminScroll = 0
             drawAdminPanel()
         end
+
     elseif adminMode then
-        if key == 200 then -- стрелка вверх
+        -- СТРЕЛКИ = key
+        if key == 200 then -- вверх
             if selectedAdminIndex > 1 then
                 selectedAdminIndex = selectedAdminIndex - 1
                 if selectedAdminIndex < adminScroll + 1 then
@@ -454,7 +455,8 @@ local function handleKey(key, char, player)
                 end
                 drawAdminPanel()
             end
-        elseif key == 208 then -- стрелка вниз
+
+        elseif key == 208 then -- вниз
             if selectedAdminIndex < #adminPlayerList then
                 selectedAdminIndex = selectedAdminIndex + 1
                 if selectedAdminIndex > adminScroll + adminViewHeight then
@@ -462,20 +464,17 @@ local function handleKey(key, char, player)
                 end
                 drawAdminPanel()
             end
-        elseif key == 100 or key == 68 then -- D / d (бан)
+
+        elseif char == 100 or char == 68 then -- D / d
             local ply = adminPlayerList[selectedAdminIndex]
             if ply then
-                if ply.data.banned then
-                    ply.data.banned = false
-                    log("INFO", "Игрок " .. ply.name .. " разбанен")
-                else
-                    ply.data.banned = true
-                    log("INFO", "Игрок " .. ply.name .. " забанен")
-                end
+                ply.data.banned = not ply.data.banned
+                log("INFO", "Игрок " .. ply.name .. (ply.data.banned and " забанен" or " разбанен"))
                 saveDB()
                 drawAdminPanel()
             end
-        elseif key == 114 or key == 82 then -- R / r (сброс статистики игрока)
+
+        elseif char == 114 or char == 82 then -- R / r
             local ply = adminPlayerList[selectedAdminIndex]
             if ply then
                 ply.data.transactions = 0
@@ -485,12 +484,11 @@ local function handleKey(key, char, player)
                 log("INFO", "Статистика игрока " .. ply.name .. " сброшена")
                 drawAdminPanel()
             end
-        elseif key == 101 or key == 69 then -- E / e (редактировать баланс)
+
+        elseif char == 101 or char == 69 then -- E / e
             local ply = adminPlayerList[selectedAdminIndex]
             if ply then
-                -- Заглушка, можно расширить
                 log("INFO", "Редактирование баланса игрока " .. ply.name .. " (будет реализовано)")
-                -- Здесь можно вызвать диалог ввода суммы и изменить ply.data.resBalance и ply.data.balance
                 drawAdminPanel()
             end
         end
