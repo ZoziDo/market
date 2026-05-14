@@ -501,16 +501,16 @@ local function handleKey(key, char, player)
             drawAdminPanel()
             return
         elseif not editCurrency then
-            -- Ожидаем выбор валюты
-            if char == 49 then -- 1
+            -- Ожидаем выбор валюты (1 или 2)
+            if char == 49 then -- '1'
                 editCurrency = "res"
-            elseif char == 50 then -- 2
+            elseif char == 50 then -- '2'
                 editCurrency = "em"
             end
             drawEditBalanceWindow()
             return
         else
-            -- Ввод суммы (цифры, точка)
+            -- Ввод суммы (цифры, точка, backspace)
             if char >= 48 and char <= 57 then -- цифры
                 editInput = editInput .. string.char(char)
             elseif char == 46 then -- точка
@@ -525,9 +525,44 @@ local function handleKey(key, char, player)
         end
     end
 
-    -- Обработка глобальных клавиш (A, P), работающих в основном интерфейсе
+    -- Обработка глобальных клавиш (A, P) и админ-панели
+    -- Сначала проверяем специальные клавиши по key (стрелки и т.п.)
+    if adminMode then
+        if not isAdmin then
+            log("WARN", "Попытка управления сервером не админом: " .. tostring(player))
+            return
+        end
+
+        -- Обработка специальных клавиш (стрелки)
+        if key == 200 then -- стрелка вверх
+            if selectedAdminIndex > 1 then
+                selectedAdminIndex = selectedAdminIndex - 1
+                if selectedAdminIndex < adminScroll + 1 then
+                    adminScroll = math.max(0, selectedAdminIndex - 1)
+                end
+                drawAdminPanel()
+            end
+            return
+        elseif key == 208 then -- стрелка вниз
+            if selectedAdminIndex < #adminPlayerList then
+                selectedAdminIndex = selectedAdminIndex + 1
+                if selectedAdminIndex > adminScroll + adminViewHeight then
+                    adminScroll = selectedAdminIndex - adminViewHeight
+                end
+                drawAdminPanel()
+            end
+            return
+        end
+    end
+
+    -- Обработка символьных клавиш (только если char в допустимом диапазоне)
+    local pressed = nil
+    if char and char >= 1 and char <= 255 then
+        pressed = string.lower(string.char(char))
+    end
+
     if not adminMode then
-        local pressed = string.lower(string.char(char > 0 and char or key))
+        -- Обработка в основном интерфейсе
         if pressed == "a" then
             if isAdmin then
                 adminMode = true
@@ -550,13 +585,7 @@ local function handleKey(key, char, player)
             return
         end
     else -- adminMode == true
-        -- В админ-панели проверяем права
-        if not isAdmin then
-            log("WARN", "Попытка управления сервером не админом: " .. tostring(player))
-            return
-        end
-
-        local pressed = string.lower(string.char(char > 0 and char or key))
+        -- Обработка символьных команд в админ-панели
         if pressed == "p" then
             shopPaused = not shopPaused
             log("INFO", "Магазин " .. (shopPaused and "приостановлен" or "возобновлён"))
@@ -565,24 +594,6 @@ local function handleKey(key, char, player)
         elseif pressed == "a" then
             adminMode = false
             drawInterface()
-            return
-        elseif key == 200 then -- ↑
-            if selectedAdminIndex > 1 then
-                selectedAdminIndex = selectedAdminIndex - 1
-                if selectedAdminIndex < adminScroll + 1 then
-                    adminScroll = math.max(0, selectedAdminIndex - 1)
-                end
-                drawAdminPanel()
-            end
-            return
-        elseif key == 208 then -- ↓
-            if selectedAdminIndex < #adminPlayerList then
-                selectedAdminIndex = selectedAdminIndex + 1
-                if selectedAdminIndex > adminScroll + adminViewHeight then
-                    adminScroll = selectedAdminIndex - adminViewHeight
-                end
-                drawAdminPanel()
-            end
             return
         elseif pressed == "d" then
             local ply = adminPlayerList[selectedAdminIndex]
