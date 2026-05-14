@@ -216,9 +216,9 @@ end
 
 local function drawBottomPanel()
     gpu.setForeground(colors.error)
-    gpu.set(4, 23, "[Поддержка]")
-    gpu.set(35, 23, "[Соглашение]")
-    gpu.set(70, 23, "[Отзывы]")
+    gpu.set(4, 23, "[ ПОДДЕРЖКА ]")
+    gpu.set(35, 23, "[ СОГЛАШЕНИЕ ]")
+    gpu.set(70, 23, "[ ОТЗЫВЫ ]")
 end
 
 local function drawFlexButton(btn)
@@ -455,7 +455,7 @@ local function drawBuyStatic()
     local emText = string.format("%.2f Эмов *", emBalance)
     gpu.setForeground(colors.success)
     gpu.set(3, 1, resText)
-    gpu.setForeground(colors.accent_secondary)
+    gpu.setForeground(colors.accent_main)
     gpu.set(3 + unicode.len(resText), 1, emText)
 
     if currentShopMode == "buy" then
@@ -653,7 +653,7 @@ local function drawPurchaseScreen()
     local emText = string.format("%.2f Эмов *", emBalance)
     gpu.setForeground(colors.success)
     gpu.set(3, 1, resText)
-    gpu.setForeground(colors.accent_secondary)
+    gpu.setForeground(colors.accent_main)
     gpu.set(3 + unicode.len(resText), 1, emText)
 
     gpu.setForeground(colors.success)
@@ -1027,7 +1027,7 @@ local function drawReportScreen()
         return
     end
 
-    gpu.setBackground(colors.bg_secondary)
+    gpu.setBackground(colors.bg_main)
     gpu.fill(10, 9, 60, 3, " ")
     gpu.setForeground(colors.text_bright)
     if reportInput ~= "" then
