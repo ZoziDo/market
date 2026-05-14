@@ -18,6 +18,7 @@ local colors = {
     error = 0xFF4D7A,          -- ошибка (розово-красный неон)
     inactive = 0x555566,       -- неактивно
     star_glow = 0xC8C8FF       -- дополнительный: звёздный/серебристый блик
+    black_fon = 0x000000       -- Чёрный 
 }
 
 -- Загружаем внешние файлы
@@ -1027,7 +1028,7 @@ local function drawReportScreen()
         return
     end
 
-    gpu.setBackground(colors.error)
+    gpu.setBackground(colors.black_fon)
     gpu.fill(10, 9, 60, 3, " ")
     gpu.setForeground(colors.text_bright)
     if reportInput ~= "" then
@@ -1121,8 +1122,8 @@ local function drawWelcomeScreen()
     gpu.fill(1, 1, 80, 25, " ")
     drawBigTitle()
     gpu.setForeground(colors.success)
-    drawCenteredText(18, "↓   Встаньте на PIM   ↓", colors.success)
-    drawCenteredText(19, "━━━━━━━━━━━━━━━━━━━", colors.success)
+    drawCenteredText(18, "↓   Встаньте на PIM   ↓", colors.accent_main)
+    drawCenteredText(19, "━━━━━━━━━━━━━━━━━━━", colors.accent_main)
     gpu.setForeground(colors.text_main)
     drawCenteredText(22, "По любым вопросам пишите в Telegram: f0rb4ik", colors.text_main)
     gpu.setBackground(colors.bg_main)
