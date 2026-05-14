@@ -466,8 +466,8 @@ end
 
 -- ========== ОБРАБОТКА КЛАВИШ ==========
 local function handleKey(key, char, player)
-    -- Разрешаем управление, если игрок nil (консоль) или ADMIN_NAME
-    local isAdmin = (player == nil) or (player == ADMIN_NAME)
+    -- Только игрок с именем ADMIN_NAME имеет права администратора
+    local isAdmin = (player == ADMIN_NAME)
 
     -- Если в режиме редактирования баланса – обрабатываем только его клавиши
     if editBalanceMode then
@@ -631,9 +631,8 @@ end
 
 local function handleTouch(x, y, player)
     if not adminMode or editBalanceMode then return end
-    -- Разрешаем клики только админу (консоль или ZoziDo)
-    local isAdmin = (player == nil) or (player == ADMIN_NAME)
-    if not isAdmin then return end
+    -- Только игрок с именем ADMIN_NAME может кликать в админ-панели
+    if player ~= ADMIN_NAME then return end
     if y >= 4 and y <= 3 + adminViewHeight then
         local lineIndex = y - 4
         local realIndex = adminScroll + lineIndex + 1
