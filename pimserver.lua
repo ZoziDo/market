@@ -129,18 +129,37 @@ local ADMIN_NAME = "ZoziDo"
 -- ========== ФУНКЦИИ ОБНОВЛЕНИЯ ЭКРАНА ==========
 local function updateScreenSize()
     local w, h = gpu.getResolution()
-    if w > 200 then w = 200 end
-    if w < 80 then w = 80 end
-    if h < 15 then h = 15 end
+
+    if w > 200 then
+        w = 200
+    end
+
+    if w < 80 then
+        w = 80
+    end
+
+    if h < 15 then
+        h = 15
+    end
+
     screenW, screenH = w, h
+
     local usable = screenW - 8
     colWidth = math.max(12, math.floor(usable / 4))
     colX = {4, 4 + colWidth, 4 + colWidth * 2, 4 + colWidth * 3}
+
     logStartY = math.min(18, screenH - 5)
     maxLogLines = screenH - logStartY - 3
-    if maxLogLines < 3 then maxLogLines = 3 end
+
+    if maxLogLines < 3 then
+        maxLogLines = 3
+    end
+
     adminViewHeight = screenH - 8
-    if adminViewHeight < 3 then adminViewHeight = 3
+
+    if adminViewHeight < 3 then
+        adminViewHeight = 3
+    end
 end
 
 local function gotoxy(x, y)
