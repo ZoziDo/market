@@ -524,75 +524,76 @@ local function handleKey(key, char, player)
 
     -- Обычный режим админ-панели
     if adminMode then
-        if not player or player ~= ADMIN_NAME then
-            log("WARN", "Попытка управления сервером не админом: " .. tostring(player))
-            return
-        end
+    if not player or player ~= ADMIN_NAME then
+        log("WARN", "Попытка управления сервером не админом: " .. tostring(player))
+        return
+    end
 
-        if char == 112 or char == 80 then   -- P / p
-            shopPaused = not shopPaused
-            log("INFO", "Магазин " .. (shopPaused and "приостановлен" or "возобновлён"))
+    local pressed = string.lower(string.char(char > 0 and char or key))
+
+    if pressed == "p" then
+        shopPaused = not shopPaused
+        log("INFO", "Магазин " .. (shopPaused and "приостановлен" or "возобновлён"))
+        drawAdminPanel()
+        return
+
+    elseif pressed == "a" then
+        adminMode = false
+        drawInterface()
+        return
+
+    elseif key == 200 then -- ↑
+        if selectedAdminIndex > 1 then
+            selectedAdminIndex = selectedAdminIndex - 1
+            if selectedAdminIndex < adminScroll + 1 then
+                adminScroll = math.max(0, selectedAdminIndex - 1)
+            end
             drawAdminPanel()
-            return
-
-        elseif char == 97 or char == 65 then -- A / a
-            adminMode = false
-            drawInterface()
-            return
-
-        elseif key == 200 then -- стрелка вверх
-            if selectedAdminIndex > 1 then
-                selectedAdminIndex = selectedAdminIndex - 1
-                if selectedAdminIndex < adminScroll + 1 then
-                    adminScroll = math.max(0, selectedAdminIndex - 1)
-                end
-                drawAdminPanel()
-            end
-            return
-
-        elseif key == 208 then -- стрелка вниз
-            if selectedAdminIndex < #adminPlayerList then
-                selectedAdminIndex = selectedAdminIndex + 1
-                if selectedAdminIndex > adminScroll + adminViewHeight then
-                    adminScroll = selectedAdminIndex - adminViewHeight
-                end
-                drawAdminPanel()
-            end
-            return
-
-        elseif char == 100 or char == 68 then -- D / d
-            local ply = adminPlayerList[selectedAdminIndex]
-            if ply then
-                ply.data.banned = not ply.data.banned
-                log("INFO", "Игрок " .. ply.name .. (ply.data.banned and " забанен" or " разбанен"))
-                saveDB()
-                drawAdminPanel()
-            end
-            return
-
-        elseif char == 114 or char == 82 then -- R / r
-            local ply = adminPlayerList[selectedAdminIndex]
-            if ply then
-                ply.data.transactions = 0
-                ply.data.balance = 0
-                ply.data.resBalance = 0
-                saveDB()
-                log("INFO", "Статистика игрока " .. ply.name .. " сброшена")
-                drawAdminPanel()
-            end
-            return
-
-        elseif char == 101 or char == 69 then -- E / e
-            local ply = adminPlayerList[selectedAdminIndex]
-            if ply then
-                editingPlayer = ply
-                editCurrency = nil
-                editInput = ""
-                editBalanceMode = true
-                drawEditBalanceWindow()
-            end
-            return
         end
+        return
+
+    elseif key == 208 then -- ↓
+        if selectedAdminIndex < #adminPlayerList then
+            selectedAdminIndex = selectedAdminIndex + 1
+            if selectedAdminIndex > adminScroll + adminViewHeight then
+                adminScroll = selectedAdminIndex - adminViewHeight
+            end
+            drawAdminPanel()
+        end
+        return
+
+    elseif pressed == "d" then
+        local ply = adminPlayerList[selectedAdminIndex]
+        if ply then
+            ply.data.banned = not ply.data.banned
+            saveDB()
+            log("INFO", "Игрок " .. ply.name .. (ply.data.banned and " забанен" or " разбанен"))
+            drawAdminPanel()
+        end
+        return
+
+    elseif pressed == "r" then
+        local ply = adminPlayerList[selectedAdminIndex]
+        if ply then
+            ply.data.transactions = 0
+            ply.data.balance = 0
+            ply.data.resBalance = 0
+            saveDB()
+            log("INFO", "Статистика игрока " .. ply.name .. " сброшена")
+            drawAdminPanel()
+        end
+        return
+
+    elseif pressed == "e" then
+        local ply = adminPlayerList[selectedAdminIndex]
+        if ply then
+            editingPlayer = ply
+            editCurrency = nil
+            editInput = ""
+            editBalanceMode = true
+            drawEditBalanceWindow()
+        end
+        return
     end
 end
 
