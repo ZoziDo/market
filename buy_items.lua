@@ -381,7 +381,7 @@ return {
   { internalName = "ThermalFoundation:material", displayName = "Эндериумная пластина", price = 0.99, currency = "res" },
   { internalName = "ThermalExpansion:Cell", displayName = "Эндериумный конденсатор", price = 298.782, currency = "res" },
   { internalName = "ThermalFoundation:bucket", displayName = "Эндериумный хладагент", price = 3.335, currency = "res" },
-  { internalName = "ThermalFoundation:material", displayName = "Эндерняк", price = 0.11, currency = "res" },
+  { internalName = "minecraft:ender_pearl", displayName = "Жемчуг Эндера", price = 0.6, currency = "res" },
   { internalName = "ThermalExpansion:Cell", displayName = "Энергетическая ячейка", price = 2.185, currency = "res" },
   { internalName = "IC2:itemArmorBronze", displayName = "Энергетический ранец", price = 13.903, currency = "res" },
   { internalName = "ThermalFoundation:material", displayName = "Энергетический сплав", price = 0.288, currency = "res" },
