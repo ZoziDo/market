@@ -394,7 +394,7 @@ return {
   { internalName = "AdvancedSolarPanel:asp_crafting_items:0", displayName = "Sunnarium", price = 13.5, currency = "res" },
   { internalName = "DraconicEvolution:draconicCore", displayName = "Awakened Core", price = 20.0, currency = "res" },
   { internalName = "minecraft:wool", displayName = "Шерсть", price = 0.10, currency = "res" },
-  { internalName = "minecraft:stone", displayName = "Камень", price = 0.02, currency = "res" }
+  { internalName = "minecraft:stone", displayName = "Камень", price = 0.02, currency = "res" },
   
   { internalName = "minecraft:blaze_rod", displayName = "Стержень ифрита", price = 0.60, currency = "res" },
   { internalName = "minecraft:ender_pearl", displayName = "Жемчуг Эндера", price = 0.75, currency = "res" },
@@ -403,6 +403,6 @@ return {
   { internalName = "minecraft:slime_ball", displayName = "Сгусток слизи", price = 0.65, currency = "res" },
   { internalName = "DraconicEvolution:draconiumDust", displayName = "Драконивая пыль", price = 0.55, currency = "res" },
   { internalName = "Forestry:royalJelly", displayName = "Маточное молочко", price = 0.80, currency = "res" },
-  { internalName = "IC2:upgradeModule", displayName = "Улучшение:Трансформатор", price = 1.45, currency = "res" },
+  { internalName = "IC2:upgradeModule", displayName = "Улучшение:Трансформатор", price = 1.45, currency = "res" }
   
 }
