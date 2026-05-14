@@ -267,7 +267,7 @@ end
 -- Обработка мыши в админ-панели
 local function handleAdminClick(x, y)
     if y < 4 or y > 3 + adminViewHeight then return end
-    local lineIndex = y - 4  -- 0-based в пределах видимой области
+    local lineIndex = y - 5
     local realIndex = adminScroll + lineIndex + 1
     if realIndex >= 1 and realIndex <= #adminPlayerList then
         selectedAdminIndex = realIndex
@@ -503,7 +503,7 @@ local function handleTouch(x, y, player)
     if player ~= ADMIN_NAME then return end
     -- Проверка, что клик в области списка
     if y >= 4 and y <= 3 + adminViewHeight then
-        local lineIndex = y - 4
+        local lineIndex = y - 5
         local realIndex = adminScroll + lineIndex + 1
         if realIndex >= 1 and realIndex <= #adminPlayerList then
             selectedAdminIndex = realIndex
@@ -546,9 +546,14 @@ while true do
     local etype = ev[1]
 
     if etype == "key_down" then
-        handleKey(ev[3], ev[4], ev[5])   -- key, char, player
+    local key = ev[4]
+    local char = ev[3]
+    local player = ev[5]
+    handleKey(key, char, player)
     elseif etype == "touch" then
-        local x, y, player = ev[3], ev[4], ev[5]
+        local x = ev[3]
+        local y = ev[4]
+        local player = ev[6]
         handleTouch(x, y, player)
     elseif etype == "modem_message" then
         local from = ev[3]
