@@ -769,7 +769,7 @@ local function drawSellPopup()
     local popupX = math.floor((80 - popupWidth) / 2)
     local popupY = 10
 
-    gpu.setBackground(colors.bg_secondary)
+    gpu.setBackground(colors.black_fon)
     gpu.setForeground(colors.text_bright)
     gpu.fill(popupX, popupY, popupWidth, popupHeight, " ")
     gpu.setBackground(colors.bg_secondary)
