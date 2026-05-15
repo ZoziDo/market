@@ -472,6 +472,7 @@ end
 -- ========== ОТРИСОВКА СПИСКА ==========
 local function drawBuyStatic()
     clear()
+    drawScreenBorder()
     local resText = "Баланс: " .. string.format("%.2f Ресов $ | ", resBalance)
     local emText = string.format("%.2f Эмов *", emBalance)
     gpu.setForeground(colors.success)
@@ -670,6 +671,7 @@ end
 local function drawPurchaseScreen()
     currentScreen = "purchase"
     clear()
+    drawScreenBorder()
     local resText = "Баланс: " .. string.format("%.2f Ресов $ | ", resBalance)
     local emText = string.format("%.2f Эмов *", emBalance)
     gpu.setForeground(colors.success)
@@ -1035,6 +1037,7 @@ end
 local function drawReportScreen()
     currentScreen = "report"
     clear()
+    drawScreenBorder()
     drawCenteredText(4, "РЕПОРТ", colors.accent_secondary)
     gpu.setForeground(colors.text_main)
     local help1 = "Опишите проблему: баг, предложение, жалоба."
@@ -1124,6 +1127,7 @@ end
 
 local function drawShopMenu()
     clear()
+    drawScreenBorder()
     drawCenteredText(4, "МАГАЗИН", colors.accent_secondary)
     if not playerAgreed then
         drawCenteredText(9, "Доступ запрещён.", colors.error)
@@ -1202,6 +1206,7 @@ end
 
 local function drawAccount(data)
     clear()
+    drawScreenBorder()
     drawCenteredText(10, currentPlayer .. ":", colors.text_bright)
     local res = data.resBalance or resBalance
     local em = data.emBalance or emBalance
@@ -1247,6 +1252,7 @@ end
 
 local function drawAccountLoading()
     clear()
+    drawScreenBorder()
     drawCenteredText(12, "Загрузка...", colors.text_main)
     drawFlexButton(backButton)
 end
