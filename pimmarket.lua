@@ -21,6 +21,16 @@ local colors = {
     black_fon = 0x000000       -- Чёрный фон для Поддержки
 }
 
+-- ========== НОРМАЛИЗАЦИЯ СТРОКИ ДЛЯ СОРТИРОВКИ ==========
+local function sortableName(name)
+    if not name then return "" end
+    local lower = string.lower(name)
+    local result = lower:gsub("(%d+)", function(d)
+        return string.format("%08d", tonumber(d))
+    end)
+    return result
+end
+
 local function drawPopupBorder(x, y, w, h, color)
     gpu.setForeground(color or colors.accent_secondary)
     -- верхняя и нижняя горизонтальные линии
@@ -377,7 +387,10 @@ local function loadBuyItems()
     end
 
     shopItems = newShopItems
-    table.sort(shopItems, function(a, b) return a.displayName < b.displayName end)
+    -- ✅ Новая сортировка с учётом регистра и цифр
+    table.sort(shopItems, function(a, b)
+        return sortableName(a.displayName) < sortableName(b.displayName)
+    end)
 end
 
 local function loadSellItems()
@@ -478,6 +491,12 @@ local function getFilteredItems()
             table.insert(filtered, item)
         end
     end
+
+    -- ✅ Сортировка отфильтрованного списка
+    table.sort(filtered, function(a, b)
+        return sortableName(a.displayName) < sortableName(b.displayName)
+    end)
+
     maxItemWidth = 0
     for _, item in ipairs(filtered) do
         local len = unicode.len(item.displayName or item.internalName or "")
