@@ -761,8 +761,8 @@ local function drawPurchaseScreen()
             gpu.set(tx, ty, text)
         end
     end
-    local backBtn = {x = 18, y = 23, xs = 10, ys = 1, text = "Назад", bg = colors.bg_button, fg = colors.accent_secondary}
-    local buyBtn  = {x = 51, y = 23, xs = 10, ys = 1, text = "Купить", bg = colors.bg_button, fg = colors.success}
+    local backBtn = {x = 19, y = 24, xs = 10, ys = 1, text = "Назад", bg = colors.bg_button, fg = colors.accent_secondary}
+    local buyBtn  = {x = 51, y = 24, xs = 10, ys = 1, text = "Купить", bg = colors.bg_button, fg = colors.success}
     drawFlexButton(backBtn)
     drawFlexButton(buyBtn)
 end
