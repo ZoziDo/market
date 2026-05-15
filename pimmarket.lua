@@ -392,13 +392,27 @@ local function loadBuyItems()
     end
 
     if #newFound > 0 and currentToken then
-        modem.send(serverAddress, 0xffef, serialization.serialize({
+    local chunkSize = 10   -- количество предметов в одном пакете
+    for i = 1, #newFound, chunkSize do
+        local chunk = {}
+        for j = i, math.min(i + chunkSize - 1, #newFound) do
+            table.insert(chunk, newFound[j])
+        end
+        local data = serialization.serialize({
             op = "new_items",
             name = currentPlayer,
             token = currentToken,
-            items = newFound
-        }))
+            items = chunk
+        })
+        -- проверка на всякий случай (если пакет всё ещё > 8000, уменьши chunkSize)
+        if #data < 8000 then
+            modem.send(serverAddress, 0xffef, data)
+        else
+            print("Предупреждение: пакет с " .. #chunk .. " предметами слишком велик")
+        end
+        os.sleep(0.05) -- небольшая задержка между отправками
     end
+end
 
     shopItems = newShopItems
     table.sort(shopItems, function(a, b)
