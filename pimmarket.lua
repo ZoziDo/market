@@ -817,7 +817,7 @@ local function drawSellPopup()
     local currency = (sellConfirmItem.internalName == "npcMoney") and "Эмов" or "$"
 
     gpu.setForeground(colors.text_bright)
-    gpu.set(popupX+14, popupY+1, "Подтверждение")
+    gpu.set(popupX+14, popupY, "Подтверждение")
     
     gpu.setForeground(colors.success)
     gpu.set(popupX+3, popupY+3, "Магазин заберёт: ")
