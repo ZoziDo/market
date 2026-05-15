@@ -7,18 +7,18 @@ local keyboard = require("keyboard")
 
 -- Цветовая схема
 local colors = {
-    bg_main = 0x0A0A0F,        -- главный фон (глубокий космос)
-    bg_secondary = 0x14141F,   -- вторичный фон (панели, строки)
-    bg_button = 0x1F1F2E,      -- кнопки, заголовки, карточки
-    accent_main = 0x8B5CF6,    -- главный акцент (фиолетовый неон)
-    accent_secondary = 0x00E5C9, -- вторичный акцент (бирюзово-голубой)
-    text_main = 0xD0D0E0,      -- основной текст
-    text_bright = 0xF0F0FF,    -- яркий текст (заголовки)
-    success = 0x00FFAA,        -- успех (холодный мятный)
-    error = 0xFF4D7A,          -- ошибка (розово-красный неон)
-    inactive = 0x555566,       -- неактивно
-    star_glow = 0xC8C8FF,       -- дополнительный: звёздный/серебристый блик
-    black_fon = 0x000000       -- Чёрный фон для Поддержки
+    bg_main = 0x0A0A0F,
+    bg_secondary = 0x14141F,
+    bg_button = 0x1F1F2E,
+    accent_main = 0x8B5CF6,
+    accent_secondary = 0x00E5C9,
+    text_main = 0xD0D0E0,
+    text_bright = 0xF0F0FF,
+    success = 0x00FFAA,
+    error = 0xFF4D7A,
+    inactive = 0x555566,
+    star_glow = 0xC8C8FF,
+    black_fon = 0x000000
 }
 
 -- ========== НОРМАЛИЗАЦИЯ СТРОКИ ДЛЯ СОРТИРОВКИ ==========
@@ -33,29 +33,24 @@ end
 
 local function drawPopupBorder(x, y, w, h, color)
     gpu.setForeground(color or colors.accent_secondary)
-    -- верхняя и нижняя горизонтальные линии
     gpu.fill(x, y, w, 1, "─")
     gpu.fill(x, y + h - 1, w, 1, "─")
-    -- левая и правая вертикальные линии
     for i = 1, h - 2 do
         gpu.set(x, y + i, "│")
         gpu.set(x + w - 1, y + i, "│")
     end
-    -- углы
     gpu.set(x, y, "┌")
     gpu.set(x + w - 1, y, "┐")
     gpu.set(x, y + h - 1, "└")
     gpu.set(x + w - 1, y + h - 1, "┘")
 end
 
--- ========== РАМКА ПО ПЕРИМЕТРУ ЭКРАНА ==========
 local function drawScreenBorder()
     local left = 1
     local right = 80
     local top = 1
     local bottom = 24
-
-    gpu.setForeground(colors.accent_secondary)  -- цвет рамки (можно сменить)
+    gpu.setForeground(colors.accent_secondary)
     gpu.fill(left, top, right - left + 1, 1, "─")
     gpu.fill(left, bottom, right - left + 1, 1, "─")
     for y = top + 1, bottom - 1 do
@@ -76,7 +71,9 @@ local vanillaItems = shopData.vanillaItems or {}
 local buyItemsData = dofile("/home/buy_items.lua")
 local buyItemMap = {}
 for _, item in ipairs(buyItemsData) do
-    buyItemMap[item.internalName] = item
+    local dmg = item.damage or 0
+    local key = item.internalName .. ":" .. dmg
+    buyItemMap[key] = item
 end
 
 local drawAgreementScreen = dofile("/home/agreement.lua")
@@ -88,7 +85,6 @@ local pimAddr = pimList[1]
 local PUSH_DIRECTION = "down"
 local PULL_DIRECTION = "up"
 
--- Вспомогательные функции для сравнения имён предметов
 local function normalizeName(name)
     if not name then return "" end
     local lastColon = name:match(".*:([^:]+)$")
@@ -113,22 +109,6 @@ if not selector then
     for addr in component.list("item_selector") do
         selector = component.proxy(addr)
         break
-    end
-end
-
-local function debugPlayerInventory()
-    if not pimAddr then return end
-    print("=== СОДЕРЖИМОЕ ИНВЕНТАРЯ (PIM) ===")
-    for slot = 1, 36 do
-        local stack = component.invoke(pimAddr, "getStackInSlot", slot)
-        if stack then
-            local qty = stack.size or stack.qty or 0
-            if qty > 0 then
-                local rawName = stack.label or stack.name or "???"
-                local cleanName = rawName:gsub("§.", "")
-                print(string.format("Слот %2d | %3d шт. | %s", slot, qty, cleanName))
-            end
-        end
     end
 end
 
@@ -176,7 +156,6 @@ local sellConfirmItem = nil
 local foundAmount = 0
 local showSellPopup = false
 
--- Переменные репорта
 local reportInput = ""
 local lastReportTime = nil
 local showShopDenied = false
@@ -197,9 +176,6 @@ local function updateSelectorDisplay(item)
     end
     local dmg = item.damage or item.dmg or 0
     local stack = { id = id, dmg = dmg }
-    if item.label and item.label ~= "" then
-        stack.label = item.label   -- показываем подпись в селекторе
-    end
     pcall(selector.setSlot, 0, stack)
     pcall(selector.setSlot, 1, stack)
 end
@@ -210,7 +186,7 @@ gpu.setBackground(colors.bg_main)
 
 -- ========== КРУПНЫЙ ШРИФТ ==========
 local function drawBigTitle()
-    gpu.setForeground(colors.accent_secondary) -- оранжевый
+    gpu.setForeground(colors.accent_secondary)
     local darkonLines = {
         "  ██████╗ ██████╗  █████╗ ██████╗ ██╗  ██╗ ██████╗ ███╗   ██╗",
         "  ██╔══██╗██╔══██╗██╔══██╗██╔══██╗██║ ██╔╝██╔═══██╗████╗  ██║",
@@ -267,9 +243,9 @@ end
 
 local function drawBottomPanel()
     gpu.setForeground(colors.error)
-    gpu.set(4, 24, "[ ПОДДЕРЖКА ]")    -- было 23
-    gpu.set(34, 24, "[ СОГЛАШЕНИЕ ]")  -- было 23
-    gpu.set(68, 24, "[ ОТЗЫВЫ ]")      -- было 23
+    gpu.set(4, 24, "[ ПОДДЕРЖКА ]")
+    gpu.set(34, 24, "[ СОГЛАШЕНИЕ ]")
+    gpu.set(68, 24, "[ ОТЗЫВЫ ]")
 end
 
 local function drawFlexButton(btn)
@@ -307,7 +283,6 @@ local shopMenuButtons = {
     bundle = {x=31, xs=20, y=17, ys=3, text="Наборы/Квесты", tx=4, ty=1, bg=colors.bg_button, fg=colors.accent_main}
 }
 
--- ==================== ПРОВЕРКА СБРОСА РЕПОРТА ====================
 local function canSendReport()
     if not lastReportTime then return true end
     local now = os.time()
@@ -320,13 +295,13 @@ local function canSendReport()
 end
 
 -- ========== ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ==========
-local function getActualItemQuantity(internalName, label)
+local function getActualItemQuantity(internalName, damage)
     if not component.isAvailable("me_interface") then return 0 end
     local me = component.me_interface
     local items = me.getItemsInNetwork()
     local total = 0
     for _, meItem in ipairs(items) do
-        if meItem.name == internalName and (meItem.label or "") == (label or "") then
+        if meItem.name == internalName and (meItem.damage or 0) == (damage or 0) then
             total = total + (meItem.size or 0)
         end
     end
@@ -338,10 +313,10 @@ local function loadBuyItems()
     if not component.isAvailable("me_interface") then return end
     local me = component.me_interface
     local rawItems = me.getItemsInNetwork()
-    local tempShopItems = {}   -- ключ = name..":"..label
+    local tempShopItems = {}
     local knownKeys = {}
     for _, item in ipairs(shopItems) do
-        local key = item.internalName .. ":" .. (item.label or "")
+        local key = item.internalName .. ":" .. (item.damage or 0)
         knownKeys[key] = true
     end
     local newFound = {}
@@ -352,31 +327,27 @@ local function loadBuyItems()
         local qty = meItem.size or 0
         if qty == 0 then goto continue end
 
-        local label = meItem.label or ""   -- подпись из ME-сети
-        local mapping = buyItemMap[name]
+        local damage = meItem.damage or 0
+        local mapKey = name .. ":" .. damage
+        local mapping = buyItemMap[mapKey]
         if not mapping then goto continue end
 
-        local displayName = mapping.displayName or (meItem.label or name)
-        -- Если есть подпись, добавляем её в название (для наглядности)
-        if label ~= "" and not displayName:match(label) then
-            displayName = displayName .. " [" .. label .. "]"
-        end
-
+        local displayName = mapping.displayName
         local price = mapping.price or 0
         local currency = mapping.currency or "res"
         if price <= 0 then goto continue end
 
-        local key = name .. ":" .. label
-        if tempShopItems[key] then
-            tempShopItems[key].qty = tempShopItems[key].qty + qty
+        local groupKey = name .. ":" .. damage
+        if tempShopItems[groupKey] then
+            tempShopItems[groupKey].qty = tempShopItems[groupKey].qty + qty
         else
-            tempShopItems[key] = {
+            tempShopItems[groupKey] = {
                 internalName = name,
                 displayName = displayName,
                 qty = qty,
                 price = price,
                 currency = currency,
-                label = label,        -- сохраняем подпись
+                damage = damage,
                 canBuy = true
             }
         end
@@ -392,27 +363,26 @@ local function loadBuyItems()
     end
 
     if #newFound > 0 and currentToken then
-    local chunkSize = 10   -- количество предметов в одном пакете
-    for i = 1, #newFound, chunkSize do
-        local chunk = {}
-        for j = i, math.min(i + chunkSize - 1, #newFound) do
-            table.insert(chunk, newFound[j])
+        local chunkSize = 10
+        for i = 1, #newFound, chunkSize do
+            local chunk = {}
+            for j = i, math.min(i + chunkSize - 1, #newFound) do
+                table.insert(chunk, newFound[j])
+            end
+            local data = serialization.serialize({
+                op = "new_items",
+                name = currentPlayer,
+                token = currentToken,
+                items = chunk
+            })
+            if #data < 8000 then
+                modem.send(serverAddress, 0xffef, data)
+            else
+                print("Предупреждение: пакет с " .. #chunk .. " предметами слишком велик")
+            end
+            os.sleep(0.05)
         end
-        local data = serialization.serialize({
-            op = "new_items",
-            name = currentPlayer,
-            token = currentToken,
-            items = chunk
-        })
-        -- проверка на всякий случай (если пакет всё ещё > 8000, уменьши chunkSize)
-        if #data < 8000 then
-            modem.send(serverAddress, 0xffef, data)
-        else
-            print("Предупреждение: пакет с " .. #chunk .. " предметами слишком велик")
-        end
-        os.sleep(0.05) -- небольшая задержка между отправками
     end
-end
 
     shopItems = newShopItems
     table.sort(shopItems, function(a, b)
@@ -519,7 +489,6 @@ local function getFilteredItems()
         end
     end
 
-    -- ✅ Сортировка отфильтрованного списка
     table.sort(filtered, function(a, b)
         return sortableName(a.displayName) < sortableName(b.displayName)
     end)
@@ -573,7 +542,7 @@ local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
         bg = colors.bg_secondary
         fg = colors.inactive
     elseif isSelected then
-        bg = 0x225577   -- оставим как выделение (не в палитре, можно оставить)
+        bg = 0x225577
     elseif isHovered then
         bg = 0x446688
     elseif itemIndex % 2 == 1 then
@@ -989,7 +958,7 @@ local function performBuy()
     local me = component.me_interface
     local item = purchaseItem
 
-    local actualQty = getActualItemQuantity(item.internalName, item.label)
+    local actualQty = getActualItemQuantity(item.internalName, item.damage)
     if actualQty <= 0 then
         drawCenteredText(20, "Товар закончился! Обновление списка...", colors.error)
         os.sleep(0.8)
@@ -1042,10 +1011,7 @@ local function performBuy()
     drawCenteredText(20, "Выполняется покупка...", colors.accent_main)
     os.sleep(0.4)
 
-    local fingerprint = { id = item.internalName, raw_name = item.displayName }
-    if item.label and item.label ~= "" then
-        fingerprint.label = item.label   -- добавляем подпись для точного извлечения
-    end
+    local fingerprint = { id = item.internalName, dmg = item.damage or 0, raw_name = item.displayName }
 
     local maxStackSize = 64
     local ok, detail = pcall(me.getItemDetail, me, item.internalName)
@@ -1094,7 +1060,7 @@ local function performBuy()
 
         loadBuyItems()
         for _, newItem in ipairs(shopItems) do
-            if newItem.internalName == item.internalName then
+            if newItem.internalName == item.internalName and (newItem.damage or 0) == (item.damage or 0) then
                 purchaseItem = newItem
                 break
             end
