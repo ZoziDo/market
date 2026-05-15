@@ -45,6 +45,7 @@ local function drawPopupBorder(x, y, w, h, color)
     gpu.set(x + w - 1, y + h - 1, "┘")
 end
 
+-- ========== РАМКА ПО ПЕРИМЕТРУ ЭКРАНА ==========
 local function drawScreenBorder()
     local left = 1
     local right = 80
@@ -174,7 +175,7 @@ local function updateSelectorDisplay(item)
     if not id:find(":") then
         id = "minecraft:" .. id
     end
-    local dmg = item.damage or item.dmg or 0
+    local dmg = item.damage or 0
     local stack = { id = id, dmg = dmg }
     pcall(selector.setSlot, 0, stack)
     pcall(selector.setSlot, 1, stack)
@@ -269,8 +270,7 @@ local backButton = {
 backButton.x = math.floor((80 - backButton.xs) / 2) + 1
 
 local function isButtonClicked(btn, x, y)
-    return y >= btn.y and y < btn.y + btn.ys and
-           x >= btn.x and x < btn.x + btn.xs
+    return y >= btn.y and y < btn.y + btn.ys and x >= btn.x and x < btn.x + btn.xs
 end
 
 local searchButton = {text = "Поиск...", x=3, y=21, xs=20, ys=1, bg=colors.bg_button, fg=colors.accent_main}
@@ -333,15 +333,15 @@ local function loadBuyItems()
         if not mapping then goto continue end
 
         local displayName = mapping.displayName
-        local price = mapping.price or 0
+        local price = mapping.price
         local currency = mapping.currency or "res"
         if price <= 0 then goto continue end
 
-        local groupKey = name .. ":" .. damage
-        if tempShopItems[groupKey] then
-            tempShopItems[groupKey].qty = tempShopItems[groupKey].qty + qty
+        local key = name .. ":" .. damage
+        if tempShopItems[key] then
+            tempShopItems[key].qty = tempShopItems[key].qty + qty
         else
-            tempShopItems[groupKey] = {
+            tempShopItems[key] = {
                 internalName = name,
                 displayName = displayName,
                 qty = qty,
@@ -1060,7 +1060,7 @@ local function performBuy()
 
         loadBuyItems()
         for _, newItem in ipairs(shopItems) do
-            if newItem.internalName == item.internalName and (newItem.damage or 0) == (item.damage or 0) then
+            if newItem.internalName == item.internalName and newItem.damage == item.damage then
                 purchaseItem = newItem
                 break
             end
@@ -1601,7 +1601,7 @@ while true do
                     os.sleep(0.8)
                     drawSellScanScreen()
                 end
-            end 
+            end
 
         elseif currentScreen == "menu" then
             for name, btn in pairs(menuButtons) do
