@@ -238,8 +238,8 @@ end
 local function drawBottomPanel()
     gpu.setForeground(colors.error)
     gpu.set(4, 23, "[ ПОДДЕРЖКА ]")
-    gpu.set(35, 23, "[ СОГЛАШЕНИЕ ]")
-    gpu.set(69, 23, "[ ОТЗЫВЫ ]")
+    gpu.set(34, 23, "[ СОГЛАШЕНИЕ ]")
+    gpu.set(68, 23, "[ ОТЗЫВЫ ]")
 end
 
 local function drawFlexButton(btn)
@@ -769,7 +769,7 @@ local function drawSellPopup()
     local popupX = math.floor((80 - popupWidth) / 2)
     local popupY = 10
 
-    gpu.setBackground(colors.bg_main)
+    gpu.setBackground(colors.bg_secondary)
     gpu.setForeground(colors.text_bright)
     gpu.fill(popupX, popupY, popupWidth, popupHeight, " ")
     gpu.setBackground(colors.bg_secondary)
@@ -797,6 +797,7 @@ end
 local function drawSellScanScreen()
     currentScreen = "sell_scan"
     clear()
+    drawScreenBorder()
     local resText = "Баланс: " .. string.format("%.2f Ресов $ | ", resBalance)
     local emText = string.format("%.2f Эмов *", emBalance)
     gpu.setForeground(colors.success)
