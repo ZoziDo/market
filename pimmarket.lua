@@ -197,6 +197,9 @@ local function updateSelectorDisplay(item)
     end
     local dmg = item.damage or item.dmg or 0
     local stack = { id = id, dmg = dmg }
+    if item.label and item.label ~= "" then
+        stack.label = item.label   -- показываем подпись в селекторе
+    end
     pcall(selector.setSlot, 0, stack)
     pcall(selector.setSlot, 1, stack)
 end
@@ -317,13 +320,13 @@ local function canSendReport()
 end
 
 -- ========== ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ==========
-local function getActualItemQuantity(internalName)
+local function getActualItemQuantity(internalName, label)
     if not component.isAvailable("me_interface") then return 0 end
     local me = component.me_interface
     local items = me.getItemsInNetwork()
     local total = 0
     for _, meItem in ipairs(items) do
-        if meItem.name == internalName then
+        if meItem.name == internalName and (meItem.label or "") == (label or "") then
             total = total + (meItem.size or 0)
         end
     end
@@ -335,10 +338,11 @@ local function loadBuyItems()
     if not component.isAvailable("me_interface") then return end
     local me = component.me_interface
     local rawItems = me.getItemsInNetwork()
-    local tempShopItems = {}
-    local knownItems = {}
+    local tempShopItems = {}   -- ключ = name..":"..label
+    local knownKeys = {}
     for _, item in ipairs(shopItems) do
-        knownItems[item.internalName] = true
+        local key = item.internalName .. ":" .. (item.label or "")
+        knownKeys[key] = true
     end
     local newFound = {}
 
@@ -347,22 +351,32 @@ local function loadBuyItems()
         if blacklist[name] then goto continue end
         local qty = meItem.size or 0
         if qty == 0 then goto continue end
+
+        local label = meItem.label or ""   -- подпись из ME-сети
         local mapping = buyItemMap[name]
         if not mapping then goto continue end
+
         local displayName = mapping.displayName or (meItem.label or name)
+        -- Если есть подпись, добавляем её в название (для наглядности)
+        if label ~= "" and not displayName:match(label) then
+            displayName = displayName .. " [" .. label .. "]"
+        end
+
         local price = mapping.price or 0
         local currency = mapping.currency or "res"
         if price <= 0 then goto continue end
 
-        if tempShopItems[name] then
-            tempShopItems[name].qty = tempShopItems[name].qty + qty
+        local key = name .. ":" .. label
+        if tempShopItems[key] then
+            tempShopItems[key].qty = tempShopItems[key].qty + qty
         else
-            tempShopItems[name] = {
+            tempShopItems[key] = {
                 internalName = name,
                 displayName = displayName,
                 qty = qty,
                 price = price,
                 currency = currency,
+                label = label,        -- сохраняем подпись
                 canBuy = true
             }
         end
@@ -370,9 +384,9 @@ local function loadBuyItems()
     end
 
     local newShopItems = {}
-    for _, itemData in pairs(tempShopItems) do
+    for key, itemData in pairs(tempShopItems) do
         table.insert(newShopItems, itemData)
-        if not knownItems[itemData.internalName] and itemData.qty > 0 then
+        if not knownKeys[key] and itemData.qty > 0 then
             table.insert(newFound, {name = itemData.displayName, qty = itemData.qty})
         end
     end
@@ -387,7 +401,6 @@ local function loadBuyItems()
     end
 
     shopItems = newShopItems
-    -- ✅ Новая сортировка с учётом регистра и цифр
     table.sort(shopItems, function(a, b)
         return sortableName(a.displayName) < sortableName(b.displayName)
     end)
@@ -963,7 +976,7 @@ local function performBuy()
     local me = component.me_interface
     local item = purchaseItem
 
-    local actualQty = getActualItemQuantity(item.internalName)
+    local actualQty = getActualItemQuantity(item.internalName, item.label)
     if actualQty <= 0 then
         drawCenteredText(20, "Товар закончился! Обновление списка...", colors.error)
         os.sleep(0.8)
@@ -1017,6 +1030,9 @@ local function performBuy()
     os.sleep(0.4)
 
     local fingerprint = { id = item.internalName, raw_name = item.displayName }
+    if item.label and item.label ~= "" then
+        fingerprint.label = item.label   -- добавляем подпись для точного извлечения
+    end
 
     local maxStackSize = 64
     local ok, detail = pcall(me.getItemDetail, me, item.internalName)
