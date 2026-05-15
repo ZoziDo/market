@@ -1170,6 +1170,26 @@ local function drawMainMenu()
             end
         end
 
+        -- ========== НОВАЯ РАМКА ==========
+        local frameLeft   = 28
+        local frameRight  = 53
+        local frameTop    = 7
+        local frameBottom = 21
+        local frameColor = colors.accent_secondary
+
+        gpu.setForeground(frameColor)
+        gpu.fill(frameLeft, frameTop, frameRight - frameLeft + 1, 1, "─")
+        gpu.fill(frameLeft, frameBottom, frameRight - frameLeft + 1, 1, "─")
+        for y = frameTop + 1, frameBottom - 1 do
+            gpu.set(frameLeft, y, "│")
+            gpu.set(frameRight, y, "│")
+        end
+        gpu.set(frameLeft,  frameTop,    "┌")
+        gpu.set(frameRight, frameTop,    "┐")
+        gpu.set(frameLeft,  frameBottom, "└")
+        gpu.set(frameRight, frameBottom, "┘")
+
+        -- рисуем кнопки
         for _, btn in pairs(menuButtons) do
             drawButton(btn)
         end
@@ -1532,35 +1552,7 @@ while true do
                     os.sleep(0.8)
                     drawSellScanScreen()
                 end
-            end
-
-          -- ========== ТОНКАЯ РАМКА ВОКРУГ КНОПОК ==========
-        local frameLeft   = 28   -- левая граница (на 3 левее кнопок)
-        local frameRight  = 53   -- правая граница (на 3 правее)
-        local frameTop    = 7    -- верхняя граница (на 2 выше кнопки "Магазин")
-        local frameBottom = 21   -- нижняя граница (на 2 ниже кнопки "Аккаунт")
-        
-        -- выбираем цвет рамки (используем один из акцентных цветов)
-        local frameColor = colors.accent_secondary   -- или colors.text_bright
-        
-        gpu.setForeground(frameColor)
-        
-        -- верхняя горизонтальная линия (от frameLeft до frameRight)
-        gpu.fill(frameLeft, frameTop, frameRight - frameLeft + 1, 1, "─")
-        -- нижняя горизонтальная линия
-        gpu.fill(frameLeft, frameBottom, frameRight - frameLeft + 1, 1, "─")
-        
-        -- левая и правая вертикальные линии (строки от frameTop+1 до frameBottom-1)
-        for y = frameTop + 1, frameBottom - 1 do
-            gpu.set(frameLeft, y, "│")
-            gpu.set(frameRight, y, "│")
-        end
-        
-        -- углы
-        gpu.set(frameLeft,  frameTop,    "┌")
-        gpu.set(frameRight, frameTop,    "┐")
-        gpu.set(frameLeft,  frameBottom, "└")
-        gpu.set(frameRight, frameBottom, "┘")  
+            end 
 
         elseif currentScreen == "menu" then
             for name, btn in pairs(menuButtons) do
