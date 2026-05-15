@@ -911,7 +911,7 @@ local function performSell()
     end
 
     local value = realExtracted * sellConfirmItem.price
-    local currency = (sellConfirmItem.internalName == "npcMoney") and "em" or "res"
+    local currency = (sellConfirmItem.internalName == "customnpcs:npcMoney") and "em" or "res"
 
     if currency == "em" then
         emBalance = emBalance + value
