@@ -563,7 +563,6 @@ local function drawBuyStatic()
     gpu.set(3, 5, string.rep("─", 74))
     gpu.set(3, 18, string.rep("─", 74))
     drawCenteredText(19, "Категория", colors.text_main)
-    gpu.set(3, 23, string.rep("─", 74))
     drawFlexButton(backButton)
 end
 
