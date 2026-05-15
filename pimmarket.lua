@@ -1644,7 +1644,7 @@ while true do
                     break
                 end
             end
-            if y == 23 then
+            if y == 24 then
                 if x >= 4 and x <= 25 then
                     showShopDenied = false
                     goToReport()
