@@ -772,7 +772,7 @@ local function drawSellPopup()
     gpu.setBackground(colors.black_fon)
     gpu.setForeground(colors.text_bright)
     gpu.fill(popupX, popupY, popupWidth, popupHeight, " ")
-    gpu.setBackground(colors.bg_secondary)
+    gpu.setBackground(colors.black_fon)
     gpu.fill(popupX+1, popupY+1, popupWidth-2, popupHeight-2, " ")
 
     local name = sellConfirmItem.displayName
