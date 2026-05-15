@@ -1,3 +1,4 @@
+return {
 { internalName = "AFSU:AFSU:0", displayName = "AFSU", price = 1.0, currency = "res" },
 { internalName = "AFSU:ALC:0", displayName = "AFB", price = 1.0, currency = "res" },
 { internalName = "AdvancedSolarPanel:asp_crafting_items:0", displayName = "Саннариум", price = 1.0, currency = "res" },
@@ -1446,4 +1447,6 @@
 { internalName = "minecraft:wool:4", displayName = "Жёлтая шерсть", price = 1.0, currency = "res" },
 { internalName = "minecraft:wool:7", displayName = "Серая шерсть", price = 1.0, currency = "res" },
 { internalName = "minecraft:wool:8", displayName = "Светло-серая шерсть", price = 1.0, currency = "res" },
-{ internalName = "minecraft:yellow_flower:0", displayName = "Одуванчик", price = 1.0, currency = "res" },
+{ internalName = "minecraft:yellow_flower:0", displayName = "Одуванчик", price = 1.0, currency = "res" }
+
+}
