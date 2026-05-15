@@ -799,14 +799,24 @@ local function drawSellPopup()
 
     gpu.setForeground(colors.text_bright)
     gpu.set(popupX+14, popupY+1, "Подтверждение")
-    gpu.setForeground(colors.accent_secondary)
-    gpu.set(popupX+3, popupY+3, "Магазин заберёт: " .. totalFound)
-    gpu.set(popupX+3, popupY+4, name .. " x" .. totalFound)
+    
     gpu.setForeground(colors.success)
-    gpu.set(popupX+3, popupY+5, "Вы получите: " .. string.format("%.2f", value) .. " " .. currency)
+    gpu.set(popupX+3, popupY+3, "Магазин заберёт: ")
+    gpu.setForeground(colors.text_bright)
+    gpu.set(popupX+3 + unicode.len("Магазин заберёт: "), popupY+3, tostring(totalFound))
+    
+    gpu.setForeground(colors.success)
+    gpu.set(popupX+3, popupY+4, name .. " x")
+    gpu.setForeground(colors.text_bright)
+    gpu.set(popupX+3 + unicode.len(name .. " x"), popupY+4, tostring(totalFound))
+    
+    gpu.setForeground(colors.success)
+    gpu.set(popupX+3, popupY+5, "Вы получите: ")
+    gpu.setForeground(colors.text_bright)
+    gpu.set(popupX+3 + unicode.len("Вы получите: "), popupY+5, string.format("%.2f", value) .. " " .. currency)
 
     local yesBtn = {x=popupX+5, y=popupY+7, xs=13, ys=1, text="[ Принять ]", bg=colors.bg_button, fg=colors.success}
-    local noBtn  = {x=popupX+popupWidth-15, y=popupY+7, xs=12, ys=1, text="[ Отмена ]", bg=colors.bg_button, fg=colors.error}
+    local noBtn  = {x=popupX+popupWidth-16, y=popupY+7, xs=12, ys=1, text="[ Отмена ]", bg=colors.bg_button, fg=colors.error}
     drawFlexButton(yesBtn)
     drawFlexButton(noBtn)
 end
