@@ -1532,7 +1532,7 @@ while true do
             end
 
         elseif currentScreen == "purchase" then
-            if (y >= 23 and y <= 23) and (x >= 18 and x <= 28) then
+            if (y >= 24 and y <= 24) and (x >= 19 and x <= 28) then
                 if currentShopMode == "buy" then
                     currentScreen = "shop_buy"
                     drawBuyStatic()
@@ -1545,7 +1545,7 @@ while true do
                     drawBuyButtons()
                 end
             end
-            if (y >= 23 and y <= 23) and (x >= 50 and x <= 60) then
+            if (y >= 24 and y <= 24) and (x >= 51 and x <= 60) then
                 performBuy()
             end
             local startX = 34
