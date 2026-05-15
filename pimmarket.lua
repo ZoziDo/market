@@ -768,6 +768,7 @@ local function drawSellPopup()
     local popupHeight = 10
     local popupX = math.floor((80 - popupWidth) / 2)
     local popupY = 10
+    drawScreenBorder()
 
     gpu.setBackground(colors.black_fon)
     gpu.setForeground(colors.text_bright)
