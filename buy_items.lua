@@ -370,7 +370,6 @@ return {
 { internalName = "IC2:blockRubSapling:0", displayName = "Саженец гевеи", price = 1.0, currency = "res" },
 { internalName = "IC2:blockRubWood:0", displayName = "Древесина гевеи", price = 1.0, currency = "res" },
 { internalName = "IC2:blockreactorvessel:0", displayName = "Корпус реактора", price = 1.0, currency = "res" },
-{ internalName = "IC2:itemAdvBat:26", displayName = "Продвинутый аккумулятор", price = 1.0, currency = "res" },
-{ internalName = "IC2:itemArmorAlloyChestplate:0", displayName = "Композитный жилет", price = 1.0, currency =
+{ internalName = "IC2:itemAdvBat:26", displayName = "Продвинутый аккумулятор", price = 1.0, currency = "res" }
   
 }
