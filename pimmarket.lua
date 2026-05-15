@@ -53,7 +53,7 @@ local function drawScreenBorder()
     local left = 1
     local right = 80
     local top = 1
-    local bottom = 25
+    local bottom = 24
 
     gpu.setForeground(colors.accent_secondary)  -- цвет рамки (можно сменить)
     gpu.fill(left, top, right - left + 1, 1, "─")
@@ -264,9 +264,9 @@ end
 
 local function drawBottomPanel()
     gpu.setForeground(colors.error)
-    gpu.set(4, 23, "[ ПОДДЕРЖКА ]")
-    gpu.set(34, 23, "[ СОГЛАШЕНИЕ ]")
-    gpu.set(68, 23, "[ ОТЗЫВЫ ]")
+    gpu.set(4, 24, "[ ПОДДЕРЖКА ]")    -- было 23
+    gpu.set(34, 24, "[ СОГЛАШЕНИЕ ]")  -- было 23
+    gpu.set(68, 24, "[ ОТЗЫВЫ ]")      -- было 23
 end
 
 local function drawFlexButton(btn)
