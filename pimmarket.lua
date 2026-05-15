@@ -21,6 +21,26 @@ local colors = {
     black_fon = 0x000000       -- Чёрный фон для Поддержки
 }
 
+-- ========== РАМКА ПО ПЕРИМЕТРУ ЭКРАНА ==========
+local function drawScreenBorder()
+    local left = 1
+    local right = 80
+    local top = 1
+    local bottom = 25
+
+    gpu.setForeground(colors.accent_secondary)  -- цвет рамки (можно сменить)
+    gpu.fill(left, top, right - left + 1, 1, "─")
+    gpu.fill(left, bottom, right - left + 1, 1, "─")
+    for y = top + 1, bottom - 1 do
+        gpu.set(left, y, "│")
+        gpu.set(right, y, "│")
+    end
+    gpu.set(left, top, "┌")
+    gpu.set(right, top, "┐")
+    gpu.set(left, bottom, "└")
+    gpu.set(right, bottom, "┘")
+end
+
 -- Загружаем внешние файлы
 local shopData = dofile("/home/shop_items.lua")
 local sellItems = shopData.sellItems
@@ -1142,6 +1162,7 @@ end
 
 local function drawMainMenu()
     clear()
+    drawScreenBorder()
     if currentPlayer then
         local hello1 = "Добро пожаловать, "
         local hello2 = currentPlayer .. "!"
@@ -1170,26 +1191,6 @@ local function drawMainMenu()
             end
         end
 
-        -- ========== НОВАЯ РАМКА ==========
-        local frameLeft   = 28
-        local frameRight  = 53
-        local frameTop    = 7
-        local frameBottom = 21
-        local frameColor = colors.accent_secondary
-
-        gpu.setForeground(frameColor)
-        gpu.fill(frameLeft, frameTop, frameRight - frameLeft + 1, 1, "─")
-        gpu.fill(frameLeft, frameBottom, frameRight - frameLeft + 1, 1, "─")
-        for y = frameTop + 1, frameBottom - 1 do
-            gpu.set(frameLeft, y, "│")
-            gpu.set(frameRight, y, "│")
-        end
-        gpu.set(frameLeft,  frameTop,    "┌")
-        gpu.set(frameRight, frameTop,    "┐")
-        gpu.set(frameLeft,  frameBottom, "└")
-        gpu.set(frameRight, frameBottom, "┘")
-
-        -- рисуем кнопки
         for _, btn in pairs(menuButtons) do
             drawButton(btn)
         end
