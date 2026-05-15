@@ -787,7 +787,7 @@ local function drawSellPopup()
     local popupY = 10
 
     gpu.setBackground(colors.black_fon)
-    gpu.fill(popupX, popupY, popupWidth, popupHeight, " ")
+    gpu.fill(popupX, popupY+2, popupWidth, popupHeight-4, " ")
     gpu.fill(popupX+1, popupY+1, popupWidth-2, popupHeight-2, " ")
 
     drawPopupBorder(popupX, popupY, popupWidth, popupHeight, colors.accent_secondary)
