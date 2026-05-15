@@ -21,6 +21,23 @@ local colors = {
     black_fon = 0x000000       -- Чёрный фон для Поддержки
 }
 
+local function drawPopupBorder(x, y, w, h, color)
+    gpu.setForeground(color or colors.accent_secondary)
+    -- верхняя и нижняя горизонтальные линии
+    gpu.fill(x, y, w, 1, "─")
+    gpu.fill(x, y + h - 1, w, 1, "─")
+    -- левая и правая вертикальные линии
+    for i = 1, h - 2 do
+        gpu.set(x, y + i, "│")
+        gpu.set(x + w - 1, y + i, "│")
+    end
+    -- углы
+    gpu.set(x, y, "┌")
+    gpu.set(x + w - 1, y, "┐")
+    gpu.set(x, y + h - 1, "└")
+    gpu.set(x + w - 1, y + h - 1, "┘")
+end
+
 -- ========== РАМКА ПО ПЕРИМЕТРУ ЭКРАНА ==========
 local function drawScreenBorder()
     local left = 1
@@ -768,13 +785,12 @@ local function drawSellPopup()
     local popupHeight = 10
     local popupX = math.floor((80 - popupWidth) / 2)
     local popupY = 10
-    drawScreenBorder()
 
     gpu.setBackground(colors.black_fon)
-    gpu.setForeground(colors.text_bright)
     gpu.fill(popupX, popupY, popupWidth, popupHeight, " ")
-    gpu.setBackground(colors.black_fon)
     gpu.fill(popupX+1, popupY+1, popupWidth-2, popupHeight-2, " ")
+
+    drawPopupBorder(popupX, popupY, popupWidth, popupHeight, colors.accent_secondary)
 
     local name = sellConfirmItem.displayName
     local totalFound = foundAmount
