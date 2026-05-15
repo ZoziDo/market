@@ -1,7 +1,7 @@
 return {
   -- === Ранние предметы (AE2, Draconic, базовые и т.д.) ===
-  { internalName = "extracells:storage.component", displayName = "1024k МЭ жидкостный компонент хранилища", price = 261.91, currency = "res" },
-  { internalName = "extracells:storage.component", displayName = "1024k МЭ компонент хранилища", price = 282.59, currency = "res" },
+  { internalName = "extracells:storage.component:9", displayName = "1024k МЭ жидкостный компонент хранилища", price = 261.91, currency = "res" },
+  { internalName = "extracells:storage.component:1", displayName = "1024k МЭ компонент хранилища", price = 282.59, currency = "res" },
   { internalName = "dwcity:Chip_16bit", displayName = "16-битный чип", price = 2.25, currency = "res" },
   { internalName = "dwcity:Chip_32bit", displayName = "32-битный чип", price = 4.51, currency = "res" },
   { internalName = "dwcity:Chip_64bit", displayName = "64-битный чип", price = 14.22, currency = "res" },
