@@ -93,7 +93,7 @@ return {
   { internalName = "appliedenergistics2:item.ItemMultiPart", displayName = "МЭ терминал создания", price = 1.32, currency = "res", damage = 360 },
   { internalName = "appliedenergistics2:item.ItemMultiPart", displayName = "МЭ терминал шаблонов", price = 1.86, currency = "res", damage = 340 },
   { internalName = "appliedenergistics2:item.ItemMultiPart", displayName = "МЭ умный кабель - Изменчивый", price = 0.31, currency = "res", damage = 56 },
-  { internalName = "appliedenergistics2:item.ItemMultiPart", displayName = "МЭ шина импорта", price = 0.85, currency = "res" damage = 240 },
+  { internalName = "appliedenergistics2:item.ItemMultiPart", displayName = "МЭ шина импорта", price = 0.85, currency = "res", damage = 240 },
   { internalName = "appliedenergistics2:item.ItemMultiPart", displayName = "МЭ шина экспорта", price = 0.78, currency = "res", damage = 260 },
   { internalName = "IC2:itemRecipePart", displayName = "Малый силовой агрегат", price = 2.13, currency = "res", damage = 3 },
   { internalName = "IC2:itemPlates", displayName = "Медная пластина", price = 0.11, currency = "res" },
