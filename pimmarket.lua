@@ -599,10 +599,6 @@ local function drawBuyStatic()
     gpu.set(42, 5, "Кол-во")
     gpu.set(65, 5, "Цена")
     gpu.setBackground(colors.bg_main)
-
-    -- Нижний разделитель (строка 22)
-    gpu.setForeground(colors.inactive)
-    gpu.set(3, 22, string.rep("─", 74))
 end
 
 local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
