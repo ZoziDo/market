@@ -1391,13 +1391,13 @@ end
 local function drawAccount(data)
     clear()
     drawScreenBorder()
-    drawCenteredText(10, currentPlayer .. ":", colors.text_bright)
+    drawCenteredText(12, currentPlayer .. ":", colors.text_bright)
     local res = data.resBalance or resBalance
     local em = data.emBalance or emBalance
     local resPart1 = string.format("Баланс Ресов: %.2f $ | ", res)
     local emPart = string.format("Эмов: %.2f *", em)
     local full = resPart1 .. emPart
-    local x = math.floor((80 - unicode.len(full)) / 2) + 2
+    local x = math.floor((80 - unicode.len(full)) / 2) + 1
     gpu.setForeground(colors.success)
     gpu.set(x, 12, resPart1)
     gpu.setForeground(colors.accent_main)
@@ -1437,7 +1437,7 @@ end
 local function drawAccountLoading()
     clear()
     drawScreenBorder()
-    drawCenteredText(12, "Загрузка...", colors.text_main)
+    drawCenteredText(16, "Загрузка...", colors.text_main)
     drawFlexButton(backButton)
 end
 
