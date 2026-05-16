@@ -1312,7 +1312,7 @@ end
 local function drawShopMenu()
     clear()
     drawScreenBorder()
-    drawCenteredText(4, "МАГАЗИН", colors.accent_secondary)
+    drawCenteredText(5, "МАГАЗИН", colors.accent_secondary)
     if not playerAgreed then
         drawCenteredText(9, "Доступ запрещён.", colors.error)
         drawCenteredText(10, "Примите соглашение, нажав [Соглашение] в главном меню.", colors.accent_main)
@@ -1397,7 +1397,7 @@ local function drawAccount(data)
     local resPart1 = string.format("Баланс Ресов: %.2f $ | ", res)
     local emPart = string.format("Эмов: %.2f *", em)
     local full = resPart1 .. emPart
-    local x = math.floor((80 - unicode.len(full)) / 2) + 1
+    local x = math.floor((80 - unicode.len(full)) / 2) + 2
     gpu.setForeground(colors.success)
     gpu.set(x, 12, resPart1)
     gpu.setForeground(colors.accent_main)
