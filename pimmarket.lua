@@ -764,6 +764,7 @@ local function drawBuyButtons()
         end
         filterButton.xs = unicode.len(filterButton.text) + 2   -- ← добавить
         drawFlexButton(filterButton)
+    end
     
     else
     -- Режим покупки: кнопка с кружком
