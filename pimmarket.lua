@@ -855,33 +855,41 @@ end
 
 -- ========== ПОПАП "НЕДОСТАТОЧНО СРЕДСТВ" ==========
 local function drawInsufficientPopup()
-    local popupWidth = 50
-    local popupHeight = 8
+    local popupWidth = 52
+    local popupHeight = 9
     local popupX = math.floor((80 - popupWidth) / 2)
-    local popupY = 10
+    local popupY = 7   -- поднято на 3 строки вверх (было 10)
 
     gpu.setBackground(colors.black_fon)
     gpu.fill(popupX, popupY, popupWidth, popupHeight, " ")
     gpu.fill(popupX+1, popupY+1, popupWidth-2, popupHeight-2, " ")
-    drawPopupBorder(popupX, popupY, popupWidth, popupHeight, colors.error)
+    drawPopupBorder(popupX, popupY, popupWidth, popupHeight, colors.accent_secondary)
 
+    -- Заголовок (поднят на одну строку вверх внутри окна)
     gpu.setForeground(colors.error)
     local title = "НЕДОСТАТОЧНО СРЕДСТВ"
     local titleX = popupX + math.floor((popupWidth - unicode.len(title)) / 2)
-    gpu.set(titleX, popupY+1, title)
+    gpu.set(titleX, popupY, title)   -- было popupY+1, теперь popupY
 
+    -- Первая строка сообщения (разбита на две)
     gpu.setForeground(colors.text_main)
-    local line1 = "Пополни баланс, не можешь купить хотя бы 1 штуку предмета."
+    local line1a = "Пополни баланс, не можешь купить"
+    local line1b = "хотя бы 1 штуку предмета."
+    local line1aX = popupX + math.floor((popupWidth - unicode.len(line1a)) / 2)
+    local line1bX = popupX + math.floor((popupWidth - unicode.len(line1b)) / 2)
+    gpu.set(line1aX, popupY+2, line1a)
+    gpu.set(line1bX, popupY+3, line1b)
+
+    -- Баланс
     local line2 = "Твой баланс: " .. string.format("%.2f", insufficientBalance) .. " " .. insufficientCurrency
-    local line1X = popupX + math.floor((popupWidth - unicode.len(line1)) / 2)
     local line2X = popupX + math.floor((popupWidth - unicode.len(line2)) / 2)
-    gpu.set(line1X, popupY+3, line1)
     gpu.set(line2X, popupY+4, line2)
 
+    -- Кнопка "ПОНЯТНО" (сдвинута влево, шире)
     local okBtn = {
-        x = popupX + math.floor((popupWidth - 10) / 2),
-        y = popupY+6,
-        xs = 10,
+        x = popupX + 5,            -- было центрирование, теперь отступ слева 5
+        y = popupY+6,              -- на строке 13 (при popupY=7)
+        xs = 14,                   -- шире, чем было (было 10)
         ys = 1,
         text = "ПОНЯТНО",
         bg = colors.bg_button,
