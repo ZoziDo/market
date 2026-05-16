@@ -601,17 +601,31 @@ local function drawBuyItemsList()
     filteredItems = getFilteredItems()
     local maxScroll = math.max(1, #filteredItems - visibleRows + 1)
     listScroll = math.max(1, math.min(listScroll, maxScroll))
+    
+    -- Очищаем область списка (строки 6–17, колонки 2–79)
     gpu.setBackground(colors.bg_main)
     gpu.fill(2, 6, 78, visibleRows, " ")
-    for i = 1, visibleRows do
-        local itemIndex = listScroll + i - 1
-        local item = filteredItems[itemIndex]
-        if not item then break end
-        local y = 5 + i
-        local isSelected = (itemIndex == selectedIndex)
-        local isHovered = (itemIndex == hoveredIndex)
-        drawSingleRow(y, item, isHovered, isSelected, itemIndex)
+    
+    if #filteredItems == 0 then
+        -- Сообщение по центру экрана
+        local msg = "ПО ТВОЕМУ ЗАПРОСУ, НИЧЕГО НЕ НАЙДЕНО!"
+        local msgX = math.floor((80 - unicode.len(msg)) / 2) + 1
+        local msgY = 11   -- примерно середина между 6 и 17
+        gpu.setForeground(colors.text_main)
+        gpu.set(msgX, msgY, msg)
+    else
+        -- Рисуем строки товаров
+        for i = 1, visibleRows do
+            local itemIndex = listScroll + i - 1
+            local item = filteredItems[itemIndex]
+            if not item then break end
+            local y = 5 + i
+            local isSelected = (itemIndex == selectedIndex)
+            local isHovered = (itemIndex == hoveredIndex)
+            drawSingleRow(y, item, isHovered, isSelected, itemIndex)
+        end
     end
+    
     drawScrollBar()
     if selectedItem then
         updateSelectorDisplay(selectedItem)
