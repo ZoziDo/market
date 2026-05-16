@@ -559,7 +559,7 @@ local function drawBuyStatic()
     gpu.set(3, 5, string.rep("─", 74))
     gpu.set(3, 18, string.rep("─", 74))
     drawCenteredText(19, "Категория", colors.text_main)
-    drawFlexButton(backButton)
+    drawFlexButton(backButton)   -- кнопка "Назад" остаётся внизу
 end
 
 local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
@@ -702,7 +702,7 @@ local function drawBuyButtons()
         nextButton.xs = 8
     end
 
-    -- Обновляем текст кнопки фильтра
+    -- Обновляем текст и цвет фильтра
     if currentShopMode == "sell" then
         if buyFilterMode == "all" then
             filterButton.text = "Все"
@@ -726,6 +726,11 @@ local function drawBuyButtons()
     else
         nextButton.fg = colors.inactive
     end
+
+    -- Рисуем кнопки внизу (y = 21)
+    drawFlexButton(filterButton)
+    drawFlexButton(nextButton)
+end
 
     -- Кнопка фильтра (находится на строке 21, колонка 33)
     local filterBg = filterButton.bg
