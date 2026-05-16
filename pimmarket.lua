@@ -732,26 +732,6 @@ local function drawBuyButtons()
     drawFlexButton(nextButton)
 end
 
-    -- Кнопка фильтра (находится на строке 21, колонка 33)
-    local filterBg = filterButton.bg
-    local filterX = filterButton.x
-    local filterY = filterButton.y
-    local filterXs = 15
-    local filterYs = filterButton.ys
-    local filterText = filterButton.text
-    local filterFg = filterButton.fg
-    gpu.setBackground(filterBg)
-    gpu.fill(filterX, filterY, filterXs, filterYs, " ")
-    gpu.setForeground(filterFg)
-    local filterTextX = filterX + math.floor((filterXs - unicode.len(filterText)) / 2)
-    local filterTextY = filterY + math.floor((filterYs - 1) / 2)
-    gpu.set(filterTextX, filterTextY, filterText)
-    gpu.setBackground(colors.bg_main)
-
-    -- Кнопка "Купить" / "Продать" (справа)
-    drawFlexButton(nextButton)
-end
-
 -- ========== ЭКРАН ПОКУПКИ ==========
 local function drawPurchaseScreen()
     currentScreen = "purchase"
