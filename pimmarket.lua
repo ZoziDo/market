@@ -233,9 +233,9 @@ end
 
 -- Кнопки главного меню
 local menuButtons = {
-    shop    = {x=31, xs=20, y=9,  ys=3, text="Магазин",     tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main},
-    util    = {x=31, xs=20, y=13, ys=3, text="Полезности",   tx=5, ty=1, bg=colors.bg_button, fg=colors.accent_main},
-    account = {x=31, xs=20, y=17, ys=3, text="Аккаунт",      tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main}
+    shop    = {x=31, xs=20, y=9,  ys=3, text="🛒 Магазин",     tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main},
+    util    = {x=31, xs=20, y=13, ys=3, text="🛠 Полезности",   tx=5, ty=1, bg=colors.bg_button, fg=colors.accent_main},
+    account = {x=31, xs=20, y=17, ys=3, text="👤 Аккаунт",      tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main}
 }
 
 local function drawButton(btn)
@@ -282,9 +282,9 @@ local filterButton  = {text = "● В наличии", x=33, y=21, xs=14, ys=1, 
 local nextButton    = {text = "Далее", x=70, y=21, xs=7, ys=1, bg=colors.bg_button, fg=colors.inactive}
 
 local shopMenuButtons = {
-    buy    = {x=31, xs=20, y=9,  ys=3, text="Покупка",     tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main},
-    sell   = {x=31, xs=20, y=13, ys=3, text="Пополнение",  tx=5, ty=1, bg=colors.bg_button, fg=colors.accent_main},
-    bundle = {x=31, xs=20, y=17, ys=3, text="Наборы/Квесты", tx=4, ty=1, bg=colors.bg_button, fg=colors.accent_main}
+    buy    = {x=31, xs=20, y=9,  ys=3, text="🛍 Покупка",     tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main},
+    sell   = {x=31, xs=20, y=13, ys=3, text="💰 Пополнение",  tx=5, ty=1, bg=colors.bg_button, fg=colors.accent_main},
+    bundle = {x=31, xs=20, y=17, ys=3, text="🎁 Наборы/Квесты", tx=4, ty=1, bg=colors.bg_button, fg=colors.accent_main}
 }
 
 local function canSendReport()
@@ -1046,20 +1046,18 @@ local function performBuy()
     end
 
     if currency == "em" and emBalance < totalCost then
-        drawCenteredText(20, "Недостаточно Эмов!", colors.error)
-        os.sleep(0.8)
-        currentScreen = "shop_buy"
-        drawBuyStatic()
-        drawBuyItemsList()
-        drawBuyButtons()
+        showInsufficientPopup = true
+        insufficientBalance = emBalance
+        insufficientCurrency = "Эмов"
+        drawPurchaseScreen()
+        drawInsufficientPopup()
         return
     elseif currency == "res" and resBalance < totalCost then
-        drawCenteredText(20, "Недостаточно Ресов!", colors.error)
-        os.sleep(0.8)
-        currentScreen = "shop_buy"
-        drawBuyStatic()
-        drawBuyItemsList()
-        drawBuyButtons()
+        showInsufficientPopup = true
+        insufficientBalance = resBalance
+        insufficientCurrency = "Ресов"
+        drawPurchaseScreen()
+        drawInsufficientPopup()
         return
     end
 
@@ -1589,6 +1587,33 @@ while true do
             elseif isButtonClicked(nextButton, x, y) then
                 if selectedItem and (currentShopMode ~= "buy" or selectedItem.qty > 0) then
                     if currentShopMode == "buy" then
+                        -- Проверяем, хватает ли денег хотя бы на 1 штуку
+                        local price = selectedItem.price
+                        local currency = selectedItem.currency or "res"
+                        if currency == "em" then
+                            if emBalance < price then
+                                showInsufficientPopup = true
+                                insufficientBalance = emBalance
+                                insufficientCurrency = "Эмов"
+                                drawBuyStatic()            -- перерисовываем фон
+                                drawBuyItemsList()         -- список товаров
+                                drawBuyButtons()           -- кнопки
+                                drawInsufficientPopup()    -- рисуем попап поверх
+                                goto continue               -- выходим, не переходя на экран покупки
+                            end
+                        else -- currency == "res"
+                            if resBalance < price then
+                                showInsufficientPopup = true
+                                insufficientBalance = resBalance
+                                insufficientCurrency = "Ресов"
+                                drawBuyStatic()
+                                drawBuyItemsList()
+                                drawBuyButtons()
+                                drawInsufficientPopup()
+                                goto continue
+                            end
+                        end
+                        -- Если денег хватает, переходим к экрану покупки
                         goToPurchase(selectedItem)
                     else
                         goToSellConfirm(selectedItem)
