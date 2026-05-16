@@ -702,13 +702,7 @@ local function drawBuyButtons()
         nextButton.xs = 8
     end
 
-    if searchActive then
-        local displayText = unicode.sub(searchInput, -16)
-        searchButton.text = displayText .. "_"
-    else
-        searchButton.text = "Поиск..."
-    end
-
+    -- Обновляем текст кнопки фильтра
     if currentShopMode == "sell" then
         if buyFilterMode == "all" then
             filterButton.text = "Все"
@@ -733,10 +727,7 @@ local function drawBuyButtons()
         nextButton.fg = colors.inactive
     end
 
-    -- Кнопка поиска (уже не используется, но оставим для совместимости)
-    drawFlexButton(searchButton)
-
-    -- Кнопка фильтра
+    -- Кнопка фильтра (находится на строке 21, колонка 33)
     local filterBg = filterButton.bg
     local filterX = filterButton.x
     local filterY = filterButton.y
@@ -752,7 +743,7 @@ local function drawBuyButtons()
     gpu.set(filterTextX, filterTextY, filterText)
     gpu.setBackground(colors.bg_main)
 
-    -- Кнопка "Купить" / "Продать"
+    -- Кнопка "Купить" / "Продать" (справа)
     drawFlexButton(nextButton)
 end
 
