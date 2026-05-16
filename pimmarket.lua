@@ -277,11 +277,11 @@ local function drawFlexButton(btn)
     gpu.setBackground(colors.bg_main)
 end
 
--- Кнопка "Назад" переопределена для нижней панели
+-- Кнопка "Назад" для нижней панели
 local backButton = {
     text = "[ НАЗАД ]",
-    x = 35, y = 24,
-    xs = unicode.len("[ НАЗАД ]") + 2,   -- 9 + 2 = 11
+    x = 37, y = 24,
+    xs = unicode.len("[ НАЗАД ]") + 2,   -- 11
     ys = 1,
     bg = colors.bg_button,
     fg = colors.accent_secondary
@@ -291,10 +291,9 @@ local function isButtonClicked(btn, x, y)
     return y >= btn.y and y < btn.y + btn.ys and x >= btn.x and x < btn.x + btn.xs
 end
 
--- Кнопки для экрана магазина (нижняя панель)
-local filterButton  = {text = "● [ Ост-к ]", x=4,  y=24, xs=16, ys=1, bg=colors.bg_button, fg=colors.success}
-local backButton    = {text = "[ НАЗАД ]",   x=34, y=24, xs=11, ys=1, bg=colors.bg_button, fg=colors.accent_secondary}
-local nextButton    = {text = "[ КУПИТЬ ]",  x=68, y=24, xs=11, ys=1, bg=colors.bg_button, fg=colors.inactive}
+-- Кнопки для экрана магазина (нижняя панель) – выровнены с отступами 11 по краям и 10 между кнопками
+local filterButton  = {text = "● [ Ост-к ]", x=11,  y=24, xs=16, ys=1, bg=colors.bg_button, fg=colors.success}
+local nextButton    = {text = "[ КУПИТЬ ]",  x=58, y=24, xs=11, ys=1, bg=colors.bg_button, fg=colors.inactive}
 
 local shopMenuButtons = {
     buy    = {x=32, xs=20, y=9,  ys=3, text="🛍 Покупка",     tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main},
@@ -755,7 +754,7 @@ local function drawBuyButtons()
         nextButton.xs = unicode.len(nextButton.text) + 2
     end
 
-            if currentShopMode == "sell" then
+    if currentShopMode == "sell" then
         if buyFilterMode == "all" then
             filterButton.text = "[ Все ]"
             filterButton.fg = colors.success
