@@ -239,7 +239,7 @@ end
 
 local function drawCenteredText(y, text, color)
     gpu.setForeground(color or colors.text_main)
-    local x = math.floor((80 - unicode.len(text)) / 2) + 1
+    local x = math.floor((80 - unicode.len(text)) / 2) + 1 + 1
     gpu.set(x, y, text)
 end
 
@@ -1391,7 +1391,7 @@ end
 local function drawAccount(data)
     clear()
     drawScreenBorder()
-    drawCenteredText(12, currentPlayer .. ":", colors.text_bright)
+    drawCenteredText(10, currentPlayer .. ":", colors.text_bright)
     local res = data.resBalance or resBalance
     local em = data.emBalance or emBalance
     local resPart1 = string.format("Баланс Ресов: %.2f $ | ", res)
@@ -1437,7 +1437,7 @@ end
 local function drawAccountLoading()
     clear()
     drawScreenBorder()
-    drawCenteredText(16, "Загрузка...", colors.text_main)
+    drawCenteredText(12, "Загрузка...", colors.text_main)
     drawFlexButton(backButton)
 end
 
