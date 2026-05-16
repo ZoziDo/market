@@ -755,7 +755,6 @@ local function drawBuyButtons()
     end
 
     if currentShopMode == "sell" then
-        -- Режим продажи: кнопка "Все"/"Vanilla" (рисуем обычным способом)
         if buyFilterMode == "all" then
             filterButton.text = "[ Все ]"
             filterButton.fg = colors.success
@@ -763,23 +762,24 @@ local function drawBuyButtons()
             filterButton.text = "[ Vanilla ]"
             filterButton.fg = colors.accent_secondary
         end
+        filterButton.xs = unicode.len(filterButton.text) + 2   -- ← добавить
         drawFlexButton(filterButton)
-    else
-        -- Режим покупки: рисуем кнопку вручную, чтобы кружок был цветным, а текст accent_secondary
-        local btn = filterButton
-        gpu.setBackground(btn.bg)
-        gpu.fill(btn.x, btn.y, btn.xs, btn.ys, " ")
-
-        -- Кружок (●) цветом в зависимости от filterState
-        local circleColor = (filterState == "available") and colors.success or colors.error
-        gpu.setForeground(circleColor)
-        gpu.set(btn.x + 1, btn.y, "●")
-
-        -- Текст "[ Ост-к ]" цветом accent_secondary
-        gpu.setForeground(colors.accent_secondary)
-        gpu.set(btn.x + 3, btn.y, " [ Ост-к ]")   -- пробел после кружка
-        gpu.setBackground(colors.bg_main)
     end
+    
+    else
+    -- Режим покупки: кнопка с кружком
+    local fullText = "● [ Ост-к ]"
+    local btn = filterButton
+    btn.xs = unicode.len(fullText) + 2   -- ширина = длина текста + 2 пробела
+    gpu.setBackground(btn.bg)
+    gpu.fill(btn.x, btn.y, btn.xs, btn.ys, " ")
+    local circleColor = (filterState == "available") and colors.success or colors.error
+    -- Вычисляем позицию, чтобы текст был по центру кнопки (с учётом, что кружок — часть текста)
+    local textX = btn.x + math.floor((btn.xs - unicode.len(fullText)) / 2)
+    gpu.setForeground(circleColor)
+    gpu.set(textX, btn.y, "●")
+    gpu.setForeground(colors.accent_secondary)
+    gpu.set(textX + 1, btn.y, " [ Ост-к ]")
 
     -- Настройка цвета кнопки "Купить"/"Продать"
     if selectedItem and (currentShopMode ~= "buy" or selectedItem.qty > 0) then
