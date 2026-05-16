@@ -157,6 +157,10 @@ local sellConfirmItem = nil
 local foundAmount = 0
 local showSellPopup = false
 
+local showInsufficientPopup = false
+local insufficientBalance = 0
+local insufficientCurrency = ""
+
 local reportInput = ""
 local lastReportTime = nil
 local showShopDenied = false
@@ -849,6 +853,43 @@ local function drawSellPopup()
     drawFlexButton(noBtn)
 end
 
+-- ========== ПОПАП "НЕДОСТАТОЧНО СРЕДСТВ" ==========
+local function drawInsufficientPopup()
+    local popupWidth = 50
+    local popupHeight = 8
+    local popupX = math.floor((80 - popupWidth) / 2)
+    local popupY = 10
+
+    gpu.setBackground(colors.black_fon)
+    gpu.fill(popupX, popupY, popupWidth, popupHeight, " ")
+    gpu.fill(popupX+1, popupY+1, popupWidth-2, popupHeight-2, " ")
+    drawPopupBorder(popupX, popupY, popupWidth, popupHeight, colors.error)
+
+    gpu.setForeground(colors.error)
+    local title = "НЕДОСТАТОЧНО СРЕДСТВ"
+    local titleX = popupX + math.floor((popupWidth - unicode.len(title)) / 2)
+    gpu.set(titleX, popupY+1, title)
+
+    gpu.setForeground(colors.text_main)
+    local line1 = "Пополни баланс, не можешь купить хотя бы 1 штуку предмета."
+    local line2 = "Твой баланс: " .. string.format("%.2f", insufficientBalance) .. " " .. insufficientCurrency
+    local line1X = popupX + math.floor((popupWidth - unicode.len(line1)) / 2)
+    local line2X = popupX + math.floor((popupWidth - unicode.len(line2)) / 2)
+    gpu.set(line1X, popupY+3, line1)
+    gpu.set(line2X, popupY+4, line2)
+
+    local okBtn = {
+        x = popupX + math.floor((popupWidth - 10) / 2),
+        y = popupY+6,
+        xs = 10,
+        ys = 1,
+        text = "ПОНЯТНО",
+        bg = colors.bg_button,
+        fg = colors.success
+    }
+    drawFlexButton(okBtn)
+end
+
 local function drawSellScanScreen()
     currentScreen = "sell_scan"
     clear()
@@ -1467,6 +1508,25 @@ while true do
                 drawSellScanScreen()
             end
             goto continue
+        end
+
+        -- Обработка попапа "недостаточно средств"
+        if showInsufficientPopup then
+            local popupWidth = 50
+            local popupHeight = 8
+            local popupX = math.floor((80 - popupWidth) / 2)
+            local popupY = 10
+            local okBtn = {
+                x = popupX + math.floor((popupWidth - 10) / 2),
+                y = popupY+6,
+                xs = 10,
+                ys = 1
+            }
+            if isButtonClicked(okBtn, x, y) then
+                showInsufficientPopup = false
+                drawPurchaseScreen()  -- убираем попап, оставляем экран покупки
+            end
+            goto continue  -- не обрабатываем другие клики, пока попап открыт
         end
 
         if currentScreen == "shop_buy" or currentScreen == "shop_sell" then
