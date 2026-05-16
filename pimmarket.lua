@@ -245,9 +245,9 @@ end
 
 -- Кнопки главного меню
 local menuButtons = {
-    shop    = {x=31, xs=20, y=9,  ys=3, text="🛒 Магазин",     tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main},
-    util    = {x=31, xs=20, y=13, ys=3, text="🛠 Полезности",   tx=5, ty=1, bg=colors.bg_button, fg=colors.accent_main},
-    account = {x=31, xs=20, y=17, ys=3, text="👤 Аккаунт",      tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main}
+    shop    = {x=32, xs=20, y=9,  ys=3, text="🛒 Магазин",     tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main},
+    util    = {x=32, xs=20, y=13, ys=3, text="🛠 Полезности",   tx=5, ty=1, bg=colors.bg_button, fg=colors.accent_main},
+    account = {x=32, xs=20, y=17, ys=3, text="👤 Аккаунт",      tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main}
 }
 
 local function drawButton(btn)
@@ -292,14 +292,14 @@ local function isButtonClicked(btn, x, y)
 end
 
 -- Кнопки для экрана магазина (нижняя панель)
-local filterButton  = {text = "● В наличии", x=4,  y=24, xs=16, ys=1, bg=colors.bg_button, fg=colors.success}
+local filterButton  = {text = "● [ Ост-к ]", x=4,  y=24, xs=16, ys=1, bg=colors.bg_button, fg=colors.success}
 local backButton    = {text = "[ НАЗАД ]",   x=34, y=24, xs=11, ys=1, bg=colors.bg_button, fg=colors.accent_secondary}
 local nextButton    = {text = "[ КУПИТЬ ]",  x=68, y=24, xs=11, ys=1, bg=colors.bg_button, fg=colors.inactive}
 
 local shopMenuButtons = {
-    buy    = {x=31, xs=20, y=9,  ys=3, text="🛍 Покупка",     tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main},
-    sell   = {x=31, xs=20, y=13, ys=3, text="💰 Пополнение",  tx=5, ty=1, bg=colors.bg_button, fg=colors.accent_main},
-    bundle = {x=31, xs=20, y=17, ys=3, text="🎁 Наборы/Квесты", tx=4, ty=1, bg=colors.bg_button, fg=colors.accent_main}
+    buy    = {x=33, xs=20, y=9,  ys=3, text="🛍 Покупка",     tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main},
+    sell   = {x=33, xs=20, y=13, ys=3, text="💰 Пополнение",  tx=5, ty=1, bg=colors.bg_button, fg=colors.accent_main},
+    bundle = {x=33, xs=20, y=17, ys=3, text="🎁 Наборы/Квесты", tx=4, ty=1, bg=colors.bg_button, fg=colors.accent_main}
 }
 
 local function canSendReport()
@@ -764,8 +764,8 @@ local function drawBuyButtons()
             filterButton.fg = colors.accent_secondary
         end
     else
-        -- Режим покупки: текст всегда "● В наличии", меняется только цвет
-        filterButton.text = "● [ В наличии ]"
+        -- Режим покупки: текст всегда "● [ Ост-к ]", меняется только цвет
+        filterButton.text = "● [ Ост-к ]"
         if filterState == "available" then
             filterButton.fg = colors.success    -- зелёный
         else
