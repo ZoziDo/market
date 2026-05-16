@@ -293,8 +293,8 @@ end
 
 -- Кнопки для экрана магазина (нижняя панель)
 local filterButton  = {text = "● В наличии", x=5,  y=24, xs=14, ys=1, bg=colors.bg_button, fg=colors.success}
-local backButton    = {text = "[ НАЗАД ]",   x=34, y=24, xs=11, ys=1, bg=colors.bg_button, fg=colors.accent_secondary}
-local nextButton    = {text = "[ КУПИТЬ ]",  x=66, y=24, xs=11, ys=1, bg=colors.bg_button, fg=colors.inactive}
+local backButton    = {text = "[ НАЗАД ]",   x=36, y=24, xs=11, ys=1, bg=colors.bg_button, fg=colors.accent_secondary}
+local nextButton    = {text = "[ КУПИТЬ ]",  x=64, y=24, xs=11, ys=1, bg=colors.bg_button, fg=colors.inactive}
 
 local shopMenuButtons = {
     buy    = {x=31, xs=20, y=9,  ys=3, text="🛍 Покупка",     tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main},
@@ -755,21 +755,21 @@ local function drawBuyButtons()
         nextButton.xs = unicode.len(nextButton.text) + 2
     end
 
-        if currentShopMode == "sell" then
+            if currentShopMode == "sell" then
         if buyFilterMode == "all" then
-            filterButton.text = "Все"
+            filterButton.text = "[ Все ]"
             filterButton.fg = colors.success
         else
-            filterButton.text = "Vanilla"
+            filterButton.text = "[ Vanilla ]"
             filterButton.fg = colors.accent_secondary
         end
     else
+        -- Режим покупки: текст всегда "● В наличии", меняется только цвет
+        filterButton.text = "● [ В наличии ]"
         if filterState == "available" then
-            filterButton.text = "● В наличии"
-            filterButton.fg = colors.success
+            filterButton.fg = colors.success    -- зелёный
         else
-            filterButton.text = "● Отсутствуют"
-            filterButton.fg = colors.error
+            filterButton.fg = colors.error      -- красный
         end
     end
 
