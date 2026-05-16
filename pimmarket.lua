@@ -143,7 +143,7 @@ local shopItems = {}
 local shopSearch = ""
 local searchActive = false
 local searchInput = ""
-local showOnlyAvailable = false
+local filterState = "available"
 local currentShopMode = "buy"
 local buyFilterMode = "all"
 
@@ -292,8 +292,9 @@ local function isButtonClicked(btn, x, y)
 end
 
 -- Кнопки для экрана магазина (нижняя панель)
-local filterButton  = {text = "● В наличии", x=3,  y=24, xs=14, ys=1, bg=colors.bg_button, fg=colors.success}
-local nextButton    = {text = "[ КУПИТЬ ]",    x=68, y=24, xs=11, ys=1, bg=colors.bg_button, fg=colors.inactive}  -- ширина под скобки
+local filterButton  = {text = "● В наличии", x=5,  y=24, xs=14, ys=1, bg=colors.bg_button, fg=colors.success}
+local backButton    = {text = "[ НАЗАД ]",   x=34, y=24, xs=11, ys=1, bg=colors.bg_button, fg=colors.accent_secondary}
+local nextButton    = {text = "[ КУПИТЬ ]",  x=66, y=24, xs=11, ys=1, bg=colors.bg_button, fg=colors.inactive}
 
 local shopMenuButtons = {
     buy    = {x=31, xs=20, y=9,  ys=3, text="🛍 Покупка",     tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main},
@@ -510,7 +511,13 @@ local function getFilteredItems()
         local matchesSearch = (shopSearch == "" or string.find(string.lower(item.displayName or item.internalName), string.lower(shopSearch), 1, true))
         local matchesAvailability = true
         if currentShopMode == "buy" then
-            matchesAvailability = (not showOnlyAvailable) or (item.qty > 0)
+            if filterState == "available" then
+                matchesAvailability = (item.qty > 0)
+            elseif filterState == "unavailable" then
+                matchesAvailability = (item.qty == 0)
+            else
+                matchesAvailability = true
+            end
         end
         local matchesVanilla = true
         if currentShopMode == "sell" and buyFilterMode == "vanilla" then
@@ -562,7 +569,7 @@ local function drawBuyStatic()
     end
 
     -- Поле поиска (сдвинуто левее: X = 45)
-    local searchX = 45
+    local searchX = 42
     local searchText = ""
     if searchActive then
         searchText = searchInput .. "_"
@@ -570,14 +577,14 @@ local function drawBuyStatic()
         searchText = (shopSearch == "" and "Поиск..." or shopSearch)
     end
     gpu.setBackground(colors.bg_button)
-    gpu.fill(searchX, 3, 20, 1, " ")
+    gpu.fill(searchX, 3, 23, 1, " ")
     gpu.setForeground(colors.accent_main)
-    gpu.set(searchX + 1, 3, unicode.sub(searchText, 1, 18))
-    
-    -- Кнопка "Стереть" с квадратными скобками, симметричными отступами
-    local clearText = "[ СТЕРЕТЬ ]"   -- длина 11 символов (с пробелами)
-    local clearWidth = unicode.len(clearText) + 2   -- 13 символов (отступы по 1)
-    local clearX = searchX + 20 + 1   -- отступ от поля поиска 1 символ (45+21=66)
+    gpu.set(searchX + 1, 3, unicode.sub(searchText, 1, 21))   -- теперь 21 символ
+
+    -- Кнопка "Стереть" (ширина 13, X = 66 → колонки 66–78)
+    local clearText = "[ СТЕРЕТЬ ]"
+    local clearWidth = unicode.len(clearText) + 2   -- 13
+    local clearX = searchX + 23 + 1                -- 42+23+1 = 66
     gpu.setBackground(colors.error)
     gpu.fill(clearX, 3, clearWidth, 1, " ")
     gpu.setForeground(colors.inactive)
@@ -748,7 +755,7 @@ local function drawBuyButtons()
         nextButton.xs = unicode.len(nextButton.text) + 2
     end
 
-    if currentShopMode == "sell" then
+        if currentShopMode == "sell" then
         if buyFilterMode == "all" then
             filterButton.text = "Все"
             filterButton.fg = colors.success
@@ -757,11 +764,11 @@ local function drawBuyButtons()
             filterButton.fg = colors.accent_secondary
         end
     else
-        if showOnlyAvailable then
+        if filterState == "available" then
             filterButton.text = "● В наличии"
             filterButton.fg = colors.success
         else
-            filterButton.text = "● В наличии"
+            filterButton.text = "● Отсутствуют"
             filterButton.fg = colors.error
         end
     end
@@ -1630,7 +1637,7 @@ while true do
             end
 
             -- Поле поиска и кнопка "Стереть" (строка 3, смещённые координаты)
-           if y == 3 and x >= 45 and x <= 64 then
+           if y == 3 and x >= 42 and x <= 64 then
             searchActive = true
             searchInput = shopSearch
             drawBuyStatic()
@@ -1638,7 +1645,7 @@ while true do
             drawBuyButtons()
             goto continue
         end
-        -- Кнопка "Стереть" (с 66 по 78, ширина 13)
+        -- Кнопка "Стереть" (66–78)
         if y == 3 and x >= 66 and x <= 78 then
             shopSearch = ""
             searchInput = ""
@@ -1664,7 +1671,12 @@ while true do
                     drawBuyItemsList()
                     drawBuyButtons()
                 else
-                    showOnlyAvailable = not showOnlyAvailable
+                    -- Переключаем состояние фильтра
+                    if filterState == "available" then
+                        filterState = "unavailable"
+                    else
+                        filterState = "available"
+                    end
                     listScroll = 1
                     selectedIndex = 0
                     selectedItem = nil
@@ -1937,6 +1949,7 @@ while true do
             reportInput = reportInput .. unicode.char(ch)
             drawReportScreen()
         end
+        
     elseif e == "key_down" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") and searchActive then
         local ch = ev[3]
         if ch == 13 then
@@ -1946,27 +1959,25 @@ while true do
             selectedIndex = 0
             selectedItem = nil
             hoveredIndex = 0
+            drawBuyStatic()          -- <-- добавить
             drawBuyItemsList()
             drawBuyButtons()
         elseif ch == 8 then
             searchInput = unicode.sub(searchInput, 1, -2)
-            shopSearch = searchInput
-            listScroll = 1
-            selectedIndex = 0
-            selectedItem = nil
-            hoveredIndex = 0
+            shopSearch = searchInput    -- или оставить только для отображения, но не фильтровать
+            drawBuyStatic()          -- <-- добавить
             drawBuyItemsList()
             drawBuyButtons()
         elseif ch >= 32 then
             searchInput = searchInput .. unicode.char(ch)
             shopSearch = searchInput
-            listScroll = 1
-            selectedIndex = 0
-            selectedItem = nil
-            hoveredIndex = 0
+            drawBuyStatic()          -- <-- добавить
             drawBuyItemsList()
             drawBuyButtons()
         end
+        goto continue
+    end
+    
     elseif e == "player_on" or e == "pim" or e == "pim_player_enter" then
         local playerName = ev[2] or "Игрок"
         currentPlayer = playerName:match("^%s*(.-)%s*$") or playerName
