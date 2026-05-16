@@ -755,29 +755,31 @@ local function drawBuyButtons()
     end
 
     if currentShopMode == "sell" then
-    -- Режим продажи: кнопка "Все"/"Vanilla"
-    if buyFilterMode == "all" then
-        filterButton.text = "[ Все ]"
-        filterButton.fg = colors.success
+        -- Режим продажи: кнопка "Все"/"Vanilla" (рисуем обычным способом)
+        if buyFilterMode == "all" then
+            filterButton.text = "[ Все ]"
+            filterButton.fg = colors.success
+        else
+            filterButton.text = "[ Vanilla ]"
+            filterButton.fg = colors.accent_secondary
+        end
+        drawFlexButton(filterButton)
     else
-        filterButton.text = "[ Vanilla ]"
-        filterButton.fg = colors.accent_secondary
+        -- Режим покупки: рисуем кнопку вручную, чтобы кружок был цветным, а текст accent_secondary
+        local btn = filterButton
+        gpu.setBackground(btn.bg)
+        gpu.fill(btn.x, btn.y, btn.xs, btn.ys, " ")
+
+        -- Кружок (●) цветом в зависимости от filterState
+        local circleColor = (filterState == "available") and colors.success or colors.error
+        gpu.setForeground(circleColor)
+        gpu.set(btn.x + 1, btn.y, "●")
+
+        -- Текст "[ Ост-к ]" цветом accent_secondary
+        gpu.setForeground(colors.accent_secondary)
+        gpu.set(btn.x + 3, btn.y, " [ Ост-к ]")   -- пробел после кружка
+        gpu.setBackground(colors.bg_main)
     end
-    -- Устанавливаем ширину = длина текста + 2 (отступы по 1)
-    filterButton.xs = unicode.len(filterButton.text) + 2
-    drawFlexButton(filterButton)
-else
-    -- Режим покупки: ручная отрисовка (кружок меняет цвет, текст accent_secondary)
-    local btn = filterButton
-    gpu.setBackground(btn.bg)
-    gpu.fill(btn.x, btn.y, btn.xs, btn.ys, " ")
-    local circleColor = (filterState == "available") and colors.success or colors.error
-    gpu.setForeground(circleColor)
-    gpu.set(btn.x + 1, btn.y, "●")
-    gpu.setForeground(colors.accent_secondary)
-    gpu.set(btn.x + 3, btn.y, " [ Ост-к ]")
-    gpu.setBackground(colors.bg_main)
-end
 
     -- Настройка цвета кнопки "Купить"/"Продать"
     if selectedItem and (currentShopMode ~= "buy" or selectedItem.qty > 0) then
@@ -1310,7 +1312,7 @@ end
 local function drawShopMenu()
     clear()
     drawScreenBorder()
-    drawCenteredText(5, "МАГАЗИН", colors.accent_secondary)
+    drawCenteredText(6, "МАГАЗИН", colors.accent_secondary)
     if not playerAgreed then
         drawCenteredText(9, "Доступ запрещён.", colors.error)
         drawCenteredText(10, "Примите соглашение, нажав [Соглашение] в главном меню.", colors.accent_main)
