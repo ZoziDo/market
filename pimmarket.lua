@@ -263,7 +263,7 @@ end
 local function drawBottomPanel()
     gpu.setForeground(colors.error)
     gpu.set(4, 24, "[ ПОДДЕРЖКА ]")
-    gpu.set(34, 24, "[ СОГЛАШЕНИЕ ]")
+    gpu.set(35, 24, "[ СОГЛАШЕНИЕ ]")
     gpu.set(68, 24, "[ ОТЗЫВЫ ]")
 end
 
@@ -1304,7 +1304,7 @@ end
 local function drawShopMenu()
     clear()
     drawScreenBorder()
-    drawCenteredText(4, "МАГАЗИН", colors.accent_secondary)
+    drawCenteredText(5, "МАГАЗИН", colors.accent_secondary)
     if not playerAgreed then
         drawCenteredText(9, "Доступ запрещён.", colors.error)
         drawCenteredText(10, "Примите соглашение, нажав [Соглашение] в главном меню.", colors.accent_main)
