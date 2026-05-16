@@ -23,7 +23,8 @@ local colors = {
 
 -- ========== НОРМАЛИЗАЦИЯ СТРОКИ ДЛЯ СОРТИРОВКИ ==========
 local function sortableName(name)
-    if not name then return "" end
+    if not name then return ""
+    end
     local lower = string.lower(name)
     local result = lower:gsub("(%d+)", function(d)
         return string.format("%08d", tonumber(d))
@@ -81,20 +82,27 @@ local drawAgreementScreen = dofile("/home/agreement.lua")
 
 local modem = component.modem
 local pimList = {}
-for addr in component.list("pim") do table.insert(pimList, addr) end
+for addr in component.list("pim") do
+    table.insert(pimList, addr)
+end
 local pimAddr = pimList[1]
 local PUSH_DIRECTION = "down"
 local PULL_DIRECTION = "up"
 
 local function normalizeName(name)
-    if not name then return "" end
+    if not name then return ""
+    end
     local lastColon = name:match(".*:([^:]+)$")
     return lastColon or name
 end
 
 local function namesMatch(name1, name2)
-    if not name1 or not name2 then return false end
-    if name1 == name2 then return true end
+    if not name1 or not name2 then
+        return false
+    end
+    if name1 == name2 then
+        return true
+    end
     local short1 = normalizeName(name1)
     local short2 = normalizeName(name2)
     return short1 == short2
@@ -144,7 +152,7 @@ local blacklist = {
 }
 
 local listScroll = 1
-local visibleRows = 12
+local visibleRows = 15          -- теперь отображаем 15 предметов
 local selectedIndex = 0
 local hoveredIndex = 0
 local filteredItems = {}
@@ -167,14 +175,18 @@ local showShopDenied = false
 
 -- ==================== ОБНОВЛЕНИЕ СЕЛЕКТОРА ====================
 local function updateSelectorDisplay(item)
-    if not selector then return end
+    if not selector then
+        return
+    end
     if not item then
         pcall(selector.setSlot, 0, nil)
         pcall(selector.setSlot, 1, nil)
         return
     end
     local raw = item.internalName or item.name or item.displayName
-    if not raw then return end
+    if not raw then
+        return
+    end
     local id = raw
     if not id:find(":") then
         id = "minecraft:" .. id
@@ -265,22 +277,23 @@ local function drawFlexButton(btn)
     gpu.setBackground(colors.bg_main)
 end
 
+-- Кнопка "Назад" больше не используется в старом виде, переопределим её координаты для нижней панели
 local backButton = {
     text = "Назад",
-    x = nil, y = 24,
-    xs = unicode.len("Назад") + 6,
+    x = 35, y = 23,        -- теперь на строке 23, по центру
+    xs = 10,
     ys = 1,
     bg = colors.bg_button,
     fg = colors.accent_secondary
 }
-backButton.x = math.floor((80 - backButton.xs) / 2) + 1
 
 local function isButtonClicked(btn, x, y)
     return y >= btn.y and y < btn.y + btn.ys and x >= btn.x and x < btn.x + btn.xs
 end
 
-local filterButton  = {text = "● В наличии", x=33, y=21, xs=14, ys=1, bg=colors.bg_button, fg=colors.success}
-local nextButton    = {text = "Далее", x=70, y=21, xs=7, ys=1, bg=colors.bg_button, fg=colors.inactive}
+-- Кнопки для экрана магазина (нижняя панель)
+local filterButton  = {text = "● В наличии", x=3,  y=23, xs=14, ys=1, bg=colors.bg_button, fg=colors.success}
+local nextButton    = {text = "Далее",       x=70, y=23, xs=8,  ys=1, bg=colors.bg_button, fg=colors.inactive}
 
 local shopMenuButtons = {
     buy    = {x=31, xs=20, y=9,  ys=3, text="🛍 Покупка",     tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main},
@@ -289,7 +302,9 @@ local shopMenuButtons = {
 }
 
 local function canSendReport()
-    if not lastReportTime then return true end
+    if not lastReportTime then
+        return true
+    end
     local now = os.time()
     local reportDate = os.date("*t", lastReportTime)
     local nowDate = os.date("*t", now)
@@ -301,7 +316,9 @@ end
 
 -- ========== ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ==========
 local function getActualItemQuantity(internalName, damage)
-    if not component.isAvailable("me_interface") then return 0 end
+    if not component.isAvailable("me_interface") then
+        return 0
+    end
     local me = component.me_interface
     local items = me.getItemsInNetwork()
     local total = 0
@@ -315,7 +332,9 @@ end
 
 -- ==================== ЗАГРУЗКА ПРЕДМЕТОВ ====================
 local function loadBuyItems()
-    if not component.isAvailable("me_interface") then return end
+    if not component.isAvailable("me_interface") then
+        return
+    end
     local me = component.me_interface
     local rawItems = me.getItemsInNetwork()
     local tempShopItems = {}
@@ -328,19 +347,27 @@ local function loadBuyItems()
 
     for _, meItem in ipairs(rawItems) do
         local name = meItem.name
-        if blacklist[name] then goto continue end
+        if blacklist[name] then
+            goto continue
+        end
         local qty = meItem.size or 0
-        if qty == 0 then goto continue end
+        if qty == 0 then
+            goto continue
+        end
 
         local damage = meItem.damage or 0
         local mapKey = name .. ":" .. damage
         local mapping = buyItemMap[mapKey]
-        if not mapping then goto continue end
+        if not mapping then
+            goto continue
+        end
 
         local displayName = mapping.displayName
         local price = mapping.price
         local currency = mapping.currency or "res"
-        if price <= 0 then goto continue end
+        if price <= 0 then
+            goto continue
+        end
 
         local key = name .. ":" .. damage
         if tempShopItems[key] then
@@ -413,7 +440,9 @@ end
 
 -- ==================== СКАНИРОВАНИЕ И ИЗЪЯТИЕ ====================
 local function scanPlayerInventory(targetName, targetDamage)
-    if not pimAddr then return 0 end
+    if not pimAddr then
+        return 0
+    end
     targetDamage = targetDamage or 0
     local total = 0
     for slot = 1, 36 do
@@ -443,11 +472,15 @@ local function scanPlayerInventory(targetName, targetDamage)
 end
 
 local function extractToME(targetName, amount, targetDamage)
-    if not pimAddr or amount <= 0 then return 0 end
+    if not pimAddr or amount <= 0 then
+        return 0
+    end
     targetDamage = targetDamage or 0
     local extracted = 0
     for slot = 1, 36 do
-        if extracted >= amount then break end
+        if extracted >= amount then
+            break
+        end
         local stack = component.invoke(pimAddr, "getStackInSlot", slot)
         if stack then
             local qty = stack.size or stack.qty or 0
@@ -501,7 +534,9 @@ local function getFilteredItems()
     maxItemWidth = 0
     for _, item in ipairs(filtered) do
         local len = unicode.len(item.displayName or item.internalName or "")
-        if len > maxItemWidth then maxItemWidth = len end
+        if len > maxItemWidth then
+            maxItemWidth = len
+        end
     end
     return filtered
 end
@@ -538,7 +573,7 @@ local function drawBuyStatic()
     gpu.fill(searchX, 3, 20, 1, " ")
     gpu.setForeground(colors.accent_main)
     gpu.set(searchX + 1, 3, unicode.sub(searchText, 1, 18))
-    
+
     -- Кнопка "Стереть"
     gpu.setBackground(colors.bg_button)
     gpu.fill(searchX + 21, 3, 7, 1, " ")
@@ -546,24 +581,25 @@ local function drawBuyStatic()
     gpu.set(searchX + 22, 3, "Стереть")
     gpu.setBackground(colors.bg_main)
 
-    -- Заголовки таблицы
+    -- Заголовки таблицы (строка 5)
     gpu.setBackground(colors.bg_button)
-    gpu.fill(2, 4, 76, 1, " ")
+    gpu.fill(2, 5, 76, 1, " ")
     gpu.setForeground(colors.text_bright)
-    gpu.set(3, 4, "Название")
-    gpu.set(42, 4, "Кол-во")
-    gpu.set(65, 4, "Цена")
+    gpu.set(3, 5, "Название")
+    gpu.set(42, 5, "Кол-во")
+    gpu.set(65, 5, "Цена")
     gpu.setBackground(colors.bg_main)
 
+    -- Разделители (верхний на 6, нижний на 22)
     gpu.setForeground(colors.inactive)
-    gpu.set(3, 5, string.rep("─", 74))
-    gpu.set(3, 18, string.rep("─", 74))
-    drawCenteredText(19, "Категория", colors.text_main)
-    drawFlexButton(backButton)   -- кнопка "Назад" остаётся внизу
+    gpu.set(3, 6, string.rep("─", 74))
+    gpu.set(3, 22, string.rep("─", 74))
 end
 
 local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
-    if not item then return end
+    if not item then
+        return
+    end
     local bg, fg
     if currentShopMode == "buy" and item.qty == 0 then
         bg = colors.bg_secondary
@@ -578,7 +614,11 @@ local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
         bg = 0x1a1a1a
     end
     if currentShopMode == "buy" then
-        if item.qty > 0 then fg = colors.accent_main else fg = colors.inactive end
+        if item.qty > 0 then
+            fg = colors.accent_main
+        else
+            fg = colors.inactive
+        end
     else
         fg = colors.accent_main
     end
@@ -591,7 +631,11 @@ local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
     end
     gpu.set(3, y, name)
     if currentShopMode == "buy" then
-        if item.qty > 0 then gpu.setForeground(colors.text_bright) else gpu.setForeground(colors.inactive) end
+        if item.qty > 0 then
+            gpu.setForeground(colors.text_bright)
+        else
+            gpu.setForeground(colors.inactive)
+        end
     else
         gpu.setForeground(colors.text_bright)
     end
@@ -608,11 +652,13 @@ end
 local function drawScrollBar()
     local total = #filteredItems
     local barX = 78
-    local barY = 6
-    local barHeight = 12
+    local barY = 7
+    local barHeight = 15
     gpu.setBackground(colors.bg_main)
     gpu.fill(barX, barY, 2, barHeight, " ")
-    if total <= visibleRows then return end
+    if total <= visibleRows then
+        return
+    end
     gpu.setBackground(colors.bg_secondary)
     gpu.fill(barX, barY, 2, barHeight, " ")
     local thumbHeight = math.max(2, math.floor(barHeight * visibleRows / total))
@@ -628,31 +674,30 @@ local function drawBuyItemsList()
     filteredItems = getFilteredItems()
     local maxScroll = math.max(1, #filteredItems - visibleRows + 1)
     listScroll = math.max(1, math.min(listScroll, maxScroll))
-    
-    -- Очищаем область списка (строки 6–17, колонки 2–79)
+
     gpu.setBackground(colors.bg_main)
-    gpu.fill(2, 6, 78, visibleRows, " ")
-    
+    gpu.fill(2, 7, 78, visibleRows, " ")
+
     if #filteredItems == 0 then
-        -- Сообщение по центру экрана
         local msg = "ПО ТВОЕМУ ЗАПРОСУ, НИЧЕГО НЕ НАЙДЕНО!"
         local msgX = math.floor((80 - unicode.len(msg)) / 2) + 1
-        local msgY = 11   -- примерно середина между 6 и 17
+        local msgY = 14   -- середина между 7 и 21
         gpu.setForeground(colors.error)
         gpu.set(msgX, msgY, msg)
     else
-        -- Рисуем строки товаров
         for i = 1, visibleRows do
             local itemIndex = listScroll + i - 1
             local item = filteredItems[itemIndex]
-            if not item then break end
-            local y = 5 + i
+            if not item then
+                break
+            end
+            local y = 6 + i   -- первая строка 7, последняя 21
             local isSelected = (itemIndex == selectedIndex)
             local isHovered = (itemIndex == hoveredIndex)
             drawSingleRow(y, item, isHovered, isSelected, itemIndex)
         end
     end
-    
+
     drawScrollBar()
     if selectedItem then
         updateSelectorDisplay(selectedItem)
@@ -665,23 +710,25 @@ local function smoothScroll(steps)
     local maxScroll = math.max(1, total - visibleRows + 1)
     local newScroll = listScroll + steps
     newScroll = math.max(1, math.min(newScroll, maxScroll))
-    if newScroll == listScroll then return end
+    if newScroll == listScroll then
+        return
+    end
     if math.abs(steps) == 1 and total > visibleRows then
         if steps > 0 then
-            gpu.copy(2, 7, 76, visibleRows - 1, 0, -1)
+            gpu.copy(2, 8, 76, visibleRows - 1, 0, -1)
             gpu.setBackground(colors.bg_main)
-            gpu.fill(2, 17, 76, 1, " ")
+            gpu.fill(2, 21, 76, 1, " ")
             local newIdx = newScroll + visibleRows - 1
             if newIdx <= total then
-                drawSingleRow(17, filtered[newIdx], (newIdx == hoveredIndex), (newIdx == selectedIndex), newIdx)
+                drawSingleRow(21, filtered[newIdx], (newIdx == hoveredIndex), (newIdx == selectedIndex), newIdx)
             end
         else
-            gpu.copy(2, 6, 76, visibleRows - 1, 0, 1)
+            gpu.copy(2, 7, 76, visibleRows - 1, 0, 1)
             gpu.setBackground(colors.bg_main)
-            gpu.fill(2, 6, 76, 1, " ")
+            gpu.fill(2, 7, 76, 1, " ")
             local newIdx = newScroll
             if newIdx >= 1 then
-                drawSingleRow(6, filtered[newIdx], (newIdx == hoveredIndex), (newIdx == selectedIndex), newIdx)
+                drawSingleRow(7, filtered[newIdx], (newIdx == hoveredIndex), (newIdx == selectedIndex), newIdx)
             end
         end
     else
@@ -693,16 +740,13 @@ local function smoothScroll(steps)
 end
 
 local function drawBuyButtons()
-    -- Обновляем текст и ширину кнопки в зависимости от режима
+    -- Обновляем текст и цвет кнопок
     if currentShopMode == "buy" then
         nextButton.text = "Купить"
-        nextButton.xs = 8
     else
         nextButton.text = "Продать"
-        nextButton.xs = 8
     end
 
-    -- Обновляем текст и цвет фильтра
     if currentShopMode == "sell" then
         if buyFilterMode == "all" then
             filterButton.text = "Все"
@@ -727,8 +771,9 @@ local function drawBuyButtons()
         nextButton.fg = colors.inactive
     end
 
-    -- Рисуем кнопки внизу (y = 21)
+    -- Рисуем три кнопки внизу (строка 23)
     drawFlexButton(filterButton)
+    drawFlexButton(backButton)
     drawFlexButton(nextButton)
 end
 
@@ -821,7 +866,9 @@ local function handleQuantityButtonClick(btnText)
 end
 
 local function goToPurchase(item)
-    if not item then return end
+    if not item then
+        return
+    end
     purchaseItem = item
     purchaseQuantity = 0
     drawPurchaseScreen()
@@ -847,17 +894,17 @@ local function drawSellPopup()
 
     gpu.setForeground(colors.text_bright)
     gpu.set(popupX+14, popupY, "Подтверждение")
-    
+
     gpu.setForeground(colors.success)
     gpu.set(popupX+3, popupY+3, "Магазин заберёт: ")
     gpu.setForeground(colors.text_bright)
     gpu.set(popupX+3 + unicode.len("Магазин заберёт: "), popupY+3, tostring(totalFound))
-    
+
     gpu.setForeground(colors.success)
     gpu.set(popupX+3, popupY+4, name .. " x")
     gpu.setForeground(colors.text_bright)
     gpu.set(popupX+3 + unicode.len(name .. " x"), popupY+4, tostring(totalFound))
-    
+
     gpu.setForeground(colors.success)
     gpu.set(popupX+3, popupY+5, "Вы получите: ")
     gpu.setForeground(colors.text_bright)
@@ -872,7 +919,7 @@ end
 -- ========== ПОПАП "НЕДОСТАТОЧНО СРЕДСТВ" ==========
 local function drawInsufficientPopup()
     local popupWidth = 52
-    local popupHeight = 10                     -- увеличено на 1 строку
+    local popupHeight = 10
     local popupX = math.floor((80 - popupWidth) / 2)
     local popupY = 7
 
@@ -881,33 +928,28 @@ local function drawInsufficientPopup()
     gpu.fill(popupX+1, popupY+1, popupWidth-2, popupHeight-2, " ")
     drawPopupBorder(popupX, popupY, popupWidth, popupHeight, colors.error)
 
-    -- Заголовок на верхней границе (строка popupY)
     gpu.setForeground(colors.error)
     local title = "НЕДОСТАТОЧНО СРЕДСТВ"
     local titleX = popupX + math.floor((popupWidth - unicode.len(title)) / 2)
     gpu.set(titleX, popupY, title)
 
-    -- Первая строка сообщения
     gpu.setForeground(colors.text_main)
     local line1a = "Пополни баланс, не можешь купить"
     local line1aX = popupX + math.floor((popupWidth - unicode.len(line1a)) / 2)
     gpu.set(line1aX, popupY+2, line1a)
 
-    -- Вторая строка
     local line1b = "хотя бы 1 штуку предмета."
     local line1bX = popupX + math.floor((popupWidth - unicode.len(line1b)) / 2)
     gpu.set(line1bX, popupY+3, line1b)
 
-    -- Баланс (опущен на строку ниже)
     local line2 = "Твой баланс: " .. string.format("%.2f", insufficientBalance) .. " " .. insufficientCurrency
     local line2X = popupX + math.floor((popupWidth - unicode.len(line2)) / 2)
-    gpu.set(line2X, popupY+5, line2)         -- было popupY+4, теперь popupY+5
+    gpu.set(line2X, popupY+5, line2)
 
-    -- Кнопка по центру (ширина 14), опущена на строку ниже
     local btnWidth = 14
     local okBtn = {
         x = popupX + math.floor((popupWidth - btnWidth) / 2),
-        y = popupY+7,                         -- было popupY+6, теперь popupY+7
+        y = popupY+7,
         xs = btnWidth,
         ys = 1,
         text = "[ ПОНЯТНО ]",
@@ -960,7 +1002,9 @@ local function drawSellScanScreen()
 end
 
 local function goToSellConfirm(item)
-    if not item then return end
+    if not item then
+        return
+    end
     sellConfirmItem = item
     foundAmount = 0
     showSellPopup = false
@@ -1105,7 +1149,9 @@ local function performBuy()
 
     while remaining > 0 do
         local toTake = math.min(remaining, maxStackSize)
-        local okExport, err = pcall(function() me.exportItem(fingerprint, PULL_DIRECTION, toTake) end)
+        local okExport, err = pcall(function()
+            me.exportItem(fingerprint, PULL_DIRECTION, toTake)
+        end)
         if okExport then
             extracted = extracted + toTake
             remaining = remaining - toTake
@@ -1380,7 +1426,9 @@ local function drawAccountLoading()
 end
 
 local function retryAccountAfterTokenRefresh()
-    if not currentPlayer then return end
+    if not currentPlayer then
+        return
+    end
     modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
     local start = os.clock()
     while os.clock() - start < 3 do
@@ -1513,7 +1561,7 @@ while true do
         end
     end
 
-        if e == "touch" then
+    if e == "touch" then
         local x, y = ev[3], ev[4]
 
         if showSellPopup and currentScreen == "sell_scan" then
@@ -1528,7 +1576,7 @@ while true do
             elseif isButtonClicked(noBtn, x, y) then
                 showSellPopup = false
                 drawSellScanScreen()
-            elseif not (x >= popupX and x < popupX+popupWidth and y >= popupY and y < popupY+popupHeight) then
+            elseif not (x >= popupX and x < popupX + popupWidth and y >= popupY and y < popupY + popupHeight) then
                 showSellPopup = false
                 drawSellScanScreen()
             end
@@ -1553,9 +1601,9 @@ while true do
             end
             goto continue
         elseif currentScreen == "shop_buy" or currentScreen == "shop_sell" then
-            -- Клик по области списка (выбор предмета)
-            if y >= 6 and y <= 17 and x >= 2 and x <= 77 then
-                local relativeRow = y - 5
+            -- Клик по списку (строки 7–21)
+            if y >= 7 and y <= 21 and x >= 2 and x <= 77 then
+                local relativeRow = y - 6
                 local clickedIndex = listScroll + relativeRow - 1
                 local item = filteredItems[clickedIndex]
                 if item and (currentShopMode ~= "buy" or item.qty > 0) then
@@ -1569,17 +1617,18 @@ while true do
                 goto continue
             end
 
-            if x >= 78 and y >= 6 and y <= 17 then
+            -- Клик по скроллбару (строки 7–21)
+            if x >= 78 and y >= 7 and y <= 21 then
                 local total = #filteredItems
                 if total > visibleRows then
-                    local clickPos = y - 5
-                    listScroll = math.floor((clickPos - 1) * (#filteredItems - visibleRows) / visibleRows) + 1
+                    local clickPos = y - 6
+                    listScroll = math.floor((clickPos - 1) * (total - visibleRows) / visibleRows) + 1
                     drawBuyItemsList()
                 end
                 goto continue
             end
 
-            -- Поле поиска и кнопка "Стереть"
+            -- Поле поиска и кнопка "Стереть" (строка 3)
             if y == 3 and x >= 50 and x <= 69 then
                 searchActive = true
                 searchInput = shopSearch
@@ -1595,6 +1644,32 @@ while true do
                 drawBuyStatic()
                 drawBuyItemsList()
                 drawBuyButtons()
+                goto continue
+            end
+
+            -- Кнопки нижней панели (фильтр, назад, купить/продать)
+            if isButtonClicked(filterButton, x, y) then
+                if currentShopMode == "sell" then
+                    if buyFilterMode == "all" then
+                        buyFilterMode = "vanilla"
+                    else
+                        buyFilterMode = "all"
+                    end
+                    listScroll = 1
+                    selectedIndex = 0
+                    selectedItem = nil
+                    hoveredIndex = 0
+                    drawBuyItemsList()
+                    drawBuyButtons()
+                else
+                    showOnlyAvailable = not showOnlyAvailable
+                    listScroll = 1
+                    selectedIndex = 0
+                    selectedItem = nil
+                    hoveredIndex = 0
+                    drawBuyItemsList()
+                    drawBuyButtons()
+                end
                 goto continue
             end
 
@@ -1644,31 +1719,7 @@ while true do
                 goto continue
             end
 
-            if isButtonClicked(filterButton, x, y) then
-                if currentShopMode == "sell" then
-                    if buyFilterMode == "all" then
-                        buyFilterMode = "vanilla"
-                    else
-                        buyFilterMode = "all"
-                    end
-                    listScroll = 1
-                    selectedIndex = 0
-                    selectedItem = nil
-                    hoveredIndex = 0
-                    drawBuyItemsList()
-                    drawBuyButtons()
-                else
-                    showOnlyAvailable = not showOnlyAvailable
-                    listScroll = 1
-                    selectedIndex = 0
-                    selectedItem = nil
-                    hoveredIndex = 0
-                    drawBuyItemsList()
-                    drawBuyButtons()
-                end
-                goto continue
-            end
-
+            -- Если был активен поиск по клавиатуре
             if searchActive then
                 shopSearch = searchInput
                 searchActive = false
@@ -1847,23 +1898,21 @@ while true do
                 end
             end
         end
-
     elseif e == "scroll" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
         local direction = ev[5]
         local x = ev[3]
         local y = ev[4]
-        if x >= 2 and x <= 78 and y >= 6 and y <= 17 then
+        if x >= 2 and x <= 78 and y >= 7 and y <= 21 then
             if direction == -1 then
                 smoothScroll(1)
             elseif direction == 1 then
                 smoothScroll(-1)
             end
         end
-
     elseif e == "mouse_move" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
         local x, y = ev[3], ev[4]
-        if y >= 6 and y <= 17 and x >= 2 and x <= 77 then
-            local rel = y - 5
+        if y >= 7 and y <= 21 and x >= 2 and x <= 77 then
+            local rel = y - 6
             local newHover = listScroll + rel - 1
             if newHover <= #filteredItems and newHover ~= hoveredIndex then
                 hoveredIndex = newHover
@@ -1875,7 +1924,6 @@ while true do
                 drawBuyItemsList()
             end
         end
-
     elseif e == "key_down" and currentScreen == "report" and canSendReport() then
         local ch = ev[3]
         if ch == 13 then
@@ -1887,7 +1935,6 @@ while true do
             reportInput = reportInput .. unicode.char(ch)
             drawReportScreen()
         end
-
     elseif e == "key_down" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") and searchActive then
         local ch = ev[3]
         if ch == 13 then
@@ -1918,7 +1965,6 @@ while true do
             drawBuyItemsList()
             drawBuyButtons()
         end
-
     elseif e == "player_on" or e == "pim" or e == "pim_player_enter" then
         local playerName = ev[2] or "Игрок"
         currentPlayer = playerName:match("^%s*(.-)%s*$") or playerName
@@ -1942,7 +1988,6 @@ while true do
             drawAuthScreen()
             modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
         end
-
     elseif e == "player_off" or e == "pim_player_leave" then
         currentPlayer = nil
         currentToken = nil
@@ -1955,7 +2000,6 @@ while true do
         pcall(selector.setSlot, 0, nil)
         pcall(selector.setSlot, 1, nil)
         drawWelcomeScreen()
-
     elseif e == "modem_message" then
         local sender = ev[3]
         local data = ev[6]
