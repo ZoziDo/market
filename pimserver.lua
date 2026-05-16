@@ -102,7 +102,6 @@ local adminViewHeight = 20
 -- Режим редактирования баланса
 local editBalanceMode = false
 local editingPlayer = nil
-local editCurrency = nil   -- "em" или "res"
 local editInput = ""       -- вводимая сумма
 
 -- Кеш для ME статистики
@@ -276,8 +275,8 @@ local function drawAdminPanel()
     for i=startIdx, endIdx do
         local ply = adminPlayerList[i]
         local bannedStr = ply.data.banned and " [ЗАБАНЕН]" or ""
-        local line = string.format("%-20s | Ресы: %8.2f | Эмы: %8.2f | Транз: %d%s",
-            ply.name, ply.data.resBalance or 0, ply.data.balance or 0, ply.data.transactions or 0, bannedStr)
+        local line = string.format("%-20s | Баланс: %8.2f ₵ | Транз: %d%s",
+            ply.name, ply.data.balance or 0, ply.data.transactions or 0, bannedStr)
         if #line > screenW - 4 then line = line:sub(1, screenW-4) end
         local y = 4 + (i - startIdx)
         setColor((i == selectedAdminIndex) and ansi.bg_blue or ansi.white, (i == selectedAdminIndex) and ansi.white or nil)
@@ -301,9 +300,8 @@ local function drawEditBalanceWindow()
     io.write(ansi.hide_cursor .. ansi.clear)
     updateScreenSize()
 
-    -- Рамка окна (по центру)
     local w = 50
-    local h = 10
+    local h = 8
     local x = math.floor((screenW - w) / 2)
     local y = math.floor((screenH - h) / 2)
 
@@ -321,29 +319,20 @@ local function drawEditBalanceWindow()
     gotoxy(x+2, y) io.write(" РЕДАКТИРОВАНИЕ БАЛАНСА ")
     resetColor()
 
-    -- Информация об игроке
     setColor(ansi.yellow)
     gotoxy(x+2, y+2)
     io.write("Игрок: " .. editingPlayer.name)
     gotoxy(x+2, y+3)
-    io.write("Текущий баланс: Ресы: " .. string.format("%.2f", editingPlayer.data.resBalance) .. "  Эмы: " .. string.format("%.2f", editingPlayer.data.balance))
+    io.write("Текущий баланс: " .. string.format("%.2f", editingPlayer.data.balance) .. " ₵")
     resetColor()
 
-    -- Выбор валюты
-    setColor(ansi.green)
+    setColor(ansi.cyan)
     gotoxy(x+2, y+5)
-    io.write("Выберите валюту: 1 - Ресы ($)   2 - Эмы (*)")
+    io.write("Введите новую сумму: " .. editInput .. "_")
     resetColor()
-
-    if editCurrency then
-        setColor(ansi.cyan)
-        gotoxy(x+2, y+6)
-        io.write("Введите сумму: " .. editInput .. "_")
-        resetColor()
-    end
 
     setColor(ansi.white)
-    gotoxy(x+2, y+8)
+    gotoxy(x+2, y+6)
     io.write("Enter - подтвердить | Esc - отмена")
     resetColor()
 
@@ -487,29 +476,21 @@ end
 
 -- ========== ОБРАБОТКА КЛАВИШ ==========
 local function handleKey(key, char, player)
-    -- Админ только если имя совпадает И есть активная сессия (стоит на PIM)
     local isAdmin = (player == ADMIN_NAME) and isAdminConnected()
 
-    -- Если в режиме редактирования баланса – обрабатываем только его клавиши
     if editBalanceMode then
         if char == 27 then -- Esc
             editBalanceMode = false
             editingPlayer = nil
-            editCurrency = nil
             editInput = ""
             drawAdminPanel()
             return
         elseif char == 13 then -- Enter
-            if editCurrency and editInput ~= "" then
+            if editInput ~= "" then
                 local amount = tonumber(editInput)
                 if amount then
-                    if editCurrency == "res" then
-                        editingPlayer.data.resBalance = amount
-                        log("INFO", "Баланс Ресов игрока " .. editingPlayer.name .. " изменён на " .. amount)
-                    else
-                        editingPlayer.data.balance = amount
-                        log("INFO", "Баланс Эмов игрока " .. editingPlayer.name .. " изменён на " .. amount)
-                    end
+                    editingPlayer.data.balance = amount
+                    log("INFO", "Баланс игрока " .. editingPlayer.name .. " изменён на " .. amount .. " ₵")
                     saveDB()
                 else
                     log("WARN", "Некорректная сумма: " .. editInput)
@@ -517,21 +498,10 @@ local function handleKey(key, char, player)
             end
             editBalanceMode = false
             editingPlayer = nil
-            editCurrency = nil
             editInput = ""
             drawAdminPanel()
             return
-        elseif not editCurrency then
-            -- Ожидаем выбор валюты (1 или 2)
-            if char == 49 then -- '1'
-                editCurrency = "res"
-            elseif char == 50 then -- '2'
-                editCurrency = "em"
-            end
-            drawEditBalanceWindow()
-            return
         else
-            -- Ввод суммы (цифры, точка, backspace)
             if char >= 48 and char <= 57 then -- цифры
                 editInput = editInput .. string.char(char)
             elseif char == 46 then -- точка
@@ -546,18 +516,14 @@ local function handleKey(key, char, player)
         end
     end
 
-    -- Обработка глобальных клавиш (A, P) и админ-панели
-    -- Сначала проверяем специальные клавиши по key (стрелки и т.п.)
     if adminMode then
         if not isAdmin then
-            -- Если админ потерял сессию, выходим из админ-панели
             adminMode = false
             drawInterface()
             log("WARN", "Сессия администратора истекла, выход из панели")
             return
         end
 
-        -- Обработка специальных клавиш (стрелки)
         if key == 200 then -- стрелка вверх
             if selectedAdminIndex > 1 then
                 selectedAdminIndex = selectedAdminIndex - 1
@@ -579,14 +545,12 @@ local function handleKey(key, char, player)
         end
     end
 
-    -- Обработка символьных клавиш (только если char в допустимом диапазоне)
     local pressed = nil
     if char and char >= 1 and char <= 255 then
         pressed = string.lower(string.char(char))
     end
 
     if not adminMode then
-        -- Обработка в основном интерфейсе
         if pressed == "a" then
             if isAdmin then
                 adminMode = true
@@ -609,7 +573,6 @@ local function handleKey(key, char, player)
             return
         end
     else -- adminMode == true
-        -- Обработка символьных команд в админ-панели
         if pressed == "p" then
             shopPaused = not shopPaused
             log("INFO", "Магазин " .. (shopPaused and "приостановлен" or "возобновлён"))
@@ -633,7 +596,6 @@ local function handleKey(key, char, player)
             if ply then
                 ply.data.transactions = 0
                 ply.data.balance = 0
-                ply.data.resBalance = 0
                 saveDB()
                 log("INFO", "Статистика игрока " .. ply.name .. " сброшена")
                 drawAdminPanel()
@@ -643,7 +605,6 @@ local function handleKey(key, char, player)
             local ply = adminPlayerList[selectedAdminIndex]
             if ply then
                 editingPlayer = ply
-                editCurrency = nil
                 editInput = ""
                 editBalanceMode = true
                 drawEditBalanceWindow()
@@ -655,7 +616,6 @@ end
 
 local function handleTouch(x, y, player)
     if not adminMode or editBalanceMode then return end
-    -- Только админ с активной сессией может кликать
     if player ~= ADMIN_NAME or not isAdminConnected() then return end
     if y >= 4 and y <= 3 + adminViewHeight then
         local lineIndex = y - 4
@@ -671,8 +631,11 @@ end
 local function getOrCreatePlayer(name)
     if not players[name] then
         players[name] = {
-            balance = 0.0, resBalance = 0.0, transactions = 0,
-            regDate = os.date("%d.%m.%Y %H:%M:%S"), agreed = false, banned = false
+            balance = 0.0,
+            transactions = 0,
+            regDate = os.date("%d.%m.%Y %H:%M:%S"),
+            agreed = false,
+            banned = false
         }
         saveDB()
         log("INFO", "Создан игрок " .. name)
@@ -690,7 +653,6 @@ local refreshTimer = event.timer(1, function()
     if not adminMode and not editBalanceMode then
         drawInterface()
     elseif adminMode and not isAdminConnected() then
-        -- Автоматически выходим из админ-панели, если сессия админа пропала
         adminMode = false
         drawInterface()
         log("WARN", "Автоматический выход из админ-панели (потеря связи с PIM)")
@@ -743,7 +705,6 @@ while true do
                 log("INFO", "✅ АДМИН ЗАРЕГИСТРИРОВАН: " .. from)
             end
             modem.send(from, 0xffef, serialization.serialize({op="welcome", owner=(from==owner), shopPaused=shopPaused}))
-            -- Перерисовка через таймер
 
         elseif msg.op == "enter" then
             if shopPaused then
@@ -776,13 +737,11 @@ while true do
             modem.send(from, 0xffef, serialization.serialize({
                 op="welcome", status="ok", token=token,
                 balance=player.balance or 0.0,
-                resBalance=player.resBalance or 0.0,
                 transactions=player.transactions,
                 regDate=player.regDate,
                 agreed = player.agreed or false,
                 shopPaused = shopPaused
             }))
-            -- Перерисовка через таймер
 
         elseif msg.op == "getAccount" then
             if not validateSession(msg.name, msg.token) then
@@ -797,7 +756,6 @@ while true do
                 op="accountData",
                 data = {
                     balance = player.balance,
-                    resBalance = player.resBalance,
                     transactions = player.transactions,
                     regDate = player.regDate,
                     agreed = player.agreed,
@@ -819,13 +777,8 @@ while true do
             if not player or player.banned then goto continue end
             local qty = tonumber(msg.qty) or 0
             local value = tonumber(msg.value) or 0
-            local currency = msg.currency or "em"
 
-            if currency == "em" then
-                player.balance = (player.balance or 0) + value
-            else
-                player.resBalance = (player.resBalance or 0) + value
-            end
+            player.balance = (player.balance or 0) + value
             player.transactions = (player.transactions or 0) + 1
             sessions[msg.name].lastAction = os.time()
 
@@ -833,7 +786,7 @@ while true do
             saveGlobalStats()
             saveDB()
             recordTransaction()
-            log("INFO", string.format("💰 %s пополнил %s: предмет '%s' x%d на сумму %.2f", msg.name, currency, msg.item, qty, value))
+            log("INFO", string.format("💰 %s пополнил баланс: предмет '%s' x%d на сумму %.2f ₵", msg.name, msg.item, qty, value))
 
         elseif msg.op == "buy" then
             if shopPaused then
@@ -847,12 +800,8 @@ while true do
             local player = players[msg.name]
             if not player or player.banned then goto continue end
             local value = tonumber(msg.value) or 0
-            local currency = msg.currency or "res"
-            if currency == "em" then
-                player.balance = (player.balance or 0) - value
-            else
-                player.resBalance = (player.resBalance or 0) - value
-            end
+
+            player.balance = (player.balance or 0) - value
             player.transactions = (player.transactions or 0) + 1
             sessions[msg.name].lastAction = os.time()
 
@@ -860,7 +809,7 @@ while true do
             saveGlobalStats()
             saveDB()
             recordTransaction()
-            log("INFO", string.format("🛒 %s купил %s x%d за %.2f %s", msg.name, msg.item, msg.qty, value, currency))
+            log("INFO", string.format("🛒 %s купил %s x%d за %.2f ₵", msg.name, msg.item, msg.qty, value))
 
         elseif msg.op == "report" then
             if not validateSession(msg.name, msg.token) then
