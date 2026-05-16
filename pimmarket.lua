@@ -242,7 +242,9 @@ local function drawButton(btn)
     gpu.setBackground(btn.bg)
     gpu.fill(btn.x, btn.y, btn.xs, btn.ys, " ")
     gpu.setForeground(btn.fg)
-    gpu.set(btn.x + btn.tx, btn.y + btn.ty, btn.text)
+    local textX = btn.x + math.floor((btn.xs - unicode.len(btn.text)) / 2)
+    local textY = btn.y + math.floor((btn.ys - 1) / 2)
+    gpu.set(textX, textY, btn.text)
     gpu.setBackground(colors.bg_main)
 end
 
@@ -277,7 +279,6 @@ local function isButtonClicked(btn, x, y)
     return y >= btn.y and y < btn.y + btn.ys and x >= btn.x and x < btn.x + btn.xs
 end
 
-local searchButton = {text = "Поиск...", x=3, y=21, xs=20, ys=1, bg=colors.bg_button, fg=colors.accent_main}
 local filterButton  = {text = "● В наличии", x=33, y=21, xs=14, ys=1, bg=colors.bg_button, fg=colors.success}
 local nextButton    = {text = "Далее", x=70, y=21, xs=7, ys=1, bg=colors.bg_button, fg=colors.inactive}
 
@@ -516,6 +517,7 @@ local function drawBuyStatic()
     gpu.setForeground(colors.accent_main)
     gpu.set(3 + unicode.len(resText), 1, emText)
 
+    -- Режим магазина (слева)
     if currentShopMode == "buy" then
         gpu.setForeground(colors.accent_secondary)
         gpu.set(3, 3, "Магазин продаёт")
@@ -524,6 +526,27 @@ local function drawBuyStatic()
         gpu.set(3, 3, "Магазин покупает")
     end
 
+    -- Поле поиска (справа, колонка 50)
+    local searchX = 50
+    local searchText = ""
+    if searchActive then
+        searchText = searchInput .. "_"
+    else
+        searchText = (shopSearch == "" and "Поиск..." or shopSearch)
+    end
+    gpu.setBackground(colors.bg_button)
+    gpu.fill(searchX, 3, 20, 1, " ")
+    gpu.setForeground(colors.accent_main)
+    gpu.set(searchX + 1, 3, unicode.sub(searchText, 1, 18))
+    
+    -- Кнопка "Стереть"
+    gpu.setBackground(colors.bg_button)
+    gpu.fill(searchX + 21, 3, 7, 1, " ")
+    gpu.setForeground(colors.error)
+    gpu.set(searchX + 22, 3, "Стереть")
+    gpu.setBackground(colors.bg_main)
+
+    -- Заголовки таблицы
     gpu.setBackground(colors.bg_button)
     gpu.fill(2, 4, 76, 1, " ")
     gpu.setForeground(colors.text_bright)
@@ -670,12 +693,22 @@ local function smoothScroll(steps)
 end
 
 local function drawBuyButtons()
+    -- Обновляем текст и ширину кнопки в зависимости от режима
+    if currentShopMode == "buy" then
+        nextButton.text = "Купить"
+        nextButton.xs = 8
+    else
+        nextButton.text = "Продать"
+        nextButton.xs = 8
+    end
+
     if searchActive then
         local displayText = unicode.sub(searchInput, -16)
         searchButton.text = displayText .. "_"
     else
         searchButton.text = "Поиск..."
     end
+
     if currentShopMode == "sell" then
         if buyFilterMode == "all" then
             filterButton.text = "Все"
@@ -693,12 +726,17 @@ local function drawBuyButtons()
             filterButton.fg = colors.error
         end
     end
+
     if selectedItem and (currentShopMode ~= "buy" or selectedItem.qty > 0) then
         nextButton.fg = colors.accent_secondary
     else
         nextButton.fg = colors.inactive
     end
+
+    -- Кнопка поиска (уже не используется, но оставим для совместимости)
     drawFlexButton(searchButton)
+
+    -- Кнопка фильтра
     local filterBg = filterButton.bg
     local filterX = filterButton.x
     local filterY = filterButton.y
@@ -713,6 +751,8 @@ local function drawBuyButtons()
     local filterTextY = filterY + math.floor((filterYs - 1) / 2)
     gpu.set(filterTextX, filterTextY, filterText)
     gpu.setBackground(colors.bg_main)
+
+    -- Кнопка "Купить" / "Продать"
     drawFlexButton(nextButton)
 end
 
@@ -894,7 +934,7 @@ local function drawInsufficientPopup()
         y = popupY+7,                         -- было popupY+6, теперь popupY+7
         xs = btnWidth,
         ys = 1,
-        text = "ПОНЯТНО",
+        text = "[ ПОНЯТНО ]",
         bg = colors.bg_button,
         fg = colors.success
     }
@@ -1541,7 +1581,9 @@ while true do
             end
             goto continue  -- не обрабатываем другие клики, пока попап открыт
         end
-        if currentScreen == "shop_buy" or currentScreen == "shop_sell" then
+        
+            if currentScreen == "shop_buy" or currentScreen == "shop_sell" then
+            -- Клик по области списка (выбор предмета)
             if y >= 6 and y <= 17 and x >= 2 and x <= 77 then
                 local relativeRow = y - 5
                 local clickedIndex = listScroll + relativeRow - 1
@@ -1554,8 +1596,10 @@ while true do
                     drawBuyItemsList()
                     drawBuyButtons()
                 end
+                goto continue
             end
 
+            -- Клик по скроллбару
             if x >= 78 and y >= 6 and y <= 17 then
                 local total = #filteredItems
                 if total > visibleRows then
@@ -1563,8 +1607,32 @@ while true do
                     listScroll = math.floor((clickPos - 1) * (#filteredItems - visibleRows) / visibleRows) + 1
                     drawBuyItemsList()
                 end
+                goto continue
             end
 
+            -- === НОВЫЕ ПРОВЕРКИ ДЛЯ ПОИСКА И СТИРАНИЯ ===
+            -- Клик по полю поиска (строка 3, колонки 50–69)
+            if y == 3 and x >= 50 and x <= 69 then
+                searchActive = true
+                searchInput = shopSearch
+                drawBuyStatic()
+                drawBuyItemsList()
+                drawBuyButtons()
+                goto continue
+            end
+
+            -- Клик по кнопке "Стереть" (строка 3, колонки 71–77)
+            if y == 3 and x >= 71 and x <= 77 then
+                shopSearch = ""
+                searchInput = ""
+                searchActive = false
+                drawBuyStatic()
+                drawBuyItemsList()
+                drawBuyButtons()
+                goto continue
+            end
+
+            -- Кнопка "Назад"
             if isButtonClicked(backButton, x, y) then
                 currentScreen = "shop"
                 selectedIndex = 0
@@ -1572,11 +1640,48 @@ while true do
                 hoveredIndex = 0
                 updateSelectorDisplay(nil)
                 drawShopMenu()
-            elseif isButtonClicked(searchButton, x, y) then
-                searchActive = true
-                searchInput = shopSearch
-                drawBuyButtons()
-            elseif isButtonClicked(filterButton, x, y) then
+                goto continue
+            end
+
+            -- Кнопка "Купить" / "Продать" (ранее "Далее")
+            if isButtonClicked(nextButton, x, y) then
+                if selectedItem and (currentShopMode ~= "buy" or selectedItem.qty > 0) then
+                    if currentShopMode == "buy" then
+                        local price = selectedItem.price
+                        local currency = selectedItem.currency or "res"
+                        if currency == "em" then
+                            if emBalance < price then
+                                showInsufficientPopup = true
+                                insufficientBalance = emBalance
+                                insufficientCurrency = "Эмов"
+                                drawBuyStatic()
+                                drawBuyItemsList()
+                                drawBuyButtons()
+                                drawInsufficientPopup()
+                                goto continue
+                            end
+                        else -- currency == "res"
+                            if resBalance < price then
+                                showInsufficientPopup = true
+                                insufficientBalance = resBalance
+                                insufficientCurrency = "Ресов"
+                                drawBuyStatic()
+                                drawBuyItemsList()
+                                drawBuyButtons()
+                                drawInsufficientPopup()
+                                goto continue
+                            end
+                        end
+                        goToPurchase(selectedItem)
+                    else
+                        goToSellConfirm(selectedItem)
+                    end
+                end
+                goto continue
+            end
+
+            -- Кнопка фильтра (В наличии / Все / Vanilla)
+            if isButtonClicked(filterButton, x, y) then
                 if currentShopMode == "sell" then
                     if buyFilterMode == "all" then
                         buyFilterMode = "vanilla"
@@ -1598,42 +1703,11 @@ while true do
                     drawBuyItemsList()
                     drawBuyButtons()
                 end
-            elseif isButtonClicked(nextButton, x, y) then
-                if selectedItem and (currentShopMode ~= "buy" or selectedItem.qty > 0) then
-                    if currentShopMode == "buy" then
-                        -- Проверяем, хватает ли денег хотя бы на 1 штуку
-                        local price = selectedItem.price
-                        local currency = selectedItem.currency or "res"
-                        if currency == "em" then
-                            if emBalance < price then
-                                showInsufficientPopup = true
-                                insufficientBalance = emBalance
-                                insufficientCurrency = "Эмов"
-                                drawBuyStatic()            -- перерисовываем фон
-                                drawBuyItemsList()         -- список товаров
-                                drawBuyButtons()           -- кнопки
-                                drawInsufficientPopup()    -- рисуем попап поверх
-                                goto continue               -- выходим, не переходя на экран покупки
-                            end
-                        else -- currency == "res"
-                            if resBalance < price then
-                                showInsufficientPopup = true
-                                insufficientBalance = resBalance
-                                insufficientCurrency = "Ресов"
-                                drawBuyStatic()
-                                drawBuyItemsList()
-                                drawBuyButtons()
-                                drawInsufficientPopup()
-                                goto continue
-                            end
-                        end
-                        -- Если денег хватает, переходим к экрану покупки
-                        goToPurchase(selectedItem)
-                    else
-                        goToSellConfirm(selectedItem)
-                    end
-                end
-            elseif searchActive then
+                goto continue
+            end
+
+            -- Если был активен поиск по клавиатуре
+            if searchActive then
                 shopSearch = searchInput
                 searchActive = false
                 listScroll = 1
@@ -1642,7 +1716,9 @@ while true do
                 hoveredIndex = 0
                 drawBuyItemsList()
                 drawBuyButtons()
+                goto continue
             end
+        end
 
         elseif currentScreen == "purchase" then
             if (y >= 24 and y <= 24) and (x >= 19 and x <= 28) then
