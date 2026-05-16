@@ -586,10 +586,10 @@ local function drawBuyStatic()
     local clearX = searchX + 23 + 1
     gpu.setBackground(colors.error)
     gpu.fill(clearX, 3, clearWidth, 1, " ")
-    gpu.setForeground(colors.accent_main)
+    gpu.setForeground(colors.accent_secondary)
     local textX = clearX + math.floor((clearWidth - unicode.len(clearText)) / 2)
     gpu.set(textX, 3, clearText)
-    gpu.setBackground(colors.accent_main)
+    gpu.setBackground(colors.accent_secondary)
 
     -- Заголовки таблицы (строка 5)
     gpu.setBackground(colors.bg_button)
@@ -745,10 +745,6 @@ local function smoothScroll(steps)
 end
 
 local function drawBuyButtons()
-    -- Очищаем всю нижнюю строку (y=24) от старых символов
-    gpu.setBackground(colors.bg_main)
-    gpu.fill(1, 24, 80, 1, " ")
-
     -- Обновляем текст и ширину кнопки "Купить"/"Продать"
     if currentShopMode == "buy" then
         nextButton.text = "[ КУПИТЬ ]"
