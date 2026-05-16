@@ -745,6 +745,14 @@ local function smoothScroll(steps)
 end
 
 local function drawBuyButtons()
+    -- Очищаем всю строку 24 (удаляем старые символы кнопок и возможные "хвосты")
+    gpu.setBackground(colors.bg_main)
+    gpu.fill(1, 24, 80, 1, " ")
+
+    -- Восстанавливаем нижнюю линию рамки (как в drawScreenBorder)
+    gpu.setForeground(colors.accent_secondary)
+    gpu.fill(1, 24, 80, 1, "─")   -- нижняя горизонтальная линия
+
     -- Обновляем текст и ширину кнопки "Купить"/"Продать"
     if currentShopMode == "buy" then
         nextButton.text = "[ КУПИТЬ ]"
@@ -787,7 +795,7 @@ local function drawBuyButtons()
         nextButton.fg = colors.inactive
     end
 
-    -- Рисуем остальные кнопки (Назад и Купить/Продать)
+    -- Рисуем остальные кнопки (Назад и Купить/Продать) поверх линии
     drawFlexButton(backButton)
     drawFlexButton(nextButton)
 end
