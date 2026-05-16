@@ -567,7 +567,7 @@ local function drawBuyStatic()
         gpu.set(3, 3, "Магазин покупает")
     end
 
-    -- Поле поиска (сдвинуто левее: X = 45)
+    -- Поле поиска (сдвинуто левее: X = 42)
     local searchX = 42
     local searchText = ""
     if searchActive then
@@ -578,12 +578,12 @@ local function drawBuyStatic()
     gpu.setBackground(colors.bg_button)
     gpu.fill(searchX, 3, 23, 1, " ")
     gpu.setForeground(colors.accent_main)
-    gpu.set(searchX + 1, 3, unicode.sub(searchText, 1, 21))   -- теперь 21 символ
+    gpu.set(searchX + 1, 3, unicode.sub(searchText, 1, 21))
 
-    -- Кнопка "Стереть" (ширина 13, X = 66 → колонки 66–78)
+    -- Кнопка "Стереть"
     local clearText = "[ СТЕРЕТЬ ]"
-    local clearWidth = unicode.len(clearText) + 2   -- 13
-    local clearX = searchX + 23 + 1                -- 42+23+1 = 66
+    local clearWidth = unicode.len(clearText) + 2
+    local clearX = searchX + 23 + 1
     gpu.setBackground(colors.error)
     gpu.fill(clearX, 3, clearWidth, 1, " ")
     gpu.setForeground(colors.inactive)
@@ -591,7 +591,7 @@ local function drawBuyStatic()
     gpu.set(textX, 3, clearText)
     gpu.setBackground(colors.accent_main)
 
-    -- Заголовки таблицы (строка 5, но без разделителей)
+    -- Заголовки таблицы (строка 5)
     gpu.setBackground(colors.bg_button)
     gpu.fill(2, 5, 76, 1, " ")
     gpu.setForeground(colors.text_bright)
@@ -599,6 +599,10 @@ local function drawBuyStatic()
     gpu.set(42, 5, "Кол-во")
     gpu.set(65, 5, "Цена")
     gpu.setBackground(colors.bg_main)
+
+    -- Нижний разделитель (строка 22)
+    gpu.setForeground(colors.inactive)
+    gpu.set(3, 22, string.rep("─", 74))
 end
 
 local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
