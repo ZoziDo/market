@@ -277,10 +277,10 @@ local function drawFlexButton(btn)
     gpu.setBackground(colors.bg_main)
 end
 
--- Кнопка "Назад" больше не используется в старом виде, переопределим её координаты для нижней панели
+-- Кнопка "Назад" переопределена для нижней панели
 local backButton = {
-    text = "Назад",
-    x = 35, y = 23,        -- теперь на строке 23, по центру
+    text = "[ НАЗАД ]",
+    x = 35, y = 24,
     xs = 10,
     ys = 1,
     bg = colors.bg_button,
@@ -292,8 +292,8 @@ local function isButtonClicked(btn, x, y)
 end
 
 -- Кнопки для экрана магазина (нижняя панель)
-local filterButton  = {text = "● В наличии", x=3,  y=23, xs=14, ys=1, bg=colors.bg_button, fg=colors.success}
-local nextButton    = {text = "Далее",       x=70, y=23, xs=8,  ys=1, bg=colors.bg_button, fg=colors.inactive}
+local filterButton  = {text = "● В наличии", x=3,  y=24, xs=14, ys=1, bg=colors.bg_button, fg=colors.success}
+local nextButton    = {text = "[ КУПИТЬ ]",    x=68, y=24, xs=11, ys=1, bg=colors.bg_button, fg=colors.inactive}  -- ширина под скобки
 
 local shopMenuButtons = {
     buy    = {x=31, xs=20, y=9,  ys=3, text="🛍 Покупка",     tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main},
@@ -561,8 +561,8 @@ local function drawBuyStatic()
         gpu.set(3, 3, "Магазин покупает")
     end
 
-    -- Поле поиска (справа, колонка 50)
-    local searchX = 50
+    -- Поле поиска (сдвинуто на 2 символа влево: X=48)
+    local searchX = 48
     local searchText = ""
     if searchActive then
         searchText = searchInput .. "_"
@@ -574,14 +574,16 @@ local function drawBuyStatic()
     gpu.setForeground(colors.accent_main)
     gpu.set(searchX + 1, 3, unicode.sub(searchText, 1, 18))
 
-    -- Кнопка "Стереть"
+    -- Кнопка "Стереть" со скобками и выравниванием по центру
     gpu.setBackground(colors.bg_button)
-    gpu.fill(searchX + 21, 3, 7, 1, " ")
+    gpu.fill(searchX + 21, 3, 9, 1, " ")
     gpu.setForeground(colors.error)
-    gpu.set(searchX + 22, 3, "Стереть")
+    local clearText = "[ СТЕРЕТЬ ]"
+    local clearX = searchX + 21 + math.floor((9 - unicode.len(clearText)) / 2)
+    gpu.set(clearX, 3, clearText)
     gpu.setBackground(colors.bg_main)
 
-    -- Заголовки таблицы (строка 5)
+    -- Заголовки таблицы (строка 5, но без разделителей)
     gpu.setBackground(colors.bg_button)
     gpu.fill(2, 5, 76, 1, " ")
     gpu.setForeground(colors.text_bright)
@@ -589,11 +591,6 @@ local function drawBuyStatic()
     gpu.set(42, 5, "Кол-во")
     gpu.set(65, 5, "Цена")
     gpu.setBackground(colors.bg_main)
-
-    -- Разделители (верхний на 6, нижний на 22)
-    gpu.setForeground(colors.inactive)
-    gpu.set(3, 6, string.rep("─", 74))
-    gpu.set(3, 22, string.rep("─", 74))
 end
 
 local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
@@ -742,9 +739,11 @@ end
 local function drawBuyButtons()
     -- Обновляем текст и цвет кнопок
     if currentShopMode == "buy" then
-        nextButton.text = "Купить"
+        nextButton.text = "[ КУПИТЬ ]"
+        nextButton.xs = 11
     else
-        nextButton.text = "Продать"
+        nextButton.text = "[ ПРОДАТЬ ]"
+        nextButton.xs = 11
     end
 
     if currentShopMode == "sell" then
@@ -771,7 +770,7 @@ local function drawBuyButtons()
         nextButton.fg = colors.inactive
     end
 
-    -- Рисуем три кнопки внизу (строка 23)
+    -- Рисуем кнопки внизу (строка 24)
     drawFlexButton(filterButton)
     drawFlexButton(backButton)
     drawFlexButton(nextButton)
@@ -840,8 +839,8 @@ local function drawPurchaseScreen()
             gpu.set(tx, ty, text)
         end
     end
-    local backBtn = {x = 19, y = 24, xs = 10, ys = 1, text = "Назад", bg = colors.bg_button, fg = colors.accent_secondary}
-    local buyBtn  = {x = 51, y = 24, xs = 10, ys = 1, text = "Купить", bg = colors.bg_button, fg = colors.success}
+    local backBtn = {x = 19, y = 24, xs = 10, ys = 1, text = "[ НАЗАД ]", bg = colors.bg_button, fg = colors.accent_secondary}
+    local buyBtn  = {x = 51, y = 24, xs = 11, ys = 1, text = "[ КУПИТЬ ]", bg = colors.bg_button, fg = colors.success}
     drawFlexButton(backBtn)
     drawFlexButton(buyBtn)
 end
@@ -1628,8 +1627,8 @@ while true do
                 goto continue
             end
 
-            -- Поле поиска и кнопка "Стереть" (строка 3)
-            if y == 3 and x >= 50 and x <= 69 then
+            -- Поле поиска и кнопка "Стереть" (строка 3, смещённые координаты)
+            if y == 3 and x >= 48 and x <= 67 then
                 searchActive = true
                 searchInput = shopSearch
                 drawBuyStatic()
@@ -1637,7 +1636,7 @@ while true do
                 drawBuyButtons()
                 goto continue
             end
-            if y == 3 and x >= 71 and x <= 77 then
+            if y == 3 and x >= 69 and x <= 77 then
                 shopSearch = ""
                 searchInput = ""
                 searchActive = false
@@ -1647,7 +1646,7 @@ while true do
                 goto continue
             end
 
-            -- Кнопки нижней панели (фильтр, назад, купить/продать)
+            -- Кнопки нижней панели (фильтр, назад, купить/продать) на строке 24
             if isButtonClicked(filterButton, x, y) then
                 if currentShopMode == "sell" then
                     if buyFilterMode == "all" then
@@ -1744,7 +1743,7 @@ while true do
                     drawBuyItemsList()
                     drawBuyButtons()
                 end
-            elseif (y >= 24 and y <= 24) and (x >= 51 and x <= 60) then
+            elseif (y >= 24 and y <= 24) and (x >= 51 and x <= 61) then
                 performBuy()
             end
             local startX = 34
