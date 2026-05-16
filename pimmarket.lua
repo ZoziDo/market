@@ -292,8 +292,8 @@ local function isButtonClicked(btn, x, y)
 end
 
 -- Кнопки для экрана магазина (нижняя панель) – выровнены с отступами 11 по краям и 10 между кнопками
-local filterButton  = {text = "● [ Ост-к ]", x=11,  y=24, xs=16, ys=1, bg=colors.bg_button, fg=colors.success}
-local nextButton    = {text = "[ КУПИТЬ ]",  x=58, y=24, xs=11, ys=1, bg=colors.bg_button, fg=colors.inactive}
+local filterButton  = {text = "● [ Ост-к ]", x=11,  y=24, xs=13, ys=1, bg=colors.bg_button, fg=colors.success}
+local nextButton    = {text = "[ КУПИТЬ ]",  x=59, y=24, xs=11, ys=1, bg=colors.bg_button, fg=colors.inactive}
 
 local shopMenuButtons = {
     buy    = {x=32, xs=20, y=9,  ys=3, text="🛍 Покупка",     tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main},
@@ -745,7 +745,7 @@ local function smoothScroll(steps)
 end
 
 local function drawBuyButtons()
-    -- Обновляем текст и цвет кнопок
+    -- Обновляем текст и ширину кнопки "Купить"/"Продать"
     if currentShopMode == "buy" then
         nextButton.text = "[ КУПИТЬ ]"
         nextButton.xs = unicode.len(nextButton.text) + 2
@@ -755,6 +755,7 @@ local function drawBuyButtons()
     end
 
     if currentShopMode == "sell" then
+        -- Режим продажи: кнопка "Все"/"Vanilla" (рисуем обычным способом)
         if buyFilterMode == "all" then
             filterButton.text = "[ Все ]"
             filterButton.fg = colors.success
@@ -762,24 +763,32 @@ local function drawBuyButtons()
             filterButton.text = "[ Vanilla ]"
             filterButton.fg = colors.accent_secondary
         end
+        drawFlexButton(filterButton)
     else
-        -- Режим покупки: текст всегда "● [ Ост-к ]", меняется только цвет
-        filterButton.text = "● [ Ост-к ]"
-        if filterState == "available" then
-            filterButton.fg = colors.success    -- зелёный
-        else
-            filterButton.fg = colors.error      -- красный
-        end
+        -- Режим покупки: рисуем кнопку вручную, чтобы кружок был цветным, а текст accent_secondary
+        local btn = filterButton
+        gpu.setBackground(btn.bg)
+        gpu.fill(btn.x, btn.y, btn.xs, btn.ys, " ")
+
+        -- Кружок (●) цветом в зависимости от filterState
+        local circleColor = (filterState == "available") and colors.success or colors.error
+        gpu.setForeground(circleColor)
+        gpu.set(btn.x + 1, btn.y, "●")
+
+        -- Текст "[ Ост-к ]" цветом accent_secondary
+        gpu.setForeground(colors.accent_secondary)
+        gpu.set(btn.x + 3, btn.y, " [ Ост-к ]")   -- пробел после кружка
+        gpu.setBackground(colors.bg_main)
     end
 
+    -- Настройка цвета кнопки "Купить"/"Продать"
     if selectedItem and (currentShopMode ~= "buy" or selectedItem.qty > 0) then
         nextButton.fg = colors.accent_secondary
     else
         nextButton.fg = colors.inactive
     end
 
-    -- Рисуем кнопки внизу (строка 24)
-    drawFlexButton(filterButton)
+    -- Рисуем остальные кнопки
     drawFlexButton(backButton)
     drawFlexButton(nextButton)
 end
