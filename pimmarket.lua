@@ -1950,7 +1950,7 @@ while true do
             drawReportScreen()
         end
         
-    elseif e == "key_down" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") and searchActive then
+     elseif e == "key_down" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") and searchActive then
         local ch = ev[3]
         if ch == 13 then
             shopSearch = searchInput
@@ -1959,24 +1959,23 @@ while true do
             selectedIndex = 0
             selectedItem = nil
             hoveredIndex = 0
-            drawBuyStatic()          -- <-- добавить
+            drawBuyStatic()
             drawBuyItemsList()
             drawBuyButtons()
         elseif ch == 8 then
             searchInput = unicode.sub(searchInput, 1, -2)
-            shopSearch = searchInput    -- или оставить только для отображения, но не фильтровать
-            drawBuyStatic()          -- <-- добавить
+            shopSearch = searchInput
+            drawBuyStatic()
             drawBuyItemsList()
             drawBuyButtons()
         elseif ch >= 32 then
             searchInput = searchInput .. unicode.char(ch)
             shopSearch = searchInput
-            drawBuyStatic()          -- <-- добавить
+            drawBuyStatic()
             drawBuyItemsList()
             drawBuyButtons()
         end
         goto continue
-    end
     
     elseif e == "player_on" or e == "pim" or e == "pim_player_enter" then
         local playerName = ev[2] or "Игрок"
