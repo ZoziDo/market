@@ -754,16 +754,6 @@ local function drawBuyButtons()
         nextButton.xs = unicode.len(nextButton.text) + 2
     end
 
-    local function drawBuyButtons()
-    -- Обновляем текст и ширину кнопки "Купить"/"Продать"
-    if currentShopMode == "buy" then
-        nextButton.text = "[ КУПИТЬ ]"
-        nextButton.xs = unicode.len(nextButton.text) + 2
-    else
-        nextButton.text = "[ ПРОДАТЬ ]"
-        nextButton.xs = unicode.len(nextButton.text) + 2
-    end
-
     if currentShopMode == "sell" then
         -- Режим продажи: кнопка "Все"/"Vanilla"
         if buyFilterMode == "all" then
