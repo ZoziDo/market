@@ -1871,7 +1871,6 @@ while true do
                 end
             end
         end
-    end
 
     elseif e == "scroll" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
         local direction = ev[5]
