@@ -1836,7 +1836,7 @@ while true do
         elseif currentScreen == "agreement" then
             local btnText = "[ ПОНЯТНО ]"
             local btnW = unicode.len(btnText) + 4
-            local btnX = math.floor((80 - btnW)/2)
+            local btnX = math.floor((80 - btnW)/2) + 2
             if y == 22 and x >= btnX and x <= btnX + btnW then
                 refreshAndAgree()
             end
