@@ -126,8 +126,7 @@ modem.open(0xfffe)
 
 local serverAddress = "535305a9-37c9-4645-b7c4-46204187ee7b"
 local currentPlayer, currentToken = nil, nil
-local resBalance = 0.0
-local emBalance = 0.0
+local coinBalance = 0.0
 local playerTransactions = 0
 local playerRegDate = ""
 local playerAgreed = false
@@ -165,7 +164,6 @@ local showSellPopup = false
 
 local showInsufficientPopup = false
 local insufficientBalance = 0
-local insufficientCurrency = ""
 
 local reportInput = ""
 local lastReportTime = nil
@@ -289,8 +287,7 @@ local function isButtonClicked(btn, x, y)
     return y >= btn.y and y < btn.y + btn.ys and x >= btn.x and x < btn.x + btn.xs
 end
 
--- Кнопки для экрана магазина (нижняя панель) – выровнены с отступами 11 по краям и 10 между кнопками
-local filterButton  = {text = "●[ Ост-к ]", x=11,  y=24, xs=14, ys=1, bg=colors.bg_button, fg=colors.success}
+-- Кнопки для экрана магазина (нижняя панель)
 local nextButton    = {text = "[ КУПИТЬ ]",  x=59, y=24, xs=11, ys=1, bg=colors.bg_button, fg=colors.inactive}
 
 local shopMenuButtons = {
@@ -361,8 +358,7 @@ local function loadBuyItems()
         end
 
         local displayName = mapping.displayName
-        local price = mapping.price
-        local currency = mapping.currency or "res"
+        local price = mapping.price   -- цена в Coina
         if price <= 0 then
             goto continue
         end
@@ -376,7 +372,6 @@ local function loadBuyItems()
                 displayName = displayName,
                 qty = qty,
                 price = price,
-                currency = currency,
                 damage = damage,
                 canBuy = true
             }
@@ -529,12 +524,10 @@ end
 local function drawBuyStatic()
     clear()
     drawScreenBorder()
-    local resText = "Баланс: " .. string.format("%.2f Ресов $ | ", resBalance)
-    local emText = string.format("%.2f Эмов *", emBalance)
+    local coinText = "Баланс: " .. string.format("%.2f", coinBalance) .. " Coina ₵"
     gpu.setForeground(colors.success)
-    gpu.set(3, 1, resText)
-    gpu.setForeground(colors.accent_main)
-    gpu.set(3 + unicode.len(resText), 1, emText)
+    gpu.set(3, 1, coinText)
+    -- Эмодзи можно не выводить, т.к. баланс один
 
     -- Режим магазина (слева)
     if currentShopMode == "buy" then
@@ -545,7 +538,7 @@ local function drawBuyStatic()
         gpu.set(3, 3, "Магазин покупает")
     end
 
-    -- Поле поиска (сдвинуто левее: X = 42)
+    -- Поле поиска (X = 42)
     local searchX = 42
     local searchText = ""
     if searchActive then
@@ -623,12 +616,8 @@ local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
         gpu.setForeground(colors.text_bright)
     end
     gpu.set(42, y, tostring(item.qty))
-    if currentShopMode == "buy" then
-        local currencySym = (item.currency == "em") and " Э" or " $"
-        gpu.set(65, y, string.format("%.2f", item.price) .. currencySym)
-    else
-        gpu.set(65, y, string.format("%.2f", item.price))
-    end
+    -- Цена всегда в Coina, символ ₵
+    gpu.set(65, y, string.format("%.2f", item.price) .. " ₵")
     gpu.setBackground(colors.bg_main)
 end
 
@@ -739,7 +728,7 @@ local function drawBuyButtons()
         nextButton.fg = colors.inactive
     end
 
-    -- Рисуем только кнопки "Назад" и "Купить"/"Продать"
+    -- Рисуем кнопки "Назад" и "Купить"/"Продать"
     drawFlexButton(backButton)
     drawFlexButton(nextButton)
 end
@@ -749,12 +738,9 @@ local function drawPurchaseScreen()
     currentScreen = "purchase"
     clear()
     drawScreenBorder()
-    local resText = "Баланс: " .. string.format("%.2f Ресов $ | ", resBalance)
-    local emText = string.format("%.2f Эмов *", emBalance)
+    local coinText = "Баланс: " .. string.format("%.2f", coinBalance) .. " Coina ₵"
     gpu.setForeground(colors.success)
-    gpu.set(3, 1, resText)
-    gpu.setForeground(colors.accent_main)
-    gpu.set(3 + unicode.len(resText), 1, emText)
+    gpu.set(3, 1, coinText)
 
     gpu.setForeground(colors.success)
     gpu.set(3, 3, "Имя предмета: ")
@@ -767,16 +753,15 @@ local function drawPurchaseScreen()
     gpu.set(66, 3, tostring(purchaseItem.qty))
 
     local total = (purchaseItem.price or 0.0) * purchaseQuantity
-    local currencySym = (purchaseItem.currency == "em") and "Э" or "$"
     gpu.setForeground(colors.success)
     gpu.set(3, 5, "На сумму: ")
     gpu.setForeground(colors.error)
-    gpu.set(14, 5, string.format("%.2f", total) .. " " .. currencySym)
+    gpu.set(14, 5, string.format("%.2f", total) .. " ₵")
 
     gpu.setForeground(colors.success)
     gpu.set(55, 5, "Цена: ")
     gpu.setForeground(colors.text_bright)
-    gpu.set(62, 5, string.format("%.2f", purchaseItem.price) .. " " .. currencySym)
+    gpu.set(62, 5, string.format("%.2f", purchaseItem.price) .. " ₵")
 
     gpu.setForeground(colors.success)
     gpu.set(3, 7, "Кол-во: ")
@@ -857,7 +842,6 @@ local function drawSellPopup()
     local name = sellConfirmItem.displayName
     local totalFound = foundAmount
     local value = totalFound * sellConfirmItem.price
-    local currency = (sellConfirmItem.internalName == "npcMoney") and "Эмов" or "$"
 
     gpu.setForeground(colors.text_bright)
     gpu.set(popupX+14, popupY, "Подтверждение")
@@ -875,7 +859,7 @@ local function drawSellPopup()
     gpu.setForeground(colors.success)
     gpu.set(popupX+3, popupY+5, "Вы получите: ")
     gpu.setForeground(colors.text_bright)
-    gpu.set(popupX+3 + unicode.len("Вы получите: "), popupY+5, string.format("%.2f", value) .. " " .. currency)
+    gpu.set(popupX+3 + unicode.len("Вы получите: "), popupY+5, string.format("%.2f", value) .. " ₵")
 
     local yesBtn = {x=popupX+5, y=popupY+7, xs=13, ys=1, text="[ Принять ]", bg=colors.bg_button, fg=colors.success}
     local noBtn  = {x=popupX+popupWidth-16, y=popupY+7, xs=12, ys=1, text="[ Отмена ]", bg=colors.bg_button, fg=colors.error}
@@ -909,7 +893,7 @@ local function drawInsufficientPopup()
     local line1bX = popupX + math.floor((popupWidth - unicode.len(line1b)) / 2)
     gpu.set(line1bX, popupY+3, line1b)
 
-    local line2 = "Твой баланс: " .. string.format("%.2f", insufficientBalance) .. " " .. insufficientCurrency
+    local line2 = "Твой баланс: " .. string.format("%.2f", insufficientBalance) .. " ₵"
     local line2X = popupX + math.floor((popupWidth - unicode.len(line2)) / 2)
     gpu.set(line2X, popupY+5, line2)
 
@@ -930,12 +914,9 @@ local function drawSellScanScreen()
     currentScreen = "sell_scan"
     clear()
     drawScreenBorder()
-    local resText = "Баланс: " .. string.format("%.2f Ресов $ | ", resBalance)
-    local emText = string.format("%.2f Эмов *", emBalance)
+    local coinText = "Баланс: " .. string.format("%.2f", coinBalance) .. " Coina ₵"
     gpu.setForeground(colors.success)
-    gpu.set(3, 1, resText)
-    gpu.setForeground(colors.accent_main)
-    gpu.set(3 + unicode.len(resText), 1, emText)
+    gpu.set(3, 1, coinText)
 
     gpu.setForeground(colors.success)
     gpu.set(3, 3, "Имя предмета: ")
@@ -945,7 +926,7 @@ local function drawSellScanScreen()
     gpu.setForeground(colors.success)
     gpu.set(55, 3, "Цена: ")
     gpu.setForeground(colors.text_bright)
-    gpu.set(62, 3, string.format("%.2f", sellConfirmItem.price))
+    gpu.set(62, 3, string.format("%.2f", sellConfirmItem.price) .. " ₵")
 
     gpu.setForeground(colors.success)
     gpu.set(3, 5, "Можно продать: ")
@@ -1004,13 +985,7 @@ local function performSell()
     end
 
     local value = realExtracted * sellConfirmItem.price
-    local currency = (sellConfirmItem.internalName == "customnpcs:npcMoney") and "em" or "res"
-
-    if currency == "em" then
-        emBalance = emBalance + value
-    else
-        resBalance = resBalance + value
-    end
+    coinBalance = coinBalance + value
     playerTransactions = playerTransactions + 1
 
     if currentToken then
@@ -1020,15 +995,11 @@ local function performSell()
             token = currentToken,
             item = sellConfirmItem.displayName,
             qty = realExtracted,
-            value = value,
-            currency = currency
+            value = value
         }))
     end
 
-    local currencyName = (sellConfirmItem.internalName == "npcMoney") and "Эмов" or "Ресов"
-    gpu.setBackground(colors.bg_main)
-    gpu.fill(1, 17, 80, 1, " ")
-    drawCenteredText(17, "Успешно! +" .. string.format("%.2f", value) .. " " .. currencyName, colors.success)
+    drawCenteredText(17, "Успешно! +" .. string.format("%.2f", value) .. " ₵", colors.success)
     os.sleep(0.8)
 
     currentScreen = "shop_sell"
@@ -1071,7 +1042,6 @@ local function performBuy()
     end
 
     local totalCost = item.price * qty
-    local currency = item.currency
 
     if qty <= 0 then
         drawCenteredText(20, "Выберите количество!", colors.error)
@@ -1083,17 +1053,9 @@ local function performBuy()
         return
     end
 
-    if currency == "em" and emBalance < totalCost then
+    if coinBalance < totalCost then
         showInsufficientPopup = true
-        insufficientBalance = emBalance
-        insufficientCurrency = "Эмов"
-        drawPurchaseScreen()
-        drawInsufficientPopup()
-        return
-    elseif currency == "res" and resBalance < totalCost then
-        showInsufficientPopup = true
-        insufficientBalance = resBalance
-        insufficientCurrency = "Ресов"
+        insufficientBalance = coinBalance
         drawPurchaseScreen()
         drawInsufficientPopup()
         return
@@ -1129,11 +1091,7 @@ local function performBuy()
     end
 
     if extracted > 0 then
-        if currency == "em" then
-            emBalance = emBalance - totalCost
-        else
-            resBalance = resBalance - totalCost
-        end
+        coinBalance = coinBalance - totalCost
         playerTransactions = playerTransactions + 1
 
         if currentToken then
@@ -1143,13 +1101,11 @@ local function performBuy()
                 token = currentToken,
                 item = item.displayName,
                 qty = extracted,
-                value = totalCost,
-                currency = currency
+                value = totalCost
             }))
         end
 
-        local currencyName = (currency == "em") and "Эмов" or "Ресов"
-        drawCenteredText(20, "Куплено " .. extracted .. " шт. за " .. string.format("%.2f", totalCost) .. " " .. currencyName, colors.success)
+        drawCenteredText(20, "Куплено " .. extracted .. " шт. за " .. string.format("%.2f", totalCost) .. " ₵", colors.success)
 
         loadBuyItems()
         for _, newItem in ipairs(shopItems) do
@@ -1223,9 +1179,6 @@ local function goToBuy()
     shopSearch = ""
     searchActive = false
     searchInput = ""
-    showOnlyAvailable = true
-    buyFilterMode = "all"
-    filterButton.fg = colors.success
     loadBuyItems()
     drawBuyStatic()
     drawBuyItemsList()
@@ -1251,8 +1204,6 @@ local function goToSell()
     shopSearch = ""
     searchActive = false
     searchInput = ""
-    showOnlyAvailable = false
-    buyFilterMode = "all"
 
     loadSellItems()
     drawBuyStatic()
@@ -1312,14 +1263,10 @@ local function drawMainMenu()
         gpu.setForeground(colors.text_bright)
         gpu.set(x1 + unicode.len(hello1), 4, hello2)
 
-        local resText = "Ваш баланс: " .. string.format("%.2f Ресов $ | ", resBalance)
-        local emText = string.format("%.2f Эмы *", emBalance)
-        local full2 = resText .. emText
-        local x2 = math.floor((80 - unicode.len(full2))/2) + 1
+        local coinText = "Ваш баланс: " .. string.format("%.2f", coinBalance) .. " Coina ₵"
+        local x2 = math.floor((80 - unicode.len(coinText))/2) + 1
         gpu.setForeground(colors.success)
-        gpu.set(x2, 5, resText)
-        gpu.setForeground(colors.accent_main)
-        gpu.set(x2 + unicode.len(resText), 5, emText)
+        gpu.set(x2, 5, coinText)
 
         if not playerAgreed then
             gpu.setForeground(colors.accent_secondary)
@@ -1343,16 +1290,11 @@ local function drawAccount(data)
     clear()
     drawScreenBorder()
     drawCenteredText(10, currentPlayer .. ":", colors.text_bright)
-    local res = data.resBalance or resBalance
-    local em = data.emBalance or emBalance
-    local resPart1 = string.format("Баланс Ресов: %.2f $ | ", res)
-    local emPart = string.format("Эмов: %.2f *", em)
-    local full = resPart1 .. emPart
-    local x = math.floor((80 - unicode.len(full)) / 2) + 1
+    local coin = data.balance or coinBalance
+    local coinStr = string.format("Баланс: %.2f ₵", coin)
+    local x = math.floor((80 - unicode.len(coinStr)) / 2) + 1
     gpu.setForeground(colors.success)
-    gpu.set(x, 12, resPart1)
-    gpu.setForeground(colors.accent_main)
-    gpu.set(x + unicode.len(resPart1), 12, emPart)
+    gpu.set(x, 12, coinStr)
 
     local transLabel = "Совершенно транзакций: "
     local transCount = tostring(data.transactions or 0)
@@ -1393,9 +1335,7 @@ local function drawAccountLoading()
 end
 
 local function retryAccountAfterTokenRefresh()
-    if not currentPlayer then
-        return
-    end
+    if not currentPlayer then return end
     modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
     local start = os.clock()
     while os.clock() - start < 3 do
@@ -1407,8 +1347,7 @@ local function retryAccountAfterTokenRefresh()
                 local success, msg = pcall(serialization.unserialize, data)
                 if success and msg and msg.op == "welcome" and msg.token then
                     currentToken = msg.token
-                    emBalance = msg.balance or 0.0
-                    resBalance = msg.resBalance or 0.0
+                    coinBalance = msg.balance or 0.0
                     playerAgreed = msg.agreed or false
                     alreadyAuthorized = true
                     currentScreen = "account_loading"
@@ -1595,25 +1534,24 @@ while true do
                 goto continue
             end
 
-            -- Поле поиска и кнопка "Стереть" (строка 3, смещённые координаты)
-           if y == 3 and x >= 42 and x <= 64 then
-            searchActive = true
-            searchInput = shopSearch
-            drawBuyStatic()
-            drawBuyItemsList()
-            drawBuyButtons()
-            goto continue
-        end
-        -- Кнопка "Стереть" (66–78)
-        if y == 3 and x >= 66 and x <= 78 then
-            shopSearch = ""
-            searchInput = ""
-            searchActive = false
-            drawBuyStatic()
-            drawBuyItemsList()
-            drawBuyButtons()
-            goto continue
-        end
+            -- Поле поиска и кнопка "Стереть" (строка 3)
+            if y == 3 and x >= 42 and x <= 64 then
+                searchActive = true
+                searchInput = shopSearch
+                drawBuyStatic()
+                drawBuyItemsList()
+                drawBuyButtons()
+                goto continue
+            end
+            if y == 3 and x >= 66 and x <= 78 then
+                shopSearch = ""
+                searchInput = ""
+                searchActive = false
+                drawBuyStatic()
+                drawBuyItemsList()
+                drawBuyButtons()
+                goto continue
+            end
 
             if isButtonClicked(backButton, x, y) then
                 currentScreen = "shop"
@@ -1629,29 +1567,14 @@ while true do
                 if selectedItem and (currentShopMode ~= "buy" or selectedItem.qty > 0) then
                     if currentShopMode == "buy" then
                         local price = selectedItem.price
-                        local currency = selectedItem.currency or "res"
-                        if currency == "em" then
-                            if emBalance < price then
-                                showInsufficientPopup = true
-                                insufficientBalance = emBalance
-                                insufficientCurrency = "Эмов"
-                                drawBuyStatic()
-                                drawBuyItemsList()
-                                drawBuyButtons()
-                                drawInsufficientPopup()
-                                goto continue
-                            end
-                        else
-                            if resBalance < price then
-                                showInsufficientPopup = true
-                                insufficientBalance = resBalance
-                                insufficientCurrency = "Ресов"
-                                drawBuyStatic()
-                                drawBuyItemsList()
-                                drawBuyButtons()
-                                drawInsufficientPopup()
-                                goto continue
-                            end
+                        if coinBalance < price then
+                            showInsufficientPopup = true
+                            insufficientBalance = coinBalance
+                            drawBuyStatic()
+                            drawBuyItemsList()
+                            drawBuyButtons()
+                            drawInsufficientPopup()
+                            goto continue
                         end
                         goToPurchase(selectedItem)
                     else
@@ -1877,8 +1800,7 @@ while true do
             reportInput = reportInput .. unicode.char(ch)
             drawReportScreen()
         end
-        
-     elseif e == "key_down" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") and searchActive then
+    elseif e == "key_down" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") and searchActive then
         local ch = ev[3]
         if ch == 13 then
             shopSearch = searchInput
@@ -1904,7 +1826,6 @@ while true do
             drawBuyButtons()
         end
         goto continue
-    
     elseif e == "player_on" or e == "pim" or e == "pim_player_enter" then
         local playerName = ev[2] or "Игрок"
         currentPlayer = playerName:match("^%s*(.-)%s*$") or playerName
@@ -1920,8 +1841,7 @@ while true do
                 drawMainMenu()
             end
         else
-            emBalance = 0.0
-            resBalance = 0.0
+            coinBalance = 0.0
             playerAgreed = false
             currentScreen = "auth"
             authStartTime = os.clock()
@@ -1948,8 +1868,7 @@ while true do
             if success and msg then
                 if msg.op == "welcome" and msg.token then
                     currentToken = msg.token
-                    emBalance = msg.balance or 0.0
-                    resBalance = msg.resBalance or 0.0
+                    coinBalance = msg.balance or 0.0
                     playerTransactions = msg.transactions or 0
                     playerRegDate = msg.regDate or ""
                     playerAgreed = msg.agreed or false
@@ -1998,8 +1917,7 @@ while true do
                                     local ok, m = pcall(serialization.unserialize, d)
                                     if ok and m and m.op == "welcome" and m.token then
                                         currentToken = m.token
-                                        emBalance = m.balance or 0.0
-                                        resBalance = m.resBalance or 0.0
+                                        coinBalance = m.balance or 0.0
                                         playerAgreed = m.agreed or false
                                         refreshed = true
                                         break
