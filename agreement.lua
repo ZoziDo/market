@@ -53,7 +53,7 @@ local function drawAgreementScreen()
     -- Кнопка
     local btnText = "[ ПОНЯТНО ]"
     local btnW = unicode.len(btnText) + 4
-    local btnX = math.floor((80 - btnW)/2)
+    local btnX = math.floor((80 - btnW)/2) + 2
 
     gpu.setBackground(0x004400)
     gpu.setForeground(0x00FF88)
