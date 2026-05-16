@@ -1537,7 +1537,7 @@ while true do
         end
     end
 
-    if e == "touch" then
+        if e == "touch" then
         local x, y = ev[3], ev[4]
 
         if showSellPopup and currentScreen == "sell_scan" then
@@ -1557,9 +1557,7 @@ while true do
                 drawSellScanScreen()
             end
             goto continue
-        end
-        -- Обработка попапа "недостаточно средств"
-        if showInsufficientPopup then
+        elseif showInsufficientPopup then
             local popupWidth = 52
             local popupHeight = 10
             local popupX = math.floor((80 - popupWidth) / 2)
@@ -1578,9 +1576,7 @@ while true do
                 drawBuyButtons()
             end
             goto continue
-        end
-
-        if currentScreen == "shop_buy" or currentScreen == "shop_sell" then
+        elseif currentScreen == "shop_buy" or currentScreen == "shop_sell" then
             -- Клик по области списка (выбор предмета)
             if y >= 6 and y <= 17 and x >= 2 and x <= 77 then
                 local relativeRow = y - 5
@@ -1597,7 +1593,6 @@ while true do
                 goto continue
             end
 
-            -- Клик по скроллбару
             if x >= 78 and y >= 6 and y <= 17 then
                 local total = #filteredItems
                 if total > visibleRows then
@@ -1608,8 +1603,7 @@ while true do
                 goto continue
             end
 
-            -- === НОВЫЕ ПРОВЕРКИ ДЛЯ ПОИСКА И СТИРАНИЯ ===
-            -- Клик по полю поиска (строка 3, колонки 50–69)
+            -- Поле поиска и кнопка "Стереть"
             if y == 3 and x >= 50 and x <= 69 then
                 searchActive = true
                 searchInput = shopSearch
@@ -1618,8 +1612,6 @@ while true do
                 drawBuyButtons()
                 goto continue
             end
-
-            -- Клик по кнопке "Стереть" (строка 3, колонки 71–77)
             if y == 3 and x >= 71 and x <= 77 then
                 shopSearch = ""
                 searchInput = ""
@@ -1630,7 +1622,6 @@ while true do
                 goto continue
             end
 
-            -- Кнопка "Назад"
             if isButtonClicked(backButton, x, y) then
                 currentScreen = "shop"
                 selectedIndex = 0
@@ -1641,7 +1632,6 @@ while true do
                 goto continue
             end
 
-            -- Кнопка "Купить" / "Продать" (ранее "Далее")
             if isButtonClicked(nextButton, x, y) then
                 if selectedItem and (currentShopMode ~= "buy" or selectedItem.qty > 0) then
                     if currentShopMode == "buy" then
@@ -1678,7 +1668,6 @@ while true do
                 goto continue
             end
 
-            -- Кнопка фильтра (В наличии / Все / Vanilla)
             if isButtonClicked(filterButton, x, y) then
                 if currentShopMode == "sell" then
                     if buyFilterMode == "all" then
@@ -1704,7 +1693,6 @@ while true do
                 goto continue
             end
 
-            -- Если был активен поиск по клавиатуре
             if searchActive then
                 shopSearch = searchInput
                 searchActive = false
@@ -1716,8 +1704,6 @@ while true do
                 drawBuyButtons()
                 goto continue
             end
-        end
-
         elseif currentScreen == "purchase" then
             if (y >= 24 and y <= 24) and (x >= 19 and x <= 28) then
                 if currentShopMode == "buy" then
@@ -1731,8 +1717,7 @@ while true do
                     drawBuyItemsList()
                     drawBuyButtons()
                 end
-            end
-            if (y >= 24 and y <= 24) and (x >= 51 and x <= 60) then
+            elseif (y >= 24 and y <= 24) and (x >= 51 and x <= 60) then
                 performBuy()
             end
             local startX = 34
@@ -1756,7 +1741,6 @@ while true do
                     end
                 end
             end
-
         elseif currentScreen == "sell_scan" then
             if isButtonClicked(backButton, x, y) then
                 currentScreen = "shop_sell"
@@ -1789,7 +1773,6 @@ while true do
                     drawSellScanScreen()
                 end
             end
-
         elseif currentScreen == "menu" then
             for name, btn in pairs(menuButtons) do
                 if x >= btn.x and x < btn.x + btn.xs and y >= btn.y and y < btn.y + btn.ys then
@@ -1824,7 +1807,6 @@ while true do
                     drawMainMenu()
                 end
             end
-
         elseif currentScreen == "agreement" then
             local btnText = "[ ПОНЯТНО ]"
             local btnW = unicode.len(btnText) + 4
@@ -1835,12 +1817,10 @@ while true do
             if isButtonClicked(backButton, x, y) then
                 goBackToMenu()
             end
-
         elseif currentScreen == "account" or currentScreen == "account_loading" then
             if isButtonClicked(backButton, x, y) then
                 goBackToMenu()
             end
-
         elseif currentScreen == "shop" then
             for name, btn in pairs(shopMenuButtons) do
                 if x >= btn.x and x < btn.x + btn.xs and y >= btn.y and y < btn.y + btn.ys then
@@ -1860,18 +1840,15 @@ while true do
             if isButtonClicked(backButton, x, y) then
                 goBackToMenu()
             end
-
         elseif currentScreen == "shop_bundle" then
             if isButtonClicked(backButton, x, y) then
                 currentScreen = "shop"
                 drawShopMenu()
             end
-
         elseif currentScreen == "utility" then
             if isButtonClicked(backButton, x, y) then
                 goBackToMenu()
             end
-
         elseif currentScreen == "report" then
             if isButtonClicked(backButton, x, y) then
                 goBackToMenu()
@@ -1894,6 +1871,7 @@ while true do
                 end
             end
         end
+    end
 
     elseif e == "scroll" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
         local direction = ev[5]
