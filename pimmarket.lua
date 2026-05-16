@@ -611,7 +611,7 @@ local function drawBuyItemsList()
         local msg = "ПО ТВОЕМУ ЗАПРОСУ, НИЧЕГО НЕ НАЙДЕНО!"
         local msgX = math.floor((80 - unicode.len(msg)) / 2) + 1
         local msgY = 11   -- примерно середина между 6 и 17
-        gpu.setForeground(colors.text_main)
+        gpu.setForeground(colors.error)
         gpu.set(msgX, msgY, msg)
     else
         -- Рисуем строки товаров
