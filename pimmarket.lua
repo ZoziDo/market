@@ -856,40 +856,43 @@ end
 -- ========== ПОПАП "НЕДОСТАТОЧНО СРЕДСТВ" ==========
 local function drawInsufficientPopup()
     local popupWidth = 52
-    local popupHeight = 9
+    local popupHeight = 10                     -- увеличено на 1 строку
     local popupX = math.floor((80 - popupWidth) / 2)
-    local popupY = 7   -- поднято на 3 строки вверх (было 10)
+    local popupY = 7
 
     gpu.setBackground(colors.black_fon)
     gpu.fill(popupX, popupY, popupWidth, popupHeight, " ")
     gpu.fill(popupX+1, popupY+1, popupWidth-2, popupHeight-2, " ")
-    drawPopupBorder(popupX, popupY, popupWidth, popupHeight, colors.accent_secondary)
+    drawPopupBorder(popupX, popupY, popupWidth, popupHeight, colors.error)
 
-    -- Заголовок (поднят на одну строку вверх внутри окна)
+    -- Заголовок на верхней границе (строка popupY)
     gpu.setForeground(colors.error)
     local title = "НЕДОСТАТОЧНО СРЕДСТВ"
     local titleX = popupX + math.floor((popupWidth - unicode.len(title)) / 2)
-    gpu.set(titleX, popupY, title)   -- было popupY+1, теперь popupY
+    gpu.set(titleX, popupY, title)
 
-    -- Первая строка сообщения (разбита на две)
+    -- Первая строка сообщения
     gpu.setForeground(colors.text_main)
     local line1a = "Пополни баланс, не можешь купить"
-    local line1b = "хотя бы 1 штуку предмета."
     local line1aX = popupX + math.floor((popupWidth - unicode.len(line1a)) / 2)
-    local line1bX = popupX + math.floor((popupWidth - unicode.len(line1b)) / 2)
     gpu.set(line1aX, popupY+2, line1a)
+
+    -- Вторая строка
+    local line1b = "хотя бы 1 штуку предмета."
+    local line1bX = popupX + math.floor((popupWidth - unicode.len(line1b)) / 2)
     gpu.set(line1bX, popupY+3, line1b)
 
-    -- Баланс
+    -- Баланс (опущен на строку ниже)
     local line2 = "Твой баланс: " .. string.format("%.2f", insufficientBalance) .. " " .. insufficientCurrency
     local line2X = popupX + math.floor((popupWidth - unicode.len(line2)) / 2)
-    gpu.set(line2X, popupY+4, line2)
+    gpu.set(line2X, popupY+5, line2)         -- было popupY+4, теперь popupY+5
 
-    -- Кнопка "ПОНЯТНО" (сдвинута влево, шире)
+    -- Кнопка по центру (ширина 14), опущена на строку ниже
+    local btnWidth = 14
     local okBtn = {
-        x = popupX + 5,            -- было центрирование, теперь отступ слева 5
-        y = popupY+6,              -- на строке 13 (при popupY=7)
-        xs = 14,                   -- шире, чем было (было 10)
+        x = popupX + math.floor((popupWidth - btnWidth) / 2),
+        y = popupY+7,                         -- было popupY+6, теперь popupY+7
+        xs = btnWidth,
         ys = 1,
         text = "ПОНЯТНО",
         bg = colors.bg_button,
@@ -1518,23 +1521,26 @@ while true do
 
         -- Обработка попапа "недостаточно средств"
         if showInsufficientPopup then
-            local popupWidth = 50
-            local popupHeight = 8
+            local popupWidth = 52
+            local popupHeight = 10
             local popupX = math.floor((80 - popupWidth) / 2)
-            local popupY = 10
+            local popupY = 7
+            local btnWidth = 14
             local okBtn = {
-                x = popupX + math.floor((popupWidth - 10) / 2),
-                y = popupY+6,
-                xs = 10,
+                x = popupX + math.floor((popupWidth - btnWidth) / 2),
+                y = popupY+7,
+                xs = btnWidth,
                 ys = 1
             }
             if isButtonClicked(okBtn, x, y) then
                 showInsufficientPopup = false
-                drawPurchaseScreen()  -- убираем попап, оставляем экран покупки
+                -- Возвращаемся к списку покупок (не вызываем drawPurchaseScreen!)
+                drawBuyStatic()
+                drawBuyItemsList()
+                drawBuyButtons()
             end
             goto continue  -- не обрабатываем другие клики, пока попап открыт
         end
-
         if currentScreen == "shop_buy" or currentScreen == "shop_sell" then
             if y >= 6 and y <= 17 and x >= 2 and x <= 77 then
                 local relativeRow = y - 5
