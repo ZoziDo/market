@@ -292,7 +292,7 @@ local function isButtonClicked(btn, x, y)
 end
 
 -- Кнопки для экрана магазина (нижняя панель) – выровнены с отступами 11 по краям и 10 между кнопками
-local filterButton  = {text = "● [ Ост-к ]", x=11,  y=24, xs=14, ys=1, bg=colors.bg_button, fg=colors.success}
+local filterButton  = {text = "●[ Ост-к ]", x=11,  y=24, xs=14, ys=1, bg=colors.bg_button, fg=colors.success}
 local nextButton    = {text = "[ КУПИТЬ ]",  x=59, y=24, xs=11, ys=1, bg=colors.bg_button, fg=colors.inactive}
 
 local shopMenuButtons = {
