@@ -281,7 +281,7 @@ end
 local backButton = {
     text = "[ НАЗАД ]",
     x = 35, y = 24,
-    xs = 10,
+    xs = unicode.len("[ НАЗАД ]") + 2,   -- 9 + 2 = 11
     ys = 1,
     bg = colors.bg_button,
     fg = colors.accent_secondary
@@ -575,9 +575,9 @@ local function drawBuyStatic()
     gpu.set(searchX + 1, 3, unicode.sub(searchText, 1, 18))
 
     -- Кнопка "Стереть" со скобками и выравниванием по центру
-    gpu.setBackground(colors.bg_button)
-    gpu.fill(searchX + 21, 3, 9, 1, " ")
-    gpu.setForeground(colors.error)
+    gpu.setBackground(colors.error)
+    gpu.fill(searchX + 21, 3, 13, 1, " ")
+    gpu.setForeground(colors.inactive) 
     local clearText = "[ СТЕРЕТЬ ]"
     local clearX = searchX + 21 + math.floor((9 - unicode.len(clearText)) / 2)
     gpu.set(clearX, 3, clearText)
@@ -740,10 +740,10 @@ local function drawBuyButtons()
     -- Обновляем текст и цвет кнопок
     if currentShopMode == "buy" then
         nextButton.text = "[ КУПИТЬ ]"
-        nextButton.xs = 11
+        nextButton.xs = unicode.len(nextButton.text) + 2
     else
         nextButton.text = "[ ПРОДАТЬ ]"
-        nextButton.xs = 11
+        nextButton.xs = unicode.len(nextButton.text) + 2
     end
 
     if currentShopMode == "sell" then
@@ -839,8 +839,8 @@ local function drawPurchaseScreen()
             gpu.set(tx, ty, text)
         end
     end
-    local backBtn = {x = 19, y = 24, xs = 10, ys = 1, text = "[ НАЗАД ]", bg = colors.bg_button, fg = colors.accent_secondary}
-    local buyBtn  = {x = 51, y = 24, xs = 11, ys = 1, text = "[ КУПИТЬ ]", bg = colors.bg_button, fg = colors.success}
+    local backBtn = {x = 19, y = 24, xs = unicode.len("[ НАЗАД ]") + 2, ys = 1, text = "[ НАЗАД ]", bg = colors.bg_button, fg = colors.accent_secondary}
+    local buyBtn  = {x = 51, y = 24, xs = unicode.len("[ КУПИТЬ ]") + 2, ys = 1, text = "[ КУПИТЬ ]", bg = colors.bg_button, fg = colors.success}
     drawFlexButton(backBtn)
     drawFlexButton(buyBtn)
 end
@@ -1636,7 +1636,7 @@ while true do
                 drawBuyButtons()
                 goto continue
             end
-            if y == 3 and x >= 69 and x <= 77 then
+            if y == 3 and x >= 69 and x <= 81 then
                 shopSearch = ""
                 searchInput = ""
                 searchActive = false
