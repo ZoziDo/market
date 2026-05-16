@@ -562,7 +562,7 @@ local function drawBuyStatic()
     end
 
     -- Поле поиска (сдвинуто на 2 символа влево: X=48)
-    local searchX = 48
+    local searchX = 47
     local searchText = ""
     if searchActive then
         searchText = searchInput .. "_"
@@ -576,10 +576,10 @@ local function drawBuyStatic()
 
     -- Кнопка "Стереть" со скобками и выравниванием по центру
     gpu.setBackground(colors.error)
-    gpu.fill(searchX + 21, 3, 13, 1, " ")
+    gpu.fill(searchX + 22, 3, 13, 1, " ")
     gpu.setForeground(colors.inactive) 
     local clearText = "[ СТЕРЕТЬ ]"
-    local clearX = searchX + 21 + math.floor((9 - unicode.len(clearText)) / 2)
+    local clearX = searchX + 22 + math.floor((9 - unicode.len(clearText)) / 2)
     gpu.set(clearX, 3, clearText)
     gpu.setBackground(colors.bg_main)
 
@@ -1628,7 +1628,7 @@ while true do
             end
 
             -- Поле поиска и кнопка "Стереть" (строка 3, смещённые координаты)
-            if y == 3 and x >= 48 and x <= 67 then
+            if y == 3 and x >= 47 and x <= 66 then
                 searchActive = true
                 searchInput = shopSearch
                 drawBuyStatic()
