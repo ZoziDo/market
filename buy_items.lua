@@ -1,5 +1,4 @@
 return {
-  -- === Ранние предметы (AE2, Draconic, базовые и т.д.) ===
   { internalName = "extracells:storage.component", displayName = "1024k МЭ жидкостный компонент хранилища", price = 261.91, currency = "res", damage = 1 },
   { internalName = "extracells:storage.component", displayName = "1024k МЭ компонент хранилища", price = 282.59, currency = "res", damage = 9 },
   { internalName = "appliedenergistics2:item.ItemMultiMaterial", displayName = "16K МЭ компонент хранения", price = 10.86, currency = "res" },
@@ -22,7 +21,6 @@ return {
   { internalName = "appliedenergistics2:item.tile.BlockCraftingStorage", displayName = "64K хранилище создания", price = 36.487, currency = "res", damage = 3 },
   { internalName = "extracells:storage.component", displayName = "64K МЭ жидкостный компонент хранилища", price = 28.71, currency = "res", damage = 7 },
   { internalName = "dwcity:Chip_64bit", displayName = "64-битный чип", price = 14.22, currency = "res" },
-
   { internalName = "EnderIO:blockSliceAndSplice", displayName = "Отрубатель и сращиватель", price = 4.73, currency = "res" },
   { internalName = "minecraft:nether_wart", displayName = "Адский нарост", price = 0.11, currency = "res" },
   { internalName = "dwcity:Akvamarin", displayName = "Аквамарин", price = 18.67, currency = "res" },
@@ -85,8 +83,6 @@ return {
   { internalName = "minecraft:red_mushroom", displayName = "Гриб", price = 0.38, currency = "res" },
   { internalName = "minecraft:gold_ingot", displayName = "Золотой слиток", price = 0.15, currency = "res" },
   { internalName = "Botany:pigment", displayName = "Зелёный краситель", price = 0.11, currency = "res", damage = 13 },
-
-  -- === Предметы из изображений 16-23.png ===
   { internalName = "appliedenergistics2:item.ItemMultiPart", displayName = "МЭ терминал", price = 1.14, currency = "res", damage = 380 },
   { internalName = "appliedenergistics2:item.ItemBlockSecurity", displayName = "МЭ терминал безопасности", price = 13.67, currency = "res" },
   { internalName = "appliedenergistics2:item.ItemMultiPart", displayName = "МЭ терминал интерфейсов", price = 1.98, currency = "res", damage = 480 },
@@ -227,8 +223,6 @@ return {
   { internalName = "MineFactoryReloaded:machine.0", displayName = "Рыболов", price = 3.15, currency = "res", damage = 1 },
   { internalName = "minecraft:lever", displayName = "Рычаг", price = 0.01, currency = "res" },
   { internalName = "MineFactoryReloaded:rubberwood.sapling", displayName = "Саженец гевеи", price = 0.11, currency = "res" },
-
-  -- === Новые предметы из 24-30.png (с правильными internalName) ===
   { internalName = "EnderIO:itemMaterial", displayName = "Самородок вибрирующего сплава", price = 0.99, currency = "res", damage = 4 },
   { internalName = "AdvancedSolarPanel:asp_crafting_items", displayName = "Саннариум", price = 13.5, currency = "res" },
   { internalName = "minecraft:sugar", displayName = "Сахар", price = 0.33, currency = "res" },
@@ -355,19 +349,14 @@ return {
   { internalName = "IC2:blockElectric", displayName = "Энергохранилище", price = 1.22, currency = "res" },
   { internalName = "IC2:blockGenerator", displayName = "Ядерный реактор", price = 41.69, currency = "res", damage = 5 },
   { internalName = "appliedenergistics2:tile.ItemMultiMaterial", displayName = "Ядро истребления", price = 0.32, currency = "res", damage = 44 },
-
-  -- === Дополнительные предметы из твоего большого ME списка ===
-  { internalName = "AFSU:AFSU:0", displayName = "AFSU", price = 1.0, currency = "res" },
-  { internalName = "DraconicEvolution:draconicCore", displayName = "Awakened Core", price = 20.0, currency = "res" },
-  { internalName = "minecraft:stone", displayName = "Камень", price = 0.02, currency = "res" },
-
-  -- === Дополнительные предметы из твоего большого ME списка ===,
-  { internalName = "minecraft:stone", displayName = "Камень", price = 0.02, currency = "res" },
   { internalName = "minecraft:blaze_rod", displayName = "Стержень ифрита", price = 0.60, currency = "res" },
   { internalName = "minecraft:ender_pearl", displayName = "Жемчуг Эндера", price = 0.75, currency = "res" },
   { internalName = "minecraft:bone", displayName = "Кость", price = 0.30, currency = "res" },
   { internalName = "minecraft:slime_ball", displayName = "Сгусток слизи", price = 0.65, currency = "res" },
   { internalName = "DraconicEvolution:draconiumDust", displayName = "Драконивая пыль", price = 0.55, currency = "res" },
   { internalName = "Forestry:royalJelly", displayName = "Маточное молочко", price = 0.80, currency = "res" },
-  
+  { internalName = "AFSU:AFSU:0", displayName = "AFSU", price = 1.0, currency = "res" },
+  { internalName = "DraconicEvolution:draconicCore", displayName = "Awakened Core", price = 20.0, currency = "res" },
+  { internalName = "minecraft:stone", displayName = "Камень", price = 0.02, currency = "res" }
+
 }
