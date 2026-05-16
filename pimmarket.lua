@@ -143,9 +143,7 @@ local shopItems = {}
 local shopSearch = ""
 local searchActive = false
 local searchInput = ""
-local filterState = "available"
 local currentShopMode = "buy"
-local buyFilterMode = "all"
 
 local blacklist = {
     ["customnpcs:npcMoney"] = true,
@@ -508,27 +506,7 @@ local function getFilteredItems()
     local filtered = {}
     for _, item in ipairs(shopItems) do
         local matchesSearch = (shopSearch == "" or string.find(string.lower(item.displayName or item.internalName), string.lower(shopSearch), 1, true))
-        local matchesAvailability = true
-        if currentShopMode == "buy" then
-            if filterState == "available" then
-                matchesAvailability = (item.qty > 0)
-            elseif filterState == "unavailable" then
-                matchesAvailability = (item.qty == 0)
-            else
-                matchesAvailability = true
-            end
-        end
-        local matchesVanilla = true
-        if currentShopMode == "sell" and buyFilterMode == "vanilla" then
-            matchesVanilla = false
-            for _, vname in ipairs(vanillaItems) do
-                if (item.internalName or item.name) == vname then
-                    matchesVanilla = true
-                    break
-                end
-            end
-        end
-        if matchesSearch and matchesAvailability and matchesVanilla then
+        if matchesSearch then
             table.insert(filtered, item)
         end
     end
@@ -745,14 +723,6 @@ local function smoothScroll(steps)
 end
 
 local function drawBuyButtons()
-    -- Очищаем всю строку 24 (удаляем старые символы кнопок и возможные "хвосты")
-    gpu.setBackground(colors.bg_main)
-    gpu.fill(1, 24, 80, 1, " ")
-
-    -- Восстанавливаем нижнюю линию рамки (как в drawScreenBorder)
-    gpu.setForeground(colors.accent_secondary)
-    gpu.fill(1, 24, 80, 1, "─")   -- нижняя горизонтальная линия
-
     -- Обновляем текст и ширину кнопки "Купить"/"Продать"
     if currentShopMode == "buy" then
         nextButton.text = "[ КУПИТЬ ]"
@@ -762,32 +732,6 @@ local function drawBuyButtons()
         nextButton.xs = unicode.len(nextButton.text) + 2
     end
 
-    if currentShopMode == "sell" then
-        -- Режим продажи: кнопка "Все"/"Vanilla"
-        if buyFilterMode == "all" then
-            filterButton.text = "[ Все ]"
-            filterButton.fg = colors.success
-        else
-            filterButton.text = "[ Vanilla ]"
-            filterButton.fg = colors.accent_secondary
-        end
-        filterButton.xs = unicode.len(filterButton.text) + 2
-        drawFlexButton(filterButton)
-    else
-        -- Режим покупки: кнопка с кружком
-        local fullText = "● [ Ост-к ]"
-        local btn = filterButton
-        btn.xs = unicode.len(fullText) + 2
-        gpu.setBackground(btn.bg)
-        gpu.fill(btn.x, btn.y, btn.xs, btn.ys, " ")
-        local circleColor = (filterState == "available") and colors.success or colors.error
-        local textX = btn.x + math.floor((btn.xs - unicode.len(fullText)) / 2)
-        gpu.setForeground(circleColor)
-        gpu.set(textX, btn.y, "●")
-        gpu.setForeground(colors.accent_secondary)
-        gpu.set(textX + 1, btn.y, " [ Ост-к ]")
-    end
-
     -- Настройка цвета кнопки "Купить"/"Продать"
     if selectedItem and (currentShopMode ~= "buy" or selectedItem.qty > 0) then
         nextButton.fg = colors.accent_secondary
@@ -795,7 +739,7 @@ local function drawBuyButtons()
         nextButton.fg = colors.inactive
     end
 
-    -- Рисуем остальные кнопки (Назад и Купить/Продать) поверх линии
+    -- Рисуем только кнопки "Назад" и "Купить"/"Продать"
     drawFlexButton(backButton)
     drawFlexButton(nextButton)
 end
@@ -1670,37 +1614,6 @@ while true do
             drawBuyButtons()
             goto continue
         end
-
-            -- Кнопки нижней панели (фильтр, назад, купить/продать) на строке 24
-            if isButtonClicked(filterButton, x, y) then
-                if currentShopMode == "sell" then
-                    if buyFilterMode == "all" then
-                        buyFilterMode = "vanilla"
-                    else
-                        buyFilterMode = "all"
-                    end
-                    listScroll = 1
-                    selectedIndex = 0
-                    selectedItem = nil
-                    hoveredIndex = 0
-                    drawBuyItemsList()
-                    drawBuyButtons()
-                else
-                    -- Переключаем состояние фильтра
-                    if filterState == "available" then
-                        filterState = "unavailable"
-                    else
-                        filterState = "available"
-                    end
-                    listScroll = 1
-                    selectedIndex = 0
-                    selectedItem = nil
-                    hoveredIndex = 0
-                    drawBuyItemsList()
-                    drawBuyButtons()
-                end
-                goto continue
-            end
 
             if isButtonClicked(backButton, x, y) then
                 currentScreen = "shop"
