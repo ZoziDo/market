@@ -1558,7 +1558,6 @@ while true do
             end
             goto continue
         end
-
         -- Обработка попапа "недостаточно средств"
         if showInsufficientPopup then
             local popupWidth = 52
@@ -1574,15 +1573,14 @@ while true do
             }
             if isButtonClicked(okBtn, x, y) then
                 showInsufficientPopup = false
-                -- Возвращаемся к списку покупок (не вызываем drawPurchaseScreen!)
                 drawBuyStatic()
                 drawBuyItemsList()
                 drawBuyButtons()
             end
-            goto continue  -- не обрабатываем другие клики, пока попап открыт
+            goto continue
         end
-        
-            if currentScreen == "shop_buy" or currentScreen == "shop_sell" then
+
+        if currentScreen == "shop_buy" or currentScreen == "shop_sell" then
             -- Клик по области списка (выбор предмета)
             if y >= 6 and y <= 17 and x >= 2 and x <= 77 then
                 local relativeRow = y - 5
@@ -1660,7 +1658,7 @@ while true do
                                 drawInsufficientPopup()
                                 goto continue
                             end
-                        else -- currency == "res"
+                        else
                             if resBalance < price then
                                 showInsufficientPopup = true
                                 insufficientBalance = resBalance
