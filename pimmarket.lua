@@ -586,7 +586,7 @@ local function drawBuyStatic()
     local clearX = searchX + 23 + 1
     gpu.setBackground(colors.error)
     gpu.fill(clearX, 3, clearWidth, 1, " ")
-    gpu.setForeground(colors.inactive)
+    gpu.setForeground(colors.accent_main)
     local textX = clearX + math.floor((clearWidth - unicode.len(clearText)) / 2)
     gpu.set(textX, 3, clearText)
     gpu.setBackground(colors.accent_main)
