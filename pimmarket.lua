@@ -561,8 +561,8 @@ local function drawBuyStatic()
         gpu.set(3, 3, "Магазин покупает")
     end
 
-    -- Поле поиска (сдвинуто на 2 символа влево: X=48)
-    local searchX = 47
+    -- Поле поиска (сдвинуто левее: X = 45)
+    local searchX = 45
     local searchText = ""
     if searchActive then
         searchText = searchInput .. "_"
@@ -573,14 +573,16 @@ local function drawBuyStatic()
     gpu.fill(searchX, 3, 20, 1, " ")
     gpu.setForeground(colors.accent_main)
     gpu.set(searchX + 1, 3, unicode.sub(searchText, 1, 18))
-
-    -- Кнопка "Стереть" со скобками и выравниванием по центру
+    
+    -- Кнопка "Стереть" с квадратными скобками, симметричными отступами
+    local clearText = "[ СТЕРЕТЬ ]"   -- длина 11 символов (с пробелами)
+    local clearWidth = unicode.len(clearText) + 2   -- 13 символов (отступы по 1)
+    local clearX = searchX + 20 + 1   -- отступ от поля поиска 1 символ (45+21=66)
     gpu.setBackground(colors.error)
-    gpu.fill(searchX + 22, 3, 13, 1, " ")
-    gpu.setForeground(colors.inactive) 
-    local clearText = "[ СТЕРЕТЬ ]"
-    local clearX = searchX + 22 + math.floor((9 - unicode.len(clearText)) / 2)
-    gpu.set(clearX, 3, clearText)
+    gpu.fill(clearX, 3, clearWidth, 1, " ")
+    gpu.setForeground(colors.inactive)
+    local textX = clearX + math.floor((clearWidth - unicode.len(clearText)) / 2)
+    gpu.set(textX, 3, clearText)
     gpu.setBackground(colors.bg_main)
 
     -- Заголовки таблицы (строка 5, но без разделителей)
@@ -1628,23 +1630,24 @@ while true do
             end
 
             -- Поле поиска и кнопка "Стереть" (строка 3, смещённые координаты)
-            if y == 3 and x >= 47 and x <= 66 then
-                searchActive = true
-                searchInput = shopSearch
-                drawBuyStatic()
-                drawBuyItemsList()
-                drawBuyButtons()
-                goto continue
-            end
-            if y == 3 and x >= 69 and x <= 81 then
-                shopSearch = ""
-                searchInput = ""
-                searchActive = false
-                drawBuyStatic()
-                drawBuyItemsList()
-                drawBuyButtons()
-                goto continue
-            end
+           if y == 3 and x >= 45 and x <= 64 then
+            searchActive = true
+            searchInput = shopSearch
+            drawBuyStatic()
+            drawBuyItemsList()
+            drawBuyButtons()
+            goto continue
+        end
+        -- Кнопка "Стереть" (с 66 по 78, ширина 13)
+        if y == 3 and x >= 66 and x <= 78 then
+            shopSearch = ""
+            searchInput = ""
+            searchActive = false
+            drawBuyStatic()
+            drawBuyItemsList()
+            drawBuyButtons()
+            goto continue
+        end
 
             -- Кнопки нижней панели (фильтр, назад, купить/продать) на строке 24
             if isButtonClicked(filterButton, x, y) then
