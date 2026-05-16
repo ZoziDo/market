@@ -754,7 +754,18 @@ local function drawBuyButtons()
         nextButton.xs = unicode.len(nextButton.text) + 2
     end
 
+    local function drawBuyButtons()
+    -- Обновляем текст и ширину кнопки "Купить"/"Продать"
+    if currentShopMode == "buy" then
+        nextButton.text = "[ КУПИТЬ ]"
+        nextButton.xs = unicode.len(nextButton.text) + 2
+    else
+        nextButton.text = "[ ПРОДАТЬ ]"
+        nextButton.xs = unicode.len(nextButton.text) + 2
+    end
+
     if currentShopMode == "sell" then
+        -- Режим продажи: кнопка "Все"/"Vanilla"
         if buyFilterMode == "all" then
             filterButton.text = "[ Все ]"
             filterButton.fg = colors.success
@@ -762,24 +773,22 @@ local function drawBuyButtons()
             filterButton.text = "[ Vanilla ]"
             filterButton.fg = colors.accent_secondary
         end
-        filterButton.xs = unicode.len(filterButton.text) + 2   -- ← добавить
+        filterButton.xs = unicode.len(filterButton.text) + 2
         drawFlexButton(filterButton)
-    end
-    
     else
-    -- Режим покупки: кнопка с кружком
-    local fullText = "● [ Ост-к ]"
-    local btn = filterButton
-    btn.xs = unicode.len(fullText) + 2   -- ширина = длина текста + 2 пробела
-    gpu.setBackground(btn.bg)
-    gpu.fill(btn.x, btn.y, btn.xs, btn.ys, " ")
-    local circleColor = (filterState == "available") and colors.success or colors.error
-    -- Вычисляем позицию, чтобы текст был по центру кнопки (с учётом, что кружок — часть текста)
-    local textX = btn.x + math.floor((btn.xs - unicode.len(fullText)) / 2)
-    gpu.setForeground(circleColor)
-    gpu.set(textX, btn.y, "●")
-    gpu.setForeground(colors.accent_secondary)
-    gpu.set(textX + 1, btn.y, " [ Ост-к ]")
+        -- Режим покупки: кнопка с кружком
+        local fullText = "● [ Ост-к ]"
+        local btn = filterButton
+        btn.xs = unicode.len(fullText) + 2
+        gpu.setBackground(btn.bg)
+        gpu.fill(btn.x, btn.y, btn.xs, btn.ys, " ")
+        local circleColor = (filterState == "available") and colors.success or colors.error
+        local textX = btn.x + math.floor((btn.xs - unicode.len(fullText)) / 2)
+        gpu.setForeground(circleColor)
+        gpu.set(textX, btn.y, "●")
+        gpu.setForeground(colors.accent_secondary)
+        gpu.set(textX + 1, btn.y, " [ Ост-к ]")
+    end
 
     -- Настройка цвета кнопки "Купить"/"Продать"
     if selectedItem and (currentShopMode ~= "buy" or selectedItem.qty > 0) then
