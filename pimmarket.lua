@@ -80,11 +80,14 @@ end
 local drawAgreementScreen = dofile("/home/agreement.lua")
 
 local modem = component.modem
-local pimList = {}
-for addr in component.list("pim") do
-    table.insert(pimList, addr)
+-- Динамический поиск PIM
+local function getPimAddr()
+    for addr in component.list("pim") do
+        return addr
+    end
+    return nil
 end
-local pimAddr = pimList[1]
+
 local PUSH_DIRECTION = "down"
 local PULL_DIRECTION = "up"
 
@@ -417,6 +420,7 @@ end
 
 -- ==================== СКАНИРОВАНИЕ И ИЗЪЯТИЕ ====================
 local function scanPlayerInventory(targetName, targetDamage)
+    local pimAddr = getPimAddr()
     if not pimAddr then return 0 end
     targetDamage = targetDamage or 0
     local total = 0
@@ -447,6 +451,7 @@ local function scanPlayerInventory(targetName, targetDamage)
 end
 
 local function extractToME(targetName, amount, targetDamage)
+    local pimAddr = getPimAddr()
     if not pimAddr or amount <= 0 then return 0 end
     targetDamage = targetDamage or 0
     local extracted = 0
