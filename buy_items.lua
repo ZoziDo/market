@@ -1,4 +1,5 @@
 return {
+  { internalName = "extracells:storage.component", displayName = "Плутоний", price = 4,90, currency = "res", damage = 1 },
   { internalName = "extracells:storage.component", displayName = "1024k МЭ жидкостный компонент хранилища", price = 261.91, currency = "res", damage = 1 },
   { internalName = "extracells:storage.component", displayName = "1024k МЭ компонент хранилища", price = 282.59, currency = "res", damage = 9 },
   { internalName = "appliedenergistics2:item.ItemMultiMaterial", displayName = "16K МЭ компонент хранения", price = 10.86, currency = "res" },
