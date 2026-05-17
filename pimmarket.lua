@@ -143,7 +143,7 @@ local blacklist = {
 }
 
 local listScroll = 1
-local visibleRows = 15          -- теперь отображаем 15 предметов
+local visibleRows = 15
 local selectedIndex = 0
 local hoveredIndex = 0
 local filteredItems = {}
@@ -273,7 +273,7 @@ end
 local backButton = {
     text = "[ НАЗАД ]",
     x = 37, y = 24,
-    xs = unicode.len("[ НАЗАД ]") + 2,   -- 11
+    xs = unicode.len("[ НАЗАД ]") + 2,
     ys = 1,
     bg = colors.bg_button,
     fg = colors.accent_secondary
@@ -342,7 +342,7 @@ local function loadBuyItems()
         if not mapping then goto continue end
 
         local displayName = mapping.displayName
-        local price = mapping.price   -- цена в Coina
+        local price = mapping.price
         if price <= 0 then goto continue end
 
         local key = name .. ":" .. damage
@@ -1004,7 +1004,7 @@ local function performSell()
     drawBuyButtons()
 end
 
--- ========== ИСПРАВЛЕННАЯ ПОКУПКА ==========
+-- ========== ИСПРАВЛЕННАЯ ПОКУПКА (работает с любым количеством) ==========
 local function performBuy()
     if not playerAgreed then
         drawCenteredText(20, "Сначала примите пользовательское соглашение", colors.error)
@@ -1059,9 +1059,10 @@ local function performBuy()
     drawCenteredText(20, "Выполняется покупка...", colors.accent_main)
     os.sleep(0.4)
 
-    local fingerprint = { id = item.internalName, dmg = item.damage or 0 }
+    -- Формируем запрос на выдачу предметов
+    local fingerprint = { name = item.internalName, damage = item.damage or 0 }
 
-    -- Определение максимального размера стака
+    -- Определяем максимальный размер стака
     local maxStackSize = 64
     local ok, detail = pcall(me.getItemDetail, me, item.internalName, item.damage)
     if ok and detail and detail.maxSize then
@@ -1072,21 +1073,36 @@ local function performBuy()
     local extracted = 0
     local lastError = nil
 
-    -- Цикл выдачи предметов
+    -- Цикл выдачи
     while remaining > 0 do
         local toTake = math.min(remaining, maxStackSize)
         local success, result = pcall(function()
             return me.exportItem(fingerprint, PULL_DIRECTION, toTake)
         end)
-        if success and type(result) == "number" and result > 0 then
-            extracted = extracted + result
-            remaining = remaining - result
-        else
-            -- Не удалось выдать ни одного предмета в текущем запросе
-            if result == nil or (type(result) == "number" and result == 0) then
-                lastError = "Недостаточно места в инвентаре или предметы закончились"
+
+        -- Анализ результата
+        local got = 0
+        if success then
+            if type(result) == "number" then
+                got = result
+            elseif type(result) == "boolean" and result == true then
+                -- Некоторые реализации возвращают true при успешной выдаче toTake предметов
+                got = toTake
+            elseif result and type(result) == "table" and result.count then
+                got = result.count
             else
-                lastError = success and "Ошибка выдачи" or tostring(result)
+                lastError = "неизвестный ответ: " .. tostring(result)
+            end
+        else
+            lastError = tostring(result)
+        end
+
+        if got > 0 then
+            extracted = extracted + got
+            remaining = remaining - got
+        else
+            if lastError == nil then
+                lastError = "не удалось выдать (вернулось 0 или false)"
             end
             break
         end
@@ -1095,7 +1111,7 @@ local function performBuy()
     -- Если не выдано ни одного предмета
     if extracted == 0 then
         drawCenteredText(20, "Не удалось выдать предметы! " .. (lastError or "Проверьте инвентарь."), colors.error)
-        os.sleep(1.5)
+        os.sleep(2)
         currentScreen = "shop_buy"
         drawBuyStatic()
         drawBuyItemsList()
@@ -1133,7 +1149,7 @@ local function performBuy()
 
     drawCenteredText(20, "Куплено " .. extracted .. " шт. за " .. string.format("%.2f", totalCost) .. " ₵", colors.success)
 
-    -- Обновление списка товаров и данных о покупке
+    -- Обновление списка товаров
     loadBuyItems()
     for _, newItem in ipairs(shopItems) do
         if newItem.internalName == item.internalName and newItem.damage == item.damage then
@@ -1492,154 +1508,154 @@ while true do
     end
 
     if e == "touch" then
-    local x, y = ev[3], ev[4]
+        local x, y = ev[3], ev[4]
 
-    if showSellPopup and currentScreen == "sell_scan" then
-        local popupWidth = 40
-        local popupHeight = 10
-        local popupX = math.floor((80 - popupWidth) / 2)
-        local popupY = 10
-        local yesBtn = {x=popupX+5, y=popupY+7, xs=13, ys=1}
-        local noBtn  = {x=popupX+popupWidth-15, y=popupY+7, xs=12, ys=1}
-        if isButtonClicked(yesBtn, x, y) then
-            performSell()
-        elseif isButtonClicked(noBtn, x, y) then
-            showSellPopup = false
-            drawSellScanScreen()
-        elseif not (x >= popupX and x < popupX + popupWidth and y >= popupY and y < popupY + popupHeight) then
-            showSellPopup = false
-            drawSellScanScreen()
-        end
-        goto continue
-    elseif showInsufficientPopup then
-        local popupWidth = 52
-        local popupHeight = 10
-        local popupX = math.floor((80 - popupWidth) / 2)
-        local popupY = 7
-        local btnWidth = 14
-        local okBtn = {
-            x = popupX + math.floor((popupWidth - btnWidth) / 2),
-            y = popupY+7,
-            xs = btnWidth,
-            ys = 1
-        }
-        if isButtonClicked(okBtn, x, y) then
-            showInsufficientPopup = false
-            drawBuyStatic()
-            drawBuyItemsList()
-            drawBuyButtons()
-        end
-        goto continue
-    elseif showPartialPopup then
-        local popupWidth = 52
-        local popupHeight = 9
-        local popupX = math.floor((80 - popupWidth) / 2)
-        local popupY = 8
-        local okBtn = {
-            x = popupX + math.floor((popupWidth - 12) / 2),
-            y = popupY+6,
-            xs = 12,
-            ys = 1
-        }
-        if isButtonClicked(okBtn, x, y) then
-            showPartialPopup = false
-            local actuallySpent = partialExtracted * partialItem.price
-            coinBalance = coinBalance - actuallySpent
-            playerTransactions = playerTransactions + 1
-
-            if currentToken then
-                modem.send(serverAddress, 0xffef, serialization.serialize({
-                    op = "buy",
-                    name = currentPlayer,
-                    token = currentToken,
-                    item = partialItem.displayName,
-                    qty = partialExtracted,
-                    value = actuallySpent
-                }))
+        if showSellPopup and currentScreen == "sell_scan" then
+            local popupWidth = 40
+            local popupHeight = 10
+            local popupX = math.floor((80 - popupWidth) / 2)
+            local popupY = 10
+            local yesBtn = {x=popupX+5, y=popupY+7, xs=13, ys=1}
+            local noBtn  = {x=popupX+popupWidth-15, y=popupY+7, xs=12, ys=1}
+            if isButtonClicked(yesBtn, x, y) then
+                performSell()
+            elseif isButtonClicked(noBtn, x, y) then
+                showSellPopup = false
+                drawSellScanScreen()
+            elseif not (x >= popupX and x < popupX + popupWidth and y >= popupY and y < popupY + popupHeight) then
+                showSellPopup = false
+                drawSellScanScreen()
             end
-
-            drawCenteredText(20, "Куплено " .. partialExtracted .. " шт. за " .. string.format("%.2f", actuallySpent) .. " ₵", colors.success)
-            os.sleep(0.8)
-            currentScreen = "shop_buy"
-            drawBuyStatic()
-            drawBuyItemsList()
-            drawBuyButtons()
-        end
-        goto continue
-    elseif currentScreen == "shop_buy" or currentScreen == "shop_sell" then
-        if y >= 7 and y <= 21 and x >= 2 and x <= 77 then
-            local relativeRow = y - 6
-            local clickedIndex = listScroll + relativeRow - 1
-            local item = filteredItems[clickedIndex]
-            if item and (currentShopMode ~= "buy" or item.qty > 0) then
-                selectedIndex = clickedIndex
-                selectedItem = item
-                hoveredIndex = 0
-                updateSelectorDisplay(selectedItem)
+            goto continue
+        elseif showInsufficientPopup then
+            local popupWidth = 52
+            local popupHeight = 10
+            local popupX = math.floor((80 - popupWidth) / 2)
+            local popupY = 7
+            local btnWidth = 14
+            local okBtn = {
+                x = popupX + math.floor((popupWidth - btnWidth) / 2),
+                y = popupY+7,
+                xs = btnWidth,
+                ys = 1
+            }
+            if isButtonClicked(okBtn, x, y) then
+                showInsufficientPopup = false
+                drawBuyStatic()
                 drawBuyItemsList()
                 drawBuyButtons()
             end
             goto continue
-        end
+        elseif showPartialPopup then
+            local popupWidth = 52
+            local popupHeight = 9
+            local popupX = math.floor((80 - popupWidth) / 2)
+            local popupY = 8
+            local okBtn = {
+                x = popupX + math.floor((popupWidth - 12) / 2),
+                y = popupY+6,
+                xs = 12,
+                ys = 1
+            }
+            if isButtonClicked(okBtn, x, y) then
+                showPartialPopup = false
+                local actuallySpent = partialExtracted * partialItem.price
+                coinBalance = coinBalance - actuallySpent
+                playerTransactions = playerTransactions + 1
 
-        if x >= 78 and y >= 7 and y <= 21 then
-            local total = #filteredItems
-            if total > visibleRows then
-                local clickPos = y - 6
-                listScroll = math.floor((clickPos - 1) * (total - visibleRows) / visibleRows) + 1
-                drawBuyItemsList()
-            end
-            goto continue
-        end
-
-        if y == 3 and x >= 42 and x <= 64 then
-            searchActive = true
-            searchInput = shopSearch
-            drawBuyStatic()
-            drawBuyItemsList()
-            drawBuyButtons()
-            goto continue
-        end
-        if y == 3 and x >= 66 and x <= 78 then
-            shopSearch = ""
-            searchInput = ""
-            searchActive = false
-            drawBuyStatic()
-            drawBuyItemsList()
-            drawBuyButtons()
-            goto continue
-        end
-
-        if isButtonClicked(backButton, x, y) then
-            currentScreen = "shop"
-            selectedIndex = 0
-            selectedItem = nil
-            hoveredIndex = 0
-            updateSelectorDisplay(nil)
-            drawShopMenu()
-            goto continue
-        end
-
-        if isButtonClicked(nextButton, x, y) then
-            if selectedItem and (currentShopMode ~= "buy" or selectedItem.qty > 0) then
-                if currentShopMode == "buy" then
-                    local price = selectedItem.price
-                    if coinBalance < price then
-                        showInsufficientPopup = true
-                        insufficientBalance = coinBalance
-                        drawBuyStatic()
-                        drawBuyItemsList()
-                        drawBuyButtons()
-                        drawInsufficientPopup()
-                        goto continue
-                    end
-                    goToPurchase(selectedItem)
-                else
-                    goToSellConfirm(selectedItem)
+                if currentToken then
+                    modem.send(serverAddress, 0xffef, serialization.serialize({
+                        op = "buy",
+                        name = currentPlayer,
+                        token = currentToken,
+                        item = partialItem.displayName,
+                        qty = partialExtracted,
+                        value = actuallySpent
+                    }))
                 end
+
+                drawCenteredText(20, "Куплено " .. partialExtracted .. " шт. за " .. string.format("%.2f", actuallySpent) .. " ₵", colors.success)
+                os.sleep(0.8)
+                currentScreen = "shop_buy"
+                drawBuyStatic()
+                drawBuyItemsList()
+                drawBuyButtons()
             end
             goto continue
-        end
+        elseif currentScreen == "shop_buy" or currentScreen == "shop_sell" then
+            if y >= 7 and y <= 21 and x >= 2 and x <= 77 then
+                local relativeRow = y - 6
+                local clickedIndex = listScroll + relativeRow - 1
+                local item = filteredItems[clickedIndex]
+                if item and (currentShopMode ~= "buy" or item.qty > 0) then
+                    selectedIndex = clickedIndex
+                    selectedItem = item
+                    hoveredIndex = 0
+                    updateSelectorDisplay(selectedItem)
+                    drawBuyItemsList()
+                    drawBuyButtons()
+                end
+                goto continue
+            end
+
+            if x >= 78 and y >= 7 and y <= 21 then
+                local total = #filteredItems
+                if total > visibleRows then
+                    local clickPos = y - 6
+                    listScroll = math.floor((clickPos - 1) * (total - visibleRows) / visibleRows) + 1
+                    drawBuyItemsList()
+                end
+                goto continue
+            end
+
+            if y == 3 and x >= 42 and x <= 64 then
+                searchActive = true
+                searchInput = shopSearch
+                drawBuyStatic()
+                drawBuyItemsList()
+                drawBuyButtons()
+                goto continue
+            end
+            if y == 3 and x >= 66 and x <= 78 then
+                shopSearch = ""
+                searchInput = ""
+                searchActive = false
+                drawBuyStatic()
+                drawBuyItemsList()
+                drawBuyButtons()
+                goto continue
+            end
+
+            if isButtonClicked(backButton, x, y) then
+                currentScreen = "shop"
+                selectedIndex = 0
+                selectedItem = nil
+                hoveredIndex = 0
+                updateSelectorDisplay(nil)
+                drawShopMenu()
+                goto continue
+            end
+
+            if isButtonClicked(nextButton, x, y) then
+                if selectedItem and (currentShopMode ~= "buy" or selectedItem.qty > 0) then
+                    if currentShopMode == "buy" then
+                        local price = selectedItem.price
+                        if coinBalance < price then
+                            showInsufficientPopup = true
+                            insufficientBalance = coinBalance
+                            drawBuyStatic()
+                            drawBuyItemsList()
+                            drawBuyButtons()
+                            drawInsufficientPopup()
+                            goto continue
+                        end
+                        goToPurchase(selectedItem)
+                    else
+                        goToSellConfirm(selectedItem)
+                    end
+                end
+                goto continue
+            end
 
             if searchActive then
                 shopSearch = searchInput
@@ -1652,7 +1668,7 @@ while true do
                 drawBuyButtons()
                 goto continue
             end
-            
+
         elseif currentScreen == "purchase" then
             if (y >= 24 and y <= 24) and (x >= 19 and x <= 28) then
                 if currentShopMode == "buy" then
