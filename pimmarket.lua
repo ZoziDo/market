@@ -23,8 +23,7 @@ local colors = {
 
 -- ========== НОРМАЛИЗАЦИЯ СТРОКИ ДЛЯ СОРТИРОВКИ ==========
 local function sortableName(name)
-    if not name then return ""
-    end
+    if not name then return "" end
     local lower = string.lower(name)
     local result = lower:gsub("(%d+)", function(d)
         return string.format("%08d", tonumber(d))
@@ -90,19 +89,14 @@ local PUSH_DIRECTION = "down"
 local PULL_DIRECTION = "up"
 
 local function normalizeName(name)
-    if not name then return ""
-    end
+    if not name then return "" end
     local lastColon = name:match(".*:([^:]+)$")
     return lastColon or name
 end
 
 local function namesMatch(name1, name2)
-    if not name1 or not name2 then
-        return false
-    end
-    if name1 == name2 then
-        return true
-    end
+    if not name1 or not name2 then return false end
+    if name1 == name2 then return true end
     local short1 = normalizeName(name1)
     local short2 = normalizeName(name2)
     return short1 == short2
@@ -177,18 +171,14 @@ local showShopDenied = false
 
 -- ==================== ОБНОВЛЕНИЕ СЕЛЕКТОРА ====================
 local function updateSelectorDisplay(item)
-    if not selector then
-        return
-    end
+    if not selector then return end
     if not item then
         pcall(selector.setSlot, 0, nil)
         pcall(selector.setSlot, 1, nil)
         return
     end
     local raw = item.internalName or item.name or item.displayName
-    if not raw then
-        return
-    end
+    if not raw then return end
     local id = raw
     if not id:find(":") then
         id = "minecraft:" .. id
@@ -303,9 +293,7 @@ local shopMenuButtons = {
 }
 
 local function canSendReport()
-    if not lastReportTime then
-        return true
-    end
+    if not lastReportTime then return true end
     local now = os.time()
     local reportDate = os.date("*t", lastReportTime)
     local nowDate = os.date("*t", now)
@@ -317,9 +305,7 @@ end
 
 -- ========== ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ==========
 local function getActualItemQuantity(internalName, damage)
-    if not component.isAvailable("me_interface") then
-        return 0
-    end
+    if not component.isAvailable("me_interface") then return 0 end
     local me = component.me_interface
     local items = me.getItemsInNetwork()
     local total = 0
@@ -333,9 +319,7 @@ end
 
 -- ==================== ЗАГРУЗКА ПРЕДМЕТОВ ====================
 local function loadBuyItems()
-    if not component.isAvailable("me_interface") then
-        return
-    end
+    if not component.isAvailable("me_interface") then return end
     local me = component.me_interface
     local rawItems = me.getItemsInNetwork()
     local tempShopItems = {}
@@ -348,26 +332,18 @@ local function loadBuyItems()
 
     for _, meItem in ipairs(rawItems) do
         local name = meItem.name
-        if blacklist[name] then
-            goto continue
-        end
+        if blacklist[name] then goto continue end
         local qty = meItem.size or 0
-        if qty == 0 then
-            goto continue
-        end
+        if qty == 0 then goto continue end
 
         local damage = meItem.damage or 0
         local mapKey = name .. ":" .. damage
         local mapping = buyItemMap[mapKey]
-        if not mapping then
-            goto continue
-        end
+        if not mapping then goto continue end
 
         local displayName = mapping.displayName
         local price = mapping.price   -- цена в Coina
-        if price <= 0 then
-            goto continue
-        end
+        if price <= 0 then goto continue end
 
         local key = name .. ":" .. damage
         if tempShopItems[key] then
@@ -431,7 +407,7 @@ local function loadSellItems()
                 internalName = internal,
                 qty = item.qty or 0,
                 price = item.price or 0,
-                damage = item.damage or 0   -- добавляем damage
+                damage = item.damage or 0
             })
         end
     end
@@ -439,9 +415,7 @@ end
 
 -- ==================== СКАНИРОВАНИЕ И ИЗЪЯТИЕ ====================
 local function scanPlayerInventory(targetName, targetDamage)
-    if not pimAddr then
-        return 0
-    end
+    if not pimAddr then return 0 end
     targetDamage = targetDamage or 0
     local total = 0
     for slot = 1, 36 do
@@ -471,15 +445,11 @@ local function scanPlayerInventory(targetName, targetDamage)
 end
 
 local function extractToME(targetName, amount, targetDamage)
-    if not pimAddr or amount <= 0 then
-        return 0
-    end
+    if not pimAddr or amount <= 0 then return 0 end
     targetDamage = targetDamage or 0
     local extracted = 0
     for slot = 1, 36 do
-        if extracted >= amount then
-            break
-        end
+        if extracted >= amount then break end
         local stack = component.invoke(pimAddr, "getStackInSlot", slot)
         if stack then
             local qty = stack.size or stack.qty or 0
@@ -519,9 +489,7 @@ local function getFilteredItems()
     maxItemWidth = 0
     for _, item in ipairs(filtered) do
         local len = unicode.len(item.displayName or item.internalName or "")
-        if len > maxItemWidth then
-            maxItemWidth = len
-        end
+        if len > maxItemWidth then maxItemWidth = len end
     end
     return filtered
 end
@@ -533,9 +501,7 @@ local function drawBuyStatic()
     local coinText = "Баланс: " .. string.format("%.2f", coinBalance) .. " Coina ₵"
     gpu.setForeground(colors.success)
     gpu.set(3, 1, coinText)
-    -- Эмодзи можно не выводить, т.к. баланс один
 
-    -- Режим магазина (слева)
     if currentShopMode == "buy" then
         gpu.setForeground(colors.accent_secondary)
         gpu.set(3, 3, "Магазин продаёт")
@@ -544,7 +510,6 @@ local function drawBuyStatic()
         gpu.set(3, 3, "Магазин покупает")
     end
 
-    -- Поле поиска (X = 42)
     local searchX = 42
     local searchText = ""
     if searchActive then
@@ -557,7 +522,6 @@ local function drawBuyStatic()
     gpu.setForeground(colors.accent_main)
     gpu.set(searchX + 1, 3, unicode.sub(searchText, 1, 21))
 
-    -- Кнопка "Стереть"
     local clearText = "[ СТЕРЕТЬ ]"
     local clearWidth = unicode.len(clearText) + 2
     local clearX = searchX + 23 + 1
@@ -568,7 +532,6 @@ local function drawBuyStatic()
     gpu.set(textX, 3, clearText)
     gpu.setBackground(colors.accent_secondary)
 
-    -- Заголовки таблицы (строка 5)
     gpu.setBackground(colors.bg_button)
     gpu.fill(2, 5, 76, 1, " ")
     gpu.setForeground(colors.text_bright)
@@ -579,9 +542,7 @@ local function drawBuyStatic()
 end
 
 local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
-    if not item then
-        return
-    end
+    if not item then return end
     local bg, fg
     if currentShopMode == "buy" and item.qty == 0 then
         bg = colors.bg_secondary
@@ -622,7 +583,6 @@ local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
         gpu.setForeground(colors.text_bright)
     end
     gpu.set(42, y, tostring(item.qty))
-    -- Цена всегда в Coina, символ ₵
     gpu.set(65, y, string.format("%.2f", item.price) .. " ₵")
     gpu.setBackground(colors.bg_main)
 end
@@ -634,9 +594,7 @@ local function drawScrollBar()
     local barHeight = 15
     gpu.setBackground(colors.bg_main)
     gpu.fill(barX, barY, 2, barHeight, " ")
-    if total <= visibleRows then
-        return
-    end
+    if total <= visibleRows then return end
     gpu.setBackground(colors.bg_secondary)
     gpu.fill(barX, barY, 2, barHeight, " ")
     local thumbHeight = math.max(2, math.floor(barHeight * visibleRows / total))
@@ -659,17 +617,15 @@ local function drawBuyItemsList()
     if #filteredItems == 0 then
         local msg = "ПО ТВОЕМУ ЗАПРОСУ, НИЧЕГО НЕ НАЙДЕНО!"
         local msgX = math.floor((80 - unicode.len(msg)) / 2) + 1
-        local msgY = 14   -- середина между 7 и 21
+        local msgY = 14
         gpu.setForeground(colors.error)
         gpu.set(msgX, msgY, msg)
     else
         for i = 1, visibleRows do
             local itemIndex = listScroll + i - 1
             local item = filteredItems[itemIndex]
-            if not item then
-                break
-            end
-            local y = 6 + i   -- первая строка 7, последняя 21
+            if not item then break end
+            local y = 6 + i
             local isSelected = (itemIndex == selectedIndex)
             local isHovered = (itemIndex == hoveredIndex)
             drawSingleRow(y, item, isHovered, isSelected, itemIndex)
@@ -688,9 +644,7 @@ local function smoothScroll(steps)
     local maxScroll = math.max(1, total - visibleRows + 1)
     local newScroll = listScroll + steps
     newScroll = math.max(1, math.min(newScroll, maxScroll))
-    if newScroll == listScroll then
-        return
-    end
+    if newScroll == listScroll then return end
     if math.abs(steps) == 1 and total > visibleRows then
         if steps > 0 then
             gpu.copy(2, 8, 76, visibleRows - 1, 0, -1)
@@ -718,7 +672,6 @@ local function smoothScroll(steps)
 end
 
 local function drawBuyButtons()
-    -- Обновляем текст и ширину кнопки "Купить"/"Продать"
     if currentShopMode == "buy" then
         nextButton.text = "[ КУПИТЬ ]"
         nextButton.xs = unicode.len(nextButton.text) + 2
@@ -727,14 +680,12 @@ local function drawBuyButtons()
         nextButton.xs = unicode.len(nextButton.text) + 2
     end
 
-    -- Настройка цвета кнопки "Купить"/"Продать"
     if selectedItem and (currentShopMode ~= "buy" or selectedItem.qty > 0) then
         nextButton.fg = colors.accent_secondary
     else
         nextButton.fg = colors.inactive
     end
 
-    -- Рисуем кнопки "Назад" и "Купить"/"Продать"
     drawFlexButton(backButton)
     drawFlexButton(nextButton)
 end
@@ -824,9 +775,7 @@ local function handleQuantityButtonClick(btnText)
 end
 
 local function goToPurchase(item)
-    if not item then
-        return
-    end
+    if not item then return end
     purchaseItem = item
     purchaseQuantity = 0
     drawPurchaseScreen()
@@ -998,9 +947,7 @@ local function drawSellScanScreen()
 end
 
 local function goToSellConfirm(item)
-    if not item then
-        return
-    end
+    if not item then return end
     sellConfirmItem = item
     foundAmount = 0
     showSellPopup = false
@@ -1057,7 +1004,7 @@ local function performSell()
     drawBuyButtons()
 end
 
--- ========== ПОКУПКА ==========
+-- ========== ИСПРАВЛЕННАЯ ПОКУПКА ==========
 local function performBuy()
     if not playerAgreed then
         drawCenteredText(20, "Сначала примите пользовательское соглашение", colors.error)
@@ -1070,6 +1017,7 @@ local function performBuy()
     local me = component.me_interface
     local item = purchaseItem
 
+    -- Проверка наличия предмета в ME-сети
     local actualQty = getActualItemQuantity(item.internalName, item.damage)
     if actualQty <= 0 then
         drawCenteredText(20, "Товар закончился! Обновление списка...", colors.error)
@@ -1111,10 +1059,11 @@ local function performBuy()
     drawCenteredText(20, "Выполняется покупка...", colors.accent_main)
     os.sleep(0.4)
 
-    local fingerprint = { id = item.internalName, dmg = item.damage or 0, raw_name = item.displayName }
+    local fingerprint = { id = item.internalName, dmg = item.damage or 0 }
 
+    -- Определение максимального размера стака
     local maxStackSize = 64
-    local ok, detail = pcall(me.getItemDetail, me, item.internalName)
+    local ok, detail = pcall(me.getItemDetail, me, item.internalName, item.damage)
     if ok and detail and detail.maxSize then
         maxStackSize = detail.maxSize
     end
@@ -1123,7 +1072,7 @@ local function performBuy()
     local extracted = 0
     local lastError = nil
 
-    -- Выдача по стакам, учитывая реально выданное количество
+    -- Цикл выдачи предметов
     while remaining > 0 do
         local toTake = math.min(remaining, maxStackSize)
         local success, result = pcall(function()
@@ -1133,9 +1082,9 @@ local function performBuy()
             extracted = extracted + result
             remaining = remaining - result
         else
-            -- Не удалось выдать ни одного предмета в этом стаке
-            if result == 0 then
-                lastError = "Недостаточно места в инвентаре"
+            -- Не удалось выдать ни одного предмета в текущем запросе
+            if result == nil or (type(result) == "number" and result == 0) then
+                lastError = "Недостаточно места в инвентаре или предметы закончились"
             else
                 lastError = success and "Ошибка выдачи" or tostring(result)
             end
@@ -1159,10 +1108,9 @@ local function performBuy()
         local actuallySpent = extracted * item.price
         partialExtracted = extracted
         partialRequested = qty
-        partialRefund = actuallySpent   -- сумма, которая будет списана (за выданное)
+        partialRefund = actuallySpent
         partialItem = item
         showPartialPopup = true
-        -- Показываем экран покупки и поверх попап
         drawPurchaseScreen()
         drawPartialPopup()
         return
@@ -1185,6 +1133,7 @@ local function performBuy()
 
     drawCenteredText(20, "Куплено " .. extracted .. " шт. за " .. string.format("%.2f", totalCost) .. " ₵", colors.success)
 
+    -- Обновление списка товаров и данных о покупке
     loadBuyItems()
     for _, newItem in ipairs(shopItems) do
         if newItem.internalName == item.internalName and newItem.damage == item.damage then
@@ -1594,7 +1543,6 @@ while true do
         }
         if isButtonClicked(okBtn, x, y) then
             showPartialPopup = false
-            -- Списание денег за выданное
             local actuallySpent = partialExtracted * partialItem.price
             coinBalance = coinBalance - actuallySpent
             playerTransactions = playerTransactions + 1
@@ -1619,7 +1567,6 @@ while true do
         end
         goto continue
     elseif currentScreen == "shop_buy" or currentScreen == "shop_sell" then
-        -- Клик по списку (строки 7–21)
         if y >= 7 and y <= 21 and x >= 2 and x <= 77 then
             local relativeRow = y - 6
             local clickedIndex = listScroll + relativeRow - 1
@@ -1635,7 +1582,6 @@ while true do
             goto continue
         end
 
-        -- Клик по скроллбару (строки 7–21)
         if x >= 78 and y >= 7 and y <= 21 then
             local total = #filteredItems
             if total > visibleRows then
@@ -1646,7 +1592,6 @@ while true do
             goto continue
         end
 
-        -- Поле поиска и кнопка "Стереть" (строка 3)
         if y == 3 and x >= 42 and x <= 64 then
             searchActive = true
             searchInput = shopSearch
@@ -1696,7 +1641,6 @@ while true do
             goto continue
         end
 
-            -- Если был активен поиск по клавиатуре
             if searchActive then
                 shopSearch = searchInput
                 searchActive = false
