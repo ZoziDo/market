@@ -1119,26 +1119,33 @@ local function performBuy()
         maxStackSize = detail.maxSize
     end
 
-        local remaining = qty
+    local remaining = qty
     local extracted = 0
     local lastError = nil
 
+    -- Выдача по стакам, учитывая реально выданное количество
     while remaining > 0 do
         local toTake = math.min(remaining, maxStackSize)
-        local ok, result = pcall(function()
+        local success, result = pcall(function()
             return me.exportItem(fingerprint, PULL_DIRECTION, toTake)
         end)
-        if ok and type(result) == "number" and result > 0 then
+        if success and type(result) == "number" and result > 0 then
             extracted = extracted + result
             remaining = remaining - result
         else
-            lastError = ok and "Не удалось выдать предметы (нет места)" or tostring(result)
+            -- Не удалось выдать ни одного предмета в этом стаке
+            if result == 0 then
+                lastError = "Недостаточно места в инвентаре"
+            else
+                lastError = success and "Ошибка выдачи" or tostring(result)
+            end
             break
         end
     end
 
+    -- Если не выдано ни одного предмета
     if extracted == 0 then
-        drawCenteredText(20, "Не удалось выдать предметы! Возможно, нет места в инвентаре.", colors.error)
+        drawCenteredText(20, "Не удалось выдать предметы! " .. (lastError or "Проверьте инвентарь."), colors.error)
         os.sleep(1.5)
         currentScreen = "shop_buy"
         drawBuyStatic()
@@ -1152,48 +1159,10 @@ local function performBuy()
         local actuallySpent = extracted * item.price
         partialExtracted = extracted
         partialRequested = qty
-        partialRefund = actuallySpent
+        partialRefund = actuallySpent   -- сумма, которая будет списана (за выданное)
         partialItem = item
         showPartialPopup = true
-        drawPurchaseScreen()
-        drawPartialPopup()
-        return
-    end
-
-    -- Полная выдача
-    coinBalance = coinBalance - totalCost
-    playerTransactions = playerTransactions + 1
-
-    if currentToken then
-        modem.send(serverAddress, 0xffef, serialization.serialize({
-            op = "buy",
-            name = currentPlayer,
-            token = currentToken,
-            item = item.displayName,
-            qty = extracted,
-            value = totalCost
-        }))
-    end
-
-    if extracted == 0 then
-        drawCenteredText(20, "Не удалось выдать предметы! Возможно, нет места в инвентаре.", colors.error)
-        os.sleep(1.5)
-        currentScreen = "shop_buy"
-        drawBuyStatic()
-        drawBuyItemsList()
-        drawBuyButtons()
-        return
-    end
-
-    -- Частичная выдача
-    if extracted < qty then
-        local actuallySpent = extracted * item.price
-        partialExtracted = extracted
-        partialRequested = qty
-        partialRefund = actuallySpent   -- сколько списано
-        partialItem = item
-        showPartialPopup = true
-        -- Рисуем экран покупки и поверх попап
+        -- Показываем экран покупки и поверх попап
         drawPurchaseScreen()
         drawPartialPopup()
         return
@@ -1724,19 +1693,6 @@ while true do
                     goToSellConfirm(selectedItem)
                 end
             end
-            goto continue
-        end
-
-        -- Если был активен поиск по клавиатуре
-        if searchActive then
-            shopSearch = searchInput
-            searchActive = false
-            listScroll = 1
-            selectedIndex = 0
-            selectedItem = nil
-            hoveredIndex = 0
-            drawBuyItemsList()
-            drawBuyButtons()
             goto continue
         end
 
