@@ -1,5 +1,4 @@
 return {
-  { internalName = "IC2:itemPlutonium", displayName = "Плутоний", price = 4,90, currency = "res" },
   { internalName = "extracells:storage.component", displayName = "1024k МЭ жидкостный компонент хранилища", price = 261.91, currency = "res", damage = 1 },
   { internalName = "extracells:storage.component", displayName = "1024k МЭ компонент хранилища", price = 282.59, currency = "res", damage = 9 },
   { internalName = "appliedenergistics2:item.ItemMultiMaterial", displayName = "16K МЭ компонент хранения", price = 10.86, currency = "res" },
@@ -358,6 +357,7 @@ return {
   { internalName = "Forestry:royalJelly", displayName = "Маточное молочко", price = 0.80, currency = "res" },
   { internalName = "AFSU:AFSU:0", displayName = "AFSU", price = 1.0, currency = "res" },
   { internalName = "DraconicEvolution:draconicCore", displayName = "Awakened Core", price = 20.0, currency = "res" },
+  { internalName = "IC2:itemPlutonium", displayName = "Плутоний", price = 4.90, currency = "res" },
   { internalName = "minecraft:stone", displayName = "Камень", price = 0.02, currency = "res" }
 
 }
