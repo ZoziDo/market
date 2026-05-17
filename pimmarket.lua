@@ -412,15 +412,15 @@ local function loadSellItems()
                 internalName = internal,
                 qty = item.qty or 0,
                 price = item.price or 0,
-                damage = item.damage or 0
+                damage = item.damage or 0,
+                label = item.label  -- добавляем
             })
         end
     end
 end
 
 -- ==================== СКАНИРОВАНИЕ И ИЗЪЯТИЕ ====================
-local function scanPlayerInventory(targetName, targetDamage)
-    local pimAddr = getPimAddr()
+local function scanPlayerInventory(targetName, targetDamage, targetLabel)
     if not pimAddr then return 0 end
     targetDamage = targetDamage or 0
     local total = 0
@@ -432,7 +432,15 @@ local function scanPlayerInventory(targetName, targetDamage)
                 local rawName = stack.name or stack.label or ""
                 local cleanName = rawName:gsub("§.", "")
                 local damage = stack.damage or 0
-                if namesMatch(cleanName, targetName) and damage == targetDamage then
+                local label = stack.label or ""
+                -- Сравнение: если targetLabel задан, сравниваем label, иначе имя+damage
+                local match = false
+                if targetLabel and targetLabel ~= "" then
+                    match = (label == targetLabel)
+                else
+                    match = namesMatch(cleanName, targetName) and damage == targetDamage
+                end
+                if match then
                     total = total + qty
                 end
             end
@@ -450,8 +458,7 @@ local function scanPlayerInventory(targetName, targetDamage)
     return total
 end
 
-local function extractToME(targetName, amount, targetDamage)
-    local pimAddr = getPimAddr()
+local function extractToME(targetName, amount, targetDamage, targetLabel)
     if not pimAddr or amount <= 0 then return 0 end
     targetDamage = targetDamage or 0
     local extracted = 0
@@ -464,7 +471,14 @@ local function extractToME(targetName, amount, targetDamage)
                 local rawName = stack.name or stack.label or ""
                 local cleanName = rawName:gsub("§.", "")
                 local damage = stack.damage or 0
-                if namesMatch(cleanName, targetName) and damage == targetDamage then
+                local label = stack.label or ""
+                local match = false
+                if targetLabel and targetLabel ~= "" then
+                    match = (label == targetLabel)
+                else
+                    match = namesMatch(cleanName, targetName) and damage == targetDamage
+                end
+                if match then
                     local toTake = math.min(qty, amount - extracted)
                     if toTake > 0 then
                         local moved = component.invoke(pimAddr, "pushItem", PUSH_DIRECTION, slot, toTake)
@@ -1031,7 +1045,7 @@ local function performSell()
     drawCenteredText(17, "Выполняется пополнение...", colors.accent_main)
     os.sleep(0.2)
 
-    local realExtracted = extractToME(sellConfirmItem.internalName, foundAmount, sellConfirmItem.damage or 0)
+    local realExtracted = extractToME(sellConfirmItem.internalName, foundAmount, sellConfirmItem.damage or 0, sellConfirmItem.label)
     if realExtracted == 0 then
         drawCenteredText(17, "Не удалось изъять предметы! Проверьте инвентарь.", colors.error)
         os.sleep(2)
