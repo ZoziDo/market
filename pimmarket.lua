@@ -1520,7 +1520,7 @@ while true do
         end
     end
 
-    if e == "touch" then
+        if e == "touch" then
         local x, y = ev[3], ev[4]
 
         if showSellPopup and currentScreen == "sell_scan" then
@@ -1540,7 +1540,7 @@ while true do
                 drawSellScanScreen()
             end
             goto continue
-         elseif showInsufficientPopup then
+        elseif showInsufficientPopup then
             local popupWidth = 52
             local popupHeight = 10
             local popupX = math.floor((80 - popupWidth) / 2)
@@ -1555,14 +1555,13 @@ while true do
             }
             if isButtonClicked(okBtn, x, y) then
                 showInsufficientPopup = false
-                currentScreen = "shop_buy"   -- возвращаемся к списку покупок
+                currentScreen = "shop_buy"
                 drawBuyStatic()
                 drawBuyItemsList()
                 drawBuyButtons()
             end
             goto continue
-                
-            elseif showPartialPopup then
+        elseif showPartialPopup then
             local popupWidth = 52
             local popupHeight = 9
             local popupX = math.floor((80 - popupWidth) / 2)
@@ -1600,6 +1599,20 @@ while true do
                 drawBuyButtons()
             end
             goto continue
+        elseif currentScreen == "shop_buy" or currentScreen == "shop_sell" then
+            if y >= 7 and y <= 21 and x >= 2 and x <= 77 then
+                local relativeRow = y - 6
+                local clickedIndex = listScroll + relativeRow - 1
+                local item = filteredItems[clickedIndex]
+                if item and (currentShopMode ~= "buy" or item.qty > 0) then
+                    selectedIndex = clickedIndex
+                    selectedItem = item
+                    hoveredIndex = 0
+                    updateSelectorDisplay(selectedItem)
+                    drawBuyItemsList()
+                    drawBuyButtons()
+                end
+                goto continue
             end
 
             if x >= 78 and y >= 7 and y <= 21 then
@@ -1672,7 +1685,6 @@ while true do
                 drawBuyButtons()
                 goto continue
             end
-
         elseif currentScreen == "purchase" then
             if (y >= 24 and y <= 24) and (x >= 19 and x <= 28) then
                 if currentShopMode == "buy" then
@@ -1840,6 +1852,7 @@ while true do
                 end
             end
         end
+        
     elseif e == "scroll" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
         local direction = ev[5]
         local x = ev[3]
