@@ -1562,15 +1562,17 @@ while true do
             end
             goto continue
                 
-        elseif showPartialPopup then
+            elseif showPartialPopup then
             local popupWidth = 52
             local popupHeight = 9
             local popupX = math.floor((80 - popupWidth) / 2)
             local popupY = 8
+            local okBtnText = "[ ПРИНЯТЬ ]"
+            local okBtnWidth = unicode.len(okBtnText) + 2
             local okBtn = {
-                x = popupX + math.floor((popupWidth - 12) / 2),
+                x = popupX + math.floor((popupWidth - okBtnWidth) / 2),
                 y = popupY+6,
-                xs = 12,
+                xs = okBtnWidth,
                 ys = 1
             }
             if isButtonClicked(okBtn, x, y) then
@@ -1598,20 +1600,6 @@ while true do
                 drawBuyButtons()
             end
             goto continue
-        elseif currentScreen == "shop_buy" or currentScreen == "shop_sell" then
-            if y >= 7 and y <= 21 and x >= 2 and x <= 77 then
-                local relativeRow = y - 6
-                local clickedIndex = listScroll + relativeRow - 1
-                local item = filteredItems[clickedIndex]
-                if item and (currentShopMode ~= "buy" or item.qty > 0) then
-                    selectedIndex = clickedIndex
-                    selectedItem = item
-                    hoveredIndex = 0
-                    updateSelectorDisplay(selectedItem)
-                    drawBuyItemsList()
-                    drawBuyButtons()
-                end
-                goto continue
             end
 
             if x >= 78 and y >= 7 and y <= 21 then
