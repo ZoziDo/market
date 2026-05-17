@@ -165,6 +165,8 @@ local partialItem = nil
 local showInsufficientPopup = false
 local insufficientBalance = 0
 
+local showInventoryFullPopup = false   -- НОВЫЙ ПОПАП
+
 local reportInput = ""
 local lastReportTime = nil
 local showShopDenied = false
@@ -864,7 +866,7 @@ local function drawInsufficientPopup()
         fg = colors.success
     }
     drawFlexButton(okBtn)
-end   
+end
 
 -- ========== ПОПАП "ЧАСТИЧНАЯ ВЫДАЧА" ==========
 local function drawPartialPopup()
@@ -897,6 +899,46 @@ local function drawPartialPopup()
     gpu.set(line3X, popupY+4, line3)
 
     local okBtnText = "[ ПРИНЯТЬ ]"
+    local okBtnWidth = unicode.len(okBtnText) + 2
+    local okBtn = {
+        x = popupX + math.floor((popupWidth - okBtnWidth) / 2),
+        y = popupY+6,
+        xs = okBtnWidth,
+        ys = 1,
+        text = okBtnText,
+        bg = colors.bg_button,
+        fg = colors.success
+    }
+    drawFlexButton(okBtn)
+end
+
+-- ========== НОВЫЙ ПОПАП "ИНВЕНТАРЬ ПОЛОН" ==========
+local function drawInventoryFullPopup()
+    local popupWidth = 52
+    local popupHeight = 9
+    local popupX = math.floor((80 - popupWidth) / 2)
+    local popupY = 9
+
+    gpu.setBackground(colors.black_fon)
+    gpu.fill(popupX, popupY, popupWidth, popupHeight, " ")
+    gpu.fill(popupX+1, popupY+1, popupWidth-2, popupHeight-2, " ")
+    drawPopupBorder(popupX, popupY, popupWidth, popupHeight, colors.error)
+
+    gpu.setForeground(colors.error)
+    local title = "ПРЕДУПРЕЖДЕНИЕ"
+    local titleX = popupX + math.floor((popupWidth - unicode.len(title)) / 2)
+    gpu.set(titleX, popupY, title)
+
+    gpu.setForeground(colors.text_main)
+    local line1 = "Ваш инвентарь полон!"
+    local line1X = popupX + math.floor((popupWidth - unicode.len(line1)) / 2)
+    gpu.set(line1X, popupY+2, line1)
+
+    local line2 = "Освободите его и повторите попытку."
+    local line2X = popupX + math.floor((popupWidth - unicode.len(line2)) / 2)
+    gpu.set(line2X, popupY+3, line2)
+
+    local okBtnText = "[ ПОНЯТНО ]"
     local okBtnWidth = unicode.len(okBtnText) + 2
     local okBtn = {
         x = popupX + math.floor((popupWidth - okBtnWidth) / 2),
@@ -1121,20 +1163,31 @@ local function performBuy()
         end
     end
 
-    -- Если не выдано ни одного предмета
+    -- Если не выдано ни одного предмета (инвентарь полон)
     if extracted == 0 then
-        drawCenteredText(20, "Не удалось выдать предметы! " .. (lastError or "Проверьте инвентарь."), colors.error)
-        os.sleep(2)
-        currentScreen = "shop_buy"
-        drawBuyStatic()
-        drawBuyItemsList()
-        drawBuyButtons()
+        showInventoryFullPopup = true
+        drawPurchaseScreen()
+        drawInventoryFullPopup()
         return
     end
 
-    -- Частичная выдача
+    -- Частичная выдача (ДЕНЬГИ СПИСЫВАЕМ СРАЗУ)
     if extracted < qty then
         local actuallySpent = extracted * item.price
+        coinBalance = coinBalance - actuallySpent
+        playerTransactions = playerTransactions + 1
+
+        if currentToken then
+            modem.send(serverAddress, 0xffef, serialization.serialize({
+                op = "buy",
+                name = currentPlayer,
+                token = currentToken,
+                item = item.displayName,
+                qty = extracted,
+                value = actuallySpent
+            }))
+        end
+
         partialExtracted = extracted
         partialRequested = qty
         partialRefund = actuallySpent
@@ -1520,7 +1573,7 @@ while true do
         end
     end
 
-        if e == "touch" then
+    if e == "touch" then
         local x, y = ev[3], ev[4]
 
         if showSellPopup and currentScreen == "sell_scan" then
@@ -1576,23 +1629,27 @@ while true do
             }
             if isButtonClicked(okBtn, x, y) then
                 showPartialPopup = false
-                local actuallySpent = partialExtracted * partialItem.price
-                coinBalance = coinBalance - actuallySpent
-                playerTransactions = playerTransactions + 1
-
-                if currentToken then
-                    modem.send(serverAddress, 0xffef, serialization.serialize({
-                        op = "buy",
-                        name = currentPlayer,
-                        token = currentToken,
-                        item = partialItem.displayName,
-                        qty = partialExtracted,
-                        value = actuallySpent
-                    }))
-                end
-
-                drawCenteredText(20, "Куплено " .. partialExtracted .. " шт. за " .. string.format("%.2f", actuallySpent) .. " ₵", colors.success)
-                os.sleep(0.8)
+                currentScreen = "shop_buy"
+                drawBuyStatic()
+                drawBuyItemsList()
+                drawBuyButtons()
+            end
+            goto continue
+        elseif showInventoryFullPopup then
+            local popupWidth = 52
+            local popupHeight = 9
+            local popupX = math.floor((80 - popupWidth) / 2)
+            local popupY = 9
+            local okBtnText = "[ ПОНЯТНО ]"
+            local okBtnWidth = unicode.len(okBtnText) + 2
+            local okBtn = {
+                x = popupX + math.floor((popupWidth - okBtnWidth) / 2),
+                y = popupY+6,
+                xs = okBtnWidth,
+                ys = 1
+            }
+            if isButtonClicked(okBtn, x, y) then
+                showInventoryFullPopup = false
                 currentScreen = "shop_buy"
                 drawBuyStatic()
                 drawBuyItemsList()
@@ -1852,7 +1909,6 @@ while true do
                 end
             end
         end
-        
     elseif e == "scroll" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
         local direction = ev[5]
         local x = ev[3]
