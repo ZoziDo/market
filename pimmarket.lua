@@ -1077,50 +1077,130 @@ local function performBuy()
     local extracted = 0
     local lastError = nil
 
-    -- Цикл выдачи
-   while remaining > 0 do
-    local toTake = math.min(remaining, maxStackSize)
-    local success, result = pcall(function()
-        return me.exportItem(fingerprint, PULL_DIRECTION, toTake)
-    end)
+   local function performBuy()
+    if not playerAgreed then
+        drawCenteredText(20, "Сначала примите пользовательское соглашение", colors.error)
+        os.sleep(2)
+        currentScreen = "menu"
+        drawMainMenu()
+        return
+    end
 
-    local got = 0
-    if success then
-        if type(result) == "number" then
-            got = result
-        elseif type(result) == "boolean" and result == true then
-            got = toTake
-        elseif type(result) == "table" then
-            if result.count then got = result.count
-            elseif result.amount then got = result.amount
-            elseif result.size then got = result.size
-            else got = toTake end
+    local me = component.me_interface
+    local item = purchaseItem
+
+    -- Проверка наличия предмета в ME-сети
+    local actualQty = getActualItemQuantity(item.internalName, item.damage)
+    if actualQty <= 0 then
+        drawCenteredText(20, "Товар закончился! Обновление списка...", colors.error)
+        os.sleep(0.8)
+        loadBuyItems()
+        drawBuyStatic()
+        drawBuyItemsList()
+        drawBuyButtons()
+        currentScreen = "shop_buy"
+        return
+    end
+
+    local qty = purchaseQuantity
+    if qty > actualQty then
+        qty = actualQty
+        purchaseQuantity = qty
+        drawPurchaseScreen()
+    end
+
+    if qty <= 0 then
+        drawCenteredText(20, "Выберите количество!", colors.error)
+        os.sleep(0.8)
+        currentScreen = "shop_buy"
+        drawBuyStatic()
+        drawBuyItemsList()
+        drawBuyButtons()
+        return
+    end
+
+    local totalCost = item.price * qty
+    if coinBalance < totalCost then
+        showInsufficientPopup = true
+        insufficientBalance = coinBalance
+        drawPurchaseScreen()
+        drawInsufficientPopup()
+        return
+    end
+
+    drawCenteredText(20, "Выполняется покупка...", colors.accent_main)
+    os.sleep(0.4)
+
+    -- Формируем fingerprint (как в селекторе)
+    local id = item.internalName
+    if not id:find(":") then
+        id = "minecraft:" .. id
+    end
+    local fingerprint = { id = id, dmg = item.damage or 0 }
+
+    -- Определяем максимальный размер стака
+    local maxStackSize = 64
+    local ok, detail = pcall(me.getItemDetail, me, item.internalName, item.damage)
+    if ok and detail and detail.maxSize then
+        maxStackSize = detail.maxSize
+    end
+
+    local remaining = qty
+    local extracted = 0
+    local lastError = nil
+
+    -- Цикл выдачи предметов
+    while remaining > 0 do
+        local toTake = math.min(remaining, maxStackSize)
+        local success, result = pcall(function()
+            return me.exportItem(fingerprint, PULL_DIRECTION, toTake)
+        end)
+
+        local got = 0
+        if success then
+            if type(result) == "number" then
+                got = result
+            elseif type(result) == "boolean" and result == true then
+                got = toTake
+            elseif type(result) == "table" then
+                if result.count then
+                    got = result.count
+                elseif result.amount then
+                    got = result.amount
+                elseif result.size then
+                    got = result.size
+                else
+                    -- Если таблица без известных полей, считаем что выдано toTake
+                    got = toTake
+                end
+            else
+                lastError = "неизвестный ответ: " .. tostring(result)
+            end
         else
-            lastError = "неизвестный ответ: " .. tostring(result)
+            lastError = tostring(result)
         end
-    else
-        lastError = tostring(result)
+
+        if got > 0 then
+            extracted = extracted + got
+            remaining = remaining - got
+        else
+            if lastError == nil then
+                lastError = "не удалось выдать (вернулось 0 или false)"
+            end
+            break
+        end
     end
 
-    if got > 0 then
-        extracted = extracted + got
-        remaining = remaining - got
-    else
-        if lastError == nil then lastError = "не удалось выдать" end
-        break
+    -- Если не выдано ни одного предмета
+    if extracted == 0 then
+        drawCenteredText(20, "Не удалось выдать предметы! " .. (lastError or "Проверьте инвентарь."), colors.error)
+        os.sleep(2)
+        currentScreen = "shop_buy"
+        drawBuyStatic()
+        drawBuyItemsList()
+        drawBuyButtons()
+        return
     end
-end  -- закрываем while
-
--- Теперь проверяем результат
-if extracted == 0 then
-    drawCenteredText(20, "Не удалось выдать предметы! " .. (lastError or ""), colors.error)
-    os.sleep(2)
-    currentScreen = "shop_buy"
-    drawBuyStatic()
-    drawBuyItemsList()
-    drawBuyButtons()
-    return
-end
 
     -- Частичная выдача
     if extracted < qty then
