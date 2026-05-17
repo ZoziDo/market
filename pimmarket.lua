@@ -852,18 +852,18 @@ local function drawInsufficientPopup()
     local line2X = popupX + math.floor((popupWidth - unicode.len(line2)) / 2)
     gpu.set(line2X, popupY+5, line2)
 
-    local btnWidth = 14
+    local okBtnText = "[ ПОНЯТНО ]"
+    local okBtnWidth = unicode.len(okBtnText) + 2
     local okBtn = {
-        x = popupX + math.floor((popupWidth - btnWidth) / 2),
+        x = popupX + math.floor((popupWidth - okBtnWidth) / 2),
         y = popupY+7,
-        xs = btnWidth,
+        xs = okBtnWidth,
         ys = 1,
-        text = "[ ПОНЯТНО ]",
+        text = okBtnText,
         bg = colors.bg_button,
         fg = colors.success
     }
     drawFlexButton(okBtn)
-end
 
 -- ========== ПОПАП "ЧАСТИЧНАЯ ВЫДАЧА" ==========
 local function drawPartialPopup()
@@ -1537,25 +1537,28 @@ while true do
                 drawSellScanScreen()
             end
             goto continue
-        elseif showInsufficientPopup then
+         elseif showInsufficientPopup then
             local popupWidth = 52
             local popupHeight = 10
             local popupX = math.floor((80 - popupWidth) / 2)
             local popupY = 7
-            local btnWidth = 14
+            local okBtnText = "[ ПОНЯТНО ]"
+            local okBtnWidth = unicode.len(okBtnText) + 2
             local okBtn = {
-                x = popupX + math.floor((popupWidth - btnWidth) / 2),
+                x = popupX + math.floor((popupWidth - okBtnWidth) / 2),
                 y = popupY+7,
-                xs = btnWidth,
+                xs = okBtnWidth,
                 ys = 1
             }
             if isButtonClicked(okBtn, x, y) then
                 showInsufficientPopup = false
+                currentScreen = "shop_buy"   -- возвращаемся к списку покупок
                 drawBuyStatic()
                 drawBuyItemsList()
                 drawBuyButtons()
             end
             goto continue
+                
         elseif showPartialPopup then
             local popupWidth = 52
             local popupHeight = 9
