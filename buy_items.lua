@@ -301,7 +301,7 @@ return {
   { internalName = "dwcity:Rare_plan", displayName = "Улучшенный чертёж", price = 5.72, currency = "res" },
   { internalName = "IC2:itemArmorLappack", displayName = "Ультимейт лаппак", price = 160.05, currency = "res" },
   { internalName = "minecraft:glass_bottle", displayName = "Универсальная жидкостная капсула", price = 0.22, currency = "res" },
-  { internalName = "dwcity:Rare_plan", displayName = "Уникальный чертёж", price = 10.45, currency = "res" },
+  { internalName = "dwcity:Epic_plan", displayName = "Уникальный чертёж", price = 10.45, currency = "res" },
   { internalName = "IC2:itemUran238", displayName = "Уран-238", price = 0.135, currency = "res" },
   { internalName = "appliedenergistics2:item.ItemMultiMaterial", displayName = "Усилитель беспроводного сигнала", price = 1.85, currency = "res", damage = 42 },
   { internalName = "GraviSuite:itemSimpleItem", displayName = "Ускоритель двигателя", price = 10.69, currency = "res", damage = 6 },
