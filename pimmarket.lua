@@ -1078,53 +1078,49 @@ local function performBuy()
     local lastError = nil
 
     -- Цикл выдачи
-    while remaining > 0 do
-        local toTake = math.min(remaining, maxStackSize)
-        local success, result = pcall(function()
-            return me.exportItem(fingerprint, PULL_DIRECTION, toTake)
-        end)
+   while remaining > 0 do
+    local toTake = math.min(remaining, maxStackSize)
+    local success, result = pcall(function()
+        return me.exportItem(fingerprint, PULL_DIRECTION, toTake)
+    end)
 
-        -- Анализ результата
-        local got = 0
-        if success then
-            if type(result) == "number" then
-                got = result
-            elseif type(result) == "boolean" and result == true then
-                got = toTake
-            elseif type(result) == "table" then
-                -- Пытаемся извлечь количество из таблицы
-                if result.count then
-                    got = result.count
-                elseif result.amount then
-                    got = result.amount
-                elseif result.size then
-                    got = result.size
-                elseif result.total then
-                    got = result.total
-                elseif result[1] and type(result[1]) == "number" then
-                    got = result[1]
-                else
-                    -- Если не нашли, считаем что выдано toTake (предполагаем успех)
-                    got = toTake
-                    lastError = "таблица без поля count/amount, предположительно выдано " .. toTake
-                end
-            else
-                lastError = "неизвестный ответ: " .. tostring(result)
-            end
+    local got = 0
+    if success then
+        if type(result) == "number" then
+            got = result
+        elseif type(result) == "boolean" and result == true then
+            got = toTake
+        elseif type(result) == "table" then
+            if result.count then got = result.count
+            elseif result.amount then got = result.amount
+            elseif result.size then got = result.size
+            else got = toTake end
         else
-            lastError = tostring(result)
+            lastError = "неизвестный ответ: " .. tostring(result)
         end
-
-    -- Если не выдано ни одного предмета
-    if extracted == 0 then
-        drawCenteredText(20, "Не удалось выдать предметы! " .. (lastError or "Проверьте инвентарь."), colors.error)
-        os.sleep(2)
-        currentScreen = "shop_buy"
-        drawBuyStatic()
-        drawBuyItemsList()
-        drawBuyButtons()
-        return
+    else
+        lastError = tostring(result)
     end
+
+    if got > 0 then
+        extracted = extracted + got
+        remaining = remaining - got
+    else
+        if lastError == nil then lastError = "не удалось выдать" end
+        break
+    end
+end  -- закрываем while
+
+-- Теперь проверяем результат
+if extracted == 0 then
+    drawCenteredText(20, "Не удалось выдать предметы! " .. (lastError or ""), colors.error)
+    os.sleep(2)
+    currentScreen = "shop_buy"
+    drawBuyStatic()
+    drawBuyItemsList()
+    drawBuyButtons()
+    return
+end
 
     -- Частичная выдача
     if extracted < qty then
