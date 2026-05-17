@@ -162,6 +162,12 @@ local sellConfirmItem = nil
 local foundAmount = 0
 local showSellPopup = false
 
+local showPartialPopup = false
+local partialExtracted = 0
+local partialRequested = 0
+local partialRefund = 0
+local partialItem = nil
+
 local showInsufficientPopup = false
 local insufficientBalance = 0
 
@@ -425,7 +431,7 @@ local function loadSellItems()
                 internalName = internal,
                 qty = item.qty or 0,
                 price = item.price or 0,
-                damage = item.damage or 0
+                damage = item.damage or 0   -- добавляем damage
             })
         end
     end
@@ -910,6 +916,48 @@ local function drawInsufficientPopup()
     drawFlexButton(okBtn)
 end
 
+-- ========== ПОПАП "ЧАСТИЧНАЯ ВЫДАЧА" ==========
+local function drawPartialPopup()
+    local popupWidth = 52
+    local popupHeight = 9
+    local popupX = math.floor((80 - popupWidth) / 2)
+    local popupY = 8
+
+    gpu.setBackground(colors.black_fon)
+    gpu.fill(popupX, popupY, popupWidth, popupHeight, " ")
+    gpu.fill(popupX+1, popupY+1, popupWidth-2, popupHeight-2, " ")
+    drawPopupBorder(popupX, popupY, popupWidth, popupHeight, colors.error)
+
+    gpu.setForeground(colors.error)
+    local title = "НЕ ПОЛНАЯ ВЫДАЧА"
+    local titleX = popupX + math.floor((popupWidth - unicode.len(title)) / 2)
+    gpu.set(titleX, popupY, title)
+
+    gpu.setForeground(colors.text_main)
+    local line1 = "Не хватило места в инвентаре!"
+    local line1X = popupX + math.floor((popupWidth - unicode.len(line1)) / 2)
+    gpu.set(line1X, popupY+2, line1)
+
+    local line2 = "Выдано " .. partialExtracted .. " из " .. partialRequested
+    local line2X = popupX + math.floor((popupWidth - unicode.len(line2)) / 2)
+    gpu.set(line2X, popupY+3, line2)
+
+    local line3 = "Списано: " .. string.format("%.2f", partialRefund) .. " ₵"
+    local line3X = popupX + math.floor((popupWidth - unicode.len(line3)) / 2)
+    gpu.set(line3X, popupY+4, line3)
+
+    local okBtn = {
+        x = popupX + math.floor((popupWidth - 12) / 2),
+        y = popupY+6,
+        xs = 12,
+        ys = 1,
+        text = "[ ПРИНЯТЬ ]",
+        bg = colors.bg_button,
+        fg = colors.success
+    }
+    drawFlexButton(okBtn)
+end
+
 local function drawSellScanScreen()
     currentScreen = "sell_scan"
     clear()
@@ -1041,8 +1089,6 @@ local function performBuy()
         drawPurchaseScreen()
     end
 
-    local totalCost = item.price * qty
-
     if qty <= 0 then
         drawCenteredText(20, "Выберите количество!", colors.error)
         os.sleep(0.8)
@@ -1053,6 +1099,7 @@ local function performBuy()
         return
     end
 
+    local totalCost = item.price * qty
     if coinBalance < totalCost then
         showInsufficientPopup = true
         insufficientBalance = coinBalance
@@ -1090,32 +1137,53 @@ local function performBuy()
         end
     end
 
-    if extracted > 0 then
-        coinBalance = coinBalance - totalCost
-        playerTransactions = playerTransactions + 1
+    if extracted == 0 then
+        drawCenteredText(20, "Не удалось выдать предметы! Возможно, нет места в инвентаре.", colors.error)
+        os.sleep(1.5)
+        currentScreen = "shop_buy"
+        drawBuyStatic()
+        drawBuyItemsList()
+        drawBuyButtons()
+        return
+    end
 
-        if currentToken then
-            modem.send(serverAddress, 0xffef, serialization.serialize({
-                op = "buy",
-                name = currentPlayer,
-                token = currentToken,
-                item = item.displayName,
-                qty = extracted,
-                value = totalCost
-            }))
+    -- Частичная выдача
+    if extracted < qty then
+        local actuallySpent = extracted * item.price
+        partialExtracted = extracted
+        partialRequested = qty
+        partialRefund = actuallySpent   -- сколько списано
+        partialItem = item
+        showPartialPopup = true
+        -- Рисуем экран покупки и поверх попап
+        drawPurchaseScreen()
+        drawPartialPopup()
+        return
+    end
+
+    -- Полная выдача
+    coinBalance = coinBalance - totalCost
+    playerTransactions = playerTransactions + 1
+
+    if currentToken then
+        modem.send(serverAddress, 0xffef, serialization.serialize({
+            op = "buy",
+            name = currentPlayer,
+            token = currentToken,
+            item = item.displayName,
+            qty = extracted,
+            value = totalCost
+        }))
+    end
+
+    drawCenteredText(20, "Куплено " .. extracted .. " шт. за " .. string.format("%.2f", totalCost) .. " ₵", colors.success)
+
+    loadBuyItems()
+    for _, newItem in ipairs(shopItems) do
+        if newItem.internalName == item.internalName and newItem.damage == item.damage then
+            purchaseItem = newItem
+            break
         end
-
-        drawCenteredText(20, "Куплено " .. extracted .. " шт. за " .. string.format("%.2f", totalCost) .. " ₵", colors.success)
-
-        loadBuyItems()
-        for _, newItem in ipairs(shopItems) do
-            if newItem.internalName == item.internalName and newItem.damage == item.damage then
-                purchaseItem = newItem
-                break
-            end
-        end
-    else
-        drawCenteredText(20, "Не удалось выдать предметы! Ошибка: " .. (lastError or "неизвестная"), colors.error)
     end
     os.sleep(0.8)
     currentScreen = "shop_buy"
@@ -1468,121 +1536,171 @@ while true do
     end
 
     if e == "touch" then
-        local x, y = ev[3], ev[4]
+    local x, y = ev[3], ev[4]
 
-        if showSellPopup and currentScreen == "sell_scan" then
-            local popupWidth = 40
-            local popupHeight = 10
-            local popupX = math.floor((80 - popupWidth) / 2)
-            local popupY = 10
-            local yesBtn = {x=popupX+5, y=popupY+7, xs=13, ys=1}
-            local noBtn  = {x=popupX+popupWidth-15, y=popupY+7, xs=12, ys=1}
-            if isButtonClicked(yesBtn, x, y) then
-                performSell()
-            elseif isButtonClicked(noBtn, x, y) then
-                showSellPopup = false
-                drawSellScanScreen()
-            elseif not (x >= popupX and x < popupX + popupWidth and y >= popupY and y < popupY + popupHeight) then
-                showSellPopup = false
-                drawSellScanScreen()
-            end
-            goto continue
-        elseif showInsufficientPopup then
-            local popupWidth = 52
-            local popupHeight = 10
-            local popupX = math.floor((80 - popupWidth) / 2)
-            local popupY = 7
-            local btnWidth = 14
-            local okBtn = {
-                x = popupX + math.floor((popupWidth - btnWidth) / 2),
-                y = popupY+7,
-                xs = btnWidth,
-                ys = 1
-            }
-            if isButtonClicked(okBtn, x, y) then
-                showInsufficientPopup = false
-                drawBuyStatic()
-                drawBuyItemsList()
-                drawBuyButtons()
-            end
-            goto continue
-        elseif currentScreen == "shop_buy" or currentScreen == "shop_sell" then
-            -- Клик по списку (строки 7–21)
-            if y >= 7 and y <= 21 and x >= 2 and x <= 77 then
-                local relativeRow = y - 6
-                local clickedIndex = listScroll + relativeRow - 1
-                local item = filteredItems[clickedIndex]
-                if item and (currentShopMode ~= "buy" or item.qty > 0) then
-                    selectedIndex = clickedIndex
-                    selectedItem = item
-                    hoveredIndex = 0
-                    updateSelectorDisplay(selectedItem)
-                    drawBuyItemsList()
-                    drawBuyButtons()
-                end
-                goto continue
-            end
+    if showSellPopup and currentScreen == "sell_scan" then
+        local popupWidth = 40
+        local popupHeight = 10
+        local popupX = math.floor((80 - popupWidth) / 2)
+        local popupY = 10
+        local yesBtn = {x=popupX+5, y=popupY+7, xs=13, ys=1}
+        local noBtn  = {x=popupX+popupWidth-15, y=popupY+7, xs=12, ys=1}
+        if isButtonClicked(yesBtn, x, y) then
+            performSell()
+        elseif isButtonClicked(noBtn, x, y) then
+            showSellPopup = false
+            drawSellScanScreen()
+        elseif not (x >= popupX and x < popupX + popupWidth and y >= popupY and y < popupY + popupHeight) then
+            showSellPopup = false
+            drawSellScanScreen()
+        end
+        goto continue
+    elseif showInsufficientPopup then
+        local popupWidth = 52
+        local popupHeight = 10
+        local popupX = math.floor((80 - popupWidth) / 2)
+        local popupY = 7
+        local btnWidth = 14
+        local okBtn = {
+            x = popupX + math.floor((popupWidth - btnWidth) / 2),
+            y = popupY+7,
+            xs = btnWidth,
+            ys = 1
+        }
+        if isButtonClicked(okBtn, x, y) then
+            showInsufficientPopup = false
+            drawBuyStatic()
+            drawBuyItemsList()
+            drawBuyButtons()
+        end
+        goto continue
+    elseif showPartialPopup then
+        local popupWidth = 52
+        local popupHeight = 9
+        local popupX = math.floor((80 - popupWidth) / 2)
+        local popupY = 8
+        local okBtn = {
+            x = popupX + math.floor((popupWidth - 12) / 2),
+            y = popupY+6,
+            xs = 12,
+            ys = 1
+        }
+        if isButtonClicked(okBtn, x, y) then
+            showPartialPopup = false
+            -- Списание денег за выданное
+            local actuallySpent = partialExtracted * partialItem.price
+            coinBalance = coinBalance - actuallySpent
+            playerTransactions = playerTransactions + 1
 
-            -- Клик по скроллбару (строки 7–21)
-            if x >= 78 and y >= 7 and y <= 21 then
-                local total = #filteredItems
-                if total > visibleRows then
-                    local clickPos = y - 6
-                    listScroll = math.floor((clickPos - 1) * (total - visibleRows) / visibleRows) + 1
-                    drawBuyItemsList()
-                end
-                goto continue
-            end
-
-            -- Поле поиска и кнопка "Стереть" (строка 3)
-            if y == 3 and x >= 42 and x <= 64 then
-                searchActive = true
-                searchInput = shopSearch
-                drawBuyStatic()
-                drawBuyItemsList()
-                drawBuyButtons()
-                goto continue
-            end
-            if y == 3 and x >= 66 and x <= 78 then
-                shopSearch = ""
-                searchInput = ""
-                searchActive = false
-                drawBuyStatic()
-                drawBuyItemsList()
-                drawBuyButtons()
-                goto continue
+            if currentToken then
+                modem.send(serverAddress, 0xffef, serialization.serialize({
+                    op = "buy",
+                    name = currentPlayer,
+                    token = currentToken,
+                    item = partialItem.displayName,
+                    qty = partialExtracted,
+                    value = actuallySpent
+                }))
             end
 
-            if isButtonClicked(backButton, x, y) then
-                currentScreen = "shop"
-                selectedIndex = 0
-                selectedItem = nil
+            drawCenteredText(20, "Куплено " .. partialExtracted .. " шт. за " .. string.format("%.2f", actuallySpent) .. " ₵", colors.success)
+            os.sleep(0.8)
+            currentScreen = "shop_buy"
+            drawBuyStatic()
+            drawBuyItemsList()
+            drawBuyButtons()
+        end
+        goto continue
+    elseif currentScreen == "shop_buy" or currentScreen == "shop_sell" then
+        -- Клик по списку (строки 7–21)
+        if y >= 7 and y <= 21 and x >= 2 and x <= 77 then
+            local relativeRow = y - 6
+            local clickedIndex = listScroll + relativeRow - 1
+            local item = filteredItems[clickedIndex]
+            if item and (currentShopMode ~= "buy" or item.qty > 0) then
+                selectedIndex = clickedIndex
+                selectedItem = item
                 hoveredIndex = 0
-                updateSelectorDisplay(nil)
-                drawShopMenu()
-                goto continue
+                updateSelectorDisplay(selectedItem)
+                drawBuyItemsList()
+                drawBuyButtons()
             end
+            goto continue
+        end
 
-            if isButtonClicked(nextButton, x, y) then
-                if selectedItem and (currentShopMode ~= "buy" or selectedItem.qty > 0) then
-                    if currentShopMode == "buy" then
-                        local price = selectedItem.price
-                        if coinBalance < price then
-                            showInsufficientPopup = true
-                            insufficientBalance = coinBalance
-                            drawBuyStatic()
-                            drawBuyItemsList()
-                            drawBuyButtons()
-                            drawInsufficientPopup()
-                            goto continue
-                        end
-                        goToPurchase(selectedItem)
-                    else
-                        goToSellConfirm(selectedItem)
-                    end
-                end
-                goto continue
+        -- Клик по скроллбару (строки 7–21)
+        if x >= 78 and y >= 7 and y <= 21 then
+            local total = #filteredItems
+            if total > visibleRows then
+                local clickPos = y - 6
+                listScroll = math.floor((clickPos - 1) * (total - visibleRows) / visibleRows) + 1
+                drawBuyItemsList()
             end
+            goto continue
+        end
+
+        -- Поле поиска и кнопка "Стереть" (строка 3)
+        if y == 3 and x >= 42 and x <= 64 then
+            searchActive = true
+            searchInput = shopSearch
+            drawBuyStatic()
+            drawBuyItemsList()
+            drawBuyButtons()
+            goto continue
+        end
+        if y == 3 and x >= 66 and x <= 78 then
+            shopSearch = ""
+            searchInput = ""
+            searchActive = false
+            drawBuyStatic()
+            drawBuyItemsList()
+            drawBuyButtons()
+            goto continue
+        end
+
+        if isButtonClicked(backButton, x, y) then
+            currentScreen = "shop"
+            selectedIndex = 0
+            selectedItem = nil
+            hoveredIndex = 0
+            updateSelectorDisplay(nil)
+            drawShopMenu()
+            goto continue
+        end
+
+        if isButtonClicked(nextButton, x, y) then
+            if selectedItem and (currentShopMode ~= "buy" or selectedItem.qty > 0) then
+                if currentShopMode == "buy" then
+                    local price = selectedItem.price
+                    if coinBalance < price then
+                        showInsufficientPopup = true
+                        insufficientBalance = coinBalance
+                        drawBuyStatic()
+                        drawBuyItemsList()
+                        drawBuyButtons()
+                        drawInsufficientPopup()
+                        goto continue
+                    end
+                    goToPurchase(selectedItem)
+                else
+                    goToSellConfirm(selectedItem)
+                end
+            end
+            goto continue
+        end
+
+        -- Если был активен поиск по клавиатуре
+        if searchActive then
+            shopSearch = searchInput
+            searchActive = false
+            listScroll = 1
+            selectedIndex = 0
+            selectedItem = nil
+            hoveredIndex = 0
+            drawBuyItemsList()
+            drawBuyButtons()
+            goto continue
+        end
 
             -- Если был активен поиск по клавиатуре
             if searchActive then
@@ -1596,6 +1714,7 @@ while true do
                 drawBuyButtons()
                 goto continue
             end
+            
         elseif currentScreen == "purchase" then
             if (y >= 24 and y <= 24) and (x >= 19 and x <= 28) then
                 if currentShopMode == "buy" then
