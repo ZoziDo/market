@@ -1060,7 +1060,11 @@ local function performBuy()
     os.sleep(0.4)
 
     -- Формируем запрос на выдачу предметов
-    local fingerprint = { name = item.internalName, damage = item.damage or 0 }
+    local id = item.internalName
+        if not id:find(":") then
+            id = "minecraft:" .. id
+        end
+        local fingerprint = { id = id, dmg = item.damage or 0 }
 
     -- Определяем максимальный размер стака
     local maxStackSize = 64
