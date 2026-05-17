@@ -899,10 +899,15 @@ local function drawPartialPopup()
     local line2X = popupX + math.floor((popupWidth - unicode.len(line2)) / 2)
     gpu.set(line2X, popupY+3, line2)
 
+    -- Исправленная центрированная строка "Списано: ..."
+    local spentLabel = "Списано: "
+    local spentValue = string.format("%.2f", partialRefund) .. " ₵"
+    local fullSpentText = spentLabel .. spentValue
+    local spentStartX = popupX + math.floor((popupWidth - unicode.len(fullSpentText)) / 2)
     gpu.setForeground(colors.success)
-    gpu.set(popupX+3, popupY+4, "Списано: ")
+    gpu.set(spentStartX, popupY+4, spentLabel)
     gpu.setForeground(colors.text_bright)
-    gpu.set(popupX+3 + unicode.len("Списано: "), popupY+4, string.format("%.2f", partialRefund) .. " ₵")
+    gpu.set(spentStartX + unicode.len(spentLabel), popupY+4, spentValue)
 
     local okBtnText = "[ ПРИНЯТЬ ]"
     local okBtnWidth = unicode.len(okBtnText) + 2
