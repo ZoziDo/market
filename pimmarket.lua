@@ -1090,27 +1090,30 @@ local function performBuy()
             if type(result) == "number" then
                 got = result
             elseif type(result) == "boolean" and result == true then
-                -- Некоторые реализации возвращают true при успешной выдаче toTake предметов
                 got = toTake
-            elseif result and type(result) == "table" and result.count then
-                got = result.count
+            elseif type(result) == "table" then
+                -- Пытаемся извлечь количество из таблицы
+                if result.count then
+                    got = result.count
+                elseif result.amount then
+                    got = result.amount
+                elseif result.size then
+                    got = result.size
+                elseif result.total then
+                    got = result.total
+                elseif result[1] and type(result[1]) == "number" then
+                    got = result[1]
+                else
+                    -- Если не нашли, считаем что выдано toTake (предполагаем успех)
+                    got = toTake
+                    lastError = "таблица без поля count/amount, предположительно выдано " .. toTake
+                end
             else
                 lastError = "неизвестный ответ: " .. tostring(result)
             end
         else
             lastError = tostring(result)
         end
-
-        if got > 0 then
-            extracted = extracted + got
-            remaining = remaining - got
-        else
-            if lastError == nil then
-                lastError = "не удалось выдать (вернулось 0 или false)"
-            end
-            break
-        end
-    end
 
     -- Если не выдано ни одного предмета
     if extracted == 0 then
