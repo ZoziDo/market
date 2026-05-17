@@ -165,7 +165,7 @@ local partialItem = nil
 local showInsufficientPopup = false
 local insufficientBalance = 0
 
-local showInventoryFullPopup = false   -- НОВЫЙ ПОПАП
+local showInventoryFullPopup = false
 
 local reportInput = ""
 local lastReportTime = nil
@@ -500,9 +500,11 @@ end
 local function drawBuyStatic()
     clear()
     drawScreenBorder()
-    local coinText = "Баланс: " .. string.format("%.2f", coinBalance) .. " Coina ₵"
+    -- Баланс: слово "Баланс:" цвет success, число и валюта цвет accent_main
     gpu.setForeground(colors.success)
-    gpu.set(3, 1, coinText)
+    gpu.set(3, 1, "Баланс: ")
+    gpu.setForeground(colors.accent_main)
+    gpu.set(3 + unicode.len("Баланс: "), 1, string.format("%.2f", coinBalance) .. " Coina ₵")
 
     if currentShopMode == "buy" then
         gpu.setForeground(colors.accent_secondary)
@@ -697,9 +699,11 @@ local function drawPurchaseScreen()
     currentScreen = "purchase"
     clear()
     drawScreenBorder()
-    local coinText = "Баланс: " .. string.format("%.2f", coinBalance) .. " Coina ₵"
+    -- Баланс
     gpu.setForeground(colors.success)
-    gpu.set(3, 1, coinText)
+    gpu.set(3, 1, "Баланс: ")
+    gpu.setForeground(colors.accent_main)
+    gpu.set(3 + unicode.len("Баланс: "), 1, string.format("%.2f", coinBalance) .. " Coina ₵")
 
     gpu.setForeground(colors.success)
     gpu.set(3, 3, "Имя предмета: ")
@@ -850,9 +854,10 @@ local function drawInsufficientPopup()
     local line1bX = popupX + math.floor((popupWidth - unicode.len(line1b)) / 2)
     gpu.set(line1bX, popupY+3, line1b)
 
-    local line2 = "Твой баланс: " .. string.format("%.2f", insufficientBalance) .. " ₵"
-    local line2X = popupX + math.floor((popupWidth - unicode.len(line2)) / 2)
-    gpu.set(line2X, popupY+5, line2)
+    gpu.setForeground(colors.success)
+    gpu.set(popupX+3, popupY+5, "Твой баланс: ")
+    gpu.setForeground(colors.accent_main)
+    gpu.set(popupX+3 + unicode.len("Твой баланс: "), popupY+5, string.format("%.2f", insufficientBalance) .. " ₵")
 
     local okBtnText = "[ ПОНЯТНО ]"
     local okBtnWidth = unicode.len(okBtnText) + 2
@@ -894,9 +899,10 @@ local function drawPartialPopup()
     local line2X = popupX + math.floor((popupWidth - unicode.len(line2)) / 2)
     gpu.set(line2X, popupY+3, line2)
 
-    local line3 = "Списано: " .. string.format("%.2f", partialRefund) .. " ₵"
-    local line3X = popupX + math.floor((popupWidth - unicode.len(line3)) / 2)
-    gpu.set(line3X, popupY+4, line3)
+    gpu.setForeground(colors.success)
+    gpu.set(popupX+3, popupY+4, "Списано: ")
+    gpu.setForeground(colors.text_bright)
+    gpu.set(popupX+3 + unicode.len("Списано: "), popupY+4, string.format("%.2f", partialRefund) .. " ₵")
 
     local okBtnText = "[ ПРИНЯТЬ ]"
     local okBtnWidth = unicode.len(okBtnText) + 2
@@ -956,9 +962,11 @@ local function drawSellScanScreen()
     currentScreen = "sell_scan"
     clear()
     drawScreenBorder()
-    local coinText = "Баланс: " .. string.format("%.2f", coinBalance) .. " Coina ₵"
+    -- Баланс
     gpu.setForeground(colors.success)
-    gpu.set(3, 1, coinText)
+    gpu.set(3, 1, "Баланс: ")
+    gpu.setForeground(colors.accent_main)
+    gpu.set(3 + unicode.len("Баланс: "), 1, string.format("%.2f", coinBalance) .. " Coina ₵")
 
     gpu.setForeground(colors.success)
     gpu.set(3, 3, "Имя предмета: ")
@@ -1369,10 +1377,12 @@ local function drawMainMenu()
         gpu.setForeground(colors.text_bright)
         gpu.set(x1 + unicode.len(hello1), 4, hello2)
 
-        local coinText = "Ваш баланс: " .. string.format("%.2f", coinBalance) .. " Coina ₵"
-        local x2 = math.floor((80 - unicode.len(coinText))/2) + 1
+        -- Баланс в главном меню
         gpu.setForeground(colors.success)
-        gpu.set(x2, 5, coinText)
+        local coinLabelX = math.floor((80 - (unicode.len("Ваш баланс: ") + unicode.len(string.format("%.2f", coinBalance) .. " Coina ₵"))) / 2) + 1
+        gpu.set(coinLabelX, 5, "Ваш баланс: ")
+        gpu.setForeground(colors.accent_main)
+        gpu.set(coinLabelX + unicode.len("Ваш баланс: "), 5, string.format("%.2f", coinBalance) .. " Coina ₵")
 
         if not playerAgreed then
             gpu.setForeground(colors.accent_secondary)
@@ -1397,10 +1407,12 @@ local function drawAccount(data)
     drawScreenBorder()
     drawCenteredText(10, currentPlayer .. ":", colors.text_bright)
     local coin = data.balance or coinBalance
-    local coinStr = string.format("Баланс: %.2f ₵", coin)
-    local x = math.floor((80 - unicode.len(coinStr)) / 2) + 1
+    -- Баланс в аккаунте
     gpu.setForeground(colors.success)
-    gpu.set(x, 12, coinStr)
+    local coinLabelX = math.floor((80 - (unicode.len("Баланс: ") + unicode.len(string.format("%.2f", coin) .. " ₵"))) / 2) + 1
+    gpu.set(coinLabelX, 12, "Баланс: ")
+    gpu.setForeground(colors.accent_main)
+    gpu.set(coinLabelX + unicode.len("Баланс: "), 12, string.format("%.2f", coin) .. " ₵")
 
     local transLabel = "Совершенно транзакций: "
     local transCount = tostring(data.transactions or 0)
