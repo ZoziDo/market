@@ -1119,22 +1119,60 @@ local function performBuy()
         maxStackSize = detail.maxSize
     end
 
-    local remaining = qty
+        local remaining = qty
     local extracted = 0
     local lastError = nil
 
     while remaining > 0 do
         local toTake = math.min(remaining, maxStackSize)
-        local okExport, err = pcall(function()
-            me.exportItem(fingerprint, PULL_DIRECTION, toTake)
+        local ok, result = pcall(function()
+            return me.exportItem(fingerprint, PULL_DIRECTION, toTake)
         end)
-        if okExport then
-            extracted = extracted + toTake
-            remaining = remaining - toTake
+        if ok and type(result) == "number" and result > 0 then
+            extracted = extracted + result
+            remaining = remaining - result
         else
-            lastError = err
+            lastError = ok and "Не удалось выдать предметы (нет места)" or tostring(result)
             break
         end
+    end
+
+    if extracted == 0 then
+        drawCenteredText(20, "Не удалось выдать предметы! Возможно, нет места в инвентаре.", colors.error)
+        os.sleep(1.5)
+        currentScreen = "shop_buy"
+        drawBuyStatic()
+        drawBuyItemsList()
+        drawBuyButtons()
+        return
+    end
+
+    -- Частичная выдача
+    if extracted < qty then
+        local actuallySpent = extracted * item.price
+        partialExtracted = extracted
+        partialRequested = qty
+        partialRefund = actuallySpent
+        partialItem = item
+        showPartialPopup = true
+        drawPurchaseScreen()
+        drawPartialPopup()
+        return
+    end
+
+    -- Полная выдача
+    coinBalance = coinBalance - totalCost
+    playerTransactions = playerTransactions + 1
+
+    if currentToken then
+        modem.send(serverAddress, 0xffef, serialization.serialize({
+            op = "buy",
+            name = currentPlayer,
+            token = currentToken,
+            item = item.displayName,
+            qty = extracted,
+            value = totalCost
+        }))
     end
 
     if extracted == 0 then
