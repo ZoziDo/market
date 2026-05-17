@@ -871,7 +871,7 @@ local function drawPartialPopup()
     local popupWidth = 52
     local popupHeight = 9
     local popupX = math.floor((80 - popupWidth) / 2)
-    local popupY = 8
+    local popupY = 9
 
     gpu.setBackground(colors.black_fon)
     gpu.fill(popupX, popupY, popupWidth, popupHeight, " ")
@@ -1565,7 +1565,7 @@ while true do
             local popupWidth = 52
             local popupHeight = 9
             local popupX = math.floor((80 - popupWidth) / 2)
-            local popupY = 8
+            local popupY = 9
             local okBtnText = "[ ПРИНЯТЬ ]"
             local okBtnWidth = unicode.len(okBtnText) + 2
             local okBtn = {
