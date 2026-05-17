@@ -864,6 +864,7 @@ local function drawInsufficientPopup()
         fg = colors.success
     }
     drawFlexButton(okBtn)
+end   
 
 -- ========== ПОПАП "ЧАСТИЧНАЯ ВЫДАЧА" ==========
 local function drawPartialPopup()
