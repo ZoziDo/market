@@ -298,7 +298,7 @@ return {
   { internalName = "luxinfineutems:AEAdvMolecularAssembler", displayName = "Улучшенный молекулярный сборщик", price = 3.46, currency = "res" },
   { internalName = "luxinfineutems:advancedDrive", displayName = "Улучшенный МЭ накопитель", price = 6.98, currency = "res" },
   { internalName = "GraviSuite:advNanoChestPlate", displayName = "Улучшенный наножилет", price = 73.77, currency = "res" },
-  { internalName = "appliedenergistics2:item.ItemMultiMaterial", displayName = "Улучшенный чертёж", price = 5.72, currency = "res" },
+  { internalName = "dwcity:Rare_plan", displayName = "Улучшенный чертёж", price = 5.72, currency = "res" },
   { internalName = "IC2:itemArmorLappack", displayName = "Ультимейт лаппак", price = 160.05, currency = "res" },
   { internalName = "minecraft:glass_bottle", displayName = "Универсальная жидкостная капсула", price = 0.22, currency = "res" },
   { internalName = "dwcity:Rare_plan", displayName = "Уникальный чертёж", price = 10.45, currency = "res" },
