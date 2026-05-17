@@ -1059,78 +1059,6 @@ local function performBuy()
     drawCenteredText(20, "Выполняется покупка...", colors.accent_main)
     os.sleep(0.4)
 
-    -- Формируем запрос на выдачу предметов
-    local id = item.internalName
-        if not id:find(":") then
-            id = "minecraft:" .. id
-        end
-        local fingerprint = { id = id, dmg = item.damage or 0 }
-
-    -- Определяем максимальный размер стака
-    local maxStackSize = 64
-    local ok, detail = pcall(me.getItemDetail, me, item.internalName, item.damage)
-    if ok and detail and detail.maxSize then
-        maxStackSize = detail.maxSize
-    end
-
-    local remaining = qty
-    local extracted = 0
-    local lastError = nil
-
-   local function performBuy()
-    if not playerAgreed then
-        drawCenteredText(20, "Сначала примите пользовательское соглашение", colors.error)
-        os.sleep(2)
-        currentScreen = "menu"
-        drawMainMenu()
-        return
-    end
-
-    local me = component.me_interface
-    local item = purchaseItem
-
-    -- Проверка наличия предмета в ME-сети
-    local actualQty = getActualItemQuantity(item.internalName, item.damage)
-    if actualQty <= 0 then
-        drawCenteredText(20, "Товар закончился! Обновление списка...", colors.error)
-        os.sleep(0.8)
-        loadBuyItems()
-        drawBuyStatic()
-        drawBuyItemsList()
-        drawBuyButtons()
-        currentScreen = "shop_buy"
-        return
-    end
-
-    local qty = purchaseQuantity
-    if qty > actualQty then
-        qty = actualQty
-        purchaseQuantity = qty
-        drawPurchaseScreen()
-    end
-
-    if qty <= 0 then
-        drawCenteredText(20, "Выберите количество!", colors.error)
-        os.sleep(0.8)
-        currentScreen = "shop_buy"
-        drawBuyStatic()
-        drawBuyItemsList()
-        drawBuyButtons()
-        return
-    end
-
-    local totalCost = item.price * qty
-    if coinBalance < totalCost then
-        showInsufficientPopup = true
-        insufficientBalance = coinBalance
-        drawPurchaseScreen()
-        drawInsufficientPopup()
-        return
-    end
-
-    drawCenteredText(20, "Выполняется покупка...", colors.accent_main)
-    os.sleep(0.4)
-
     -- Формируем fingerprint (как в селекторе)
     local id = item.internalName
     if not id:find(":") then
@@ -1170,7 +1098,6 @@ local function performBuy()
                 elseif result.size then
                     got = result.size
                 else
-                    -- Если таблица без известных полей, считаем что выдано toTake
                     got = toTake
                 end
             else
