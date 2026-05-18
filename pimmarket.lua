@@ -1086,7 +1086,7 @@ local function performSell()
 
     -- Очищаем строку 17 перед выводом нового сообщения
     gpu.setBackground(colors.bg_main)
-    gpu.fill(1, 17, 80, 1, " ")
+    gpu.fill(2, 17, 78, 1, " ")
     drawCenteredText(17, "Успешно! +" .. string.format("%.2f", value) .. " ₵", colors.success)
     os.sleep(0.8)
 
@@ -1256,7 +1256,7 @@ local function performBuy()
 
     -- ⬇️ ОЧИСТКА СТРОКИ 20 ПЕРЕД ВЫВОДОМ НОВОГО СООБЩЕНИЯ ⬇️
     gpu.setBackground(colors.bg_main)
-    gpu.fill(1, 20, 80, 1, " ")
+    gpu.fill(2, 20, 78, 1, " ")
     drawCenteredText(20, "Куплено " .. extracted .. " шт. за " .. string.format("%.2f", totalCost) .. " ₵", colors.success)
 
     loadBuyItems()
