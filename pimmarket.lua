@@ -1084,6 +1084,9 @@ local function performSell()
         }))
     end
 
+    -- Очищаем строку 17 перед выводом нового сообщения
+    gpu.setBackground(colors.bg_main)
+    gpu.fill(1, 17, 80, 1, " ")
     drawCenteredText(17, "Успешно! +" .. string.format("%.2f", value) .. " ₵", colors.success)
     os.sleep(0.8)
 
@@ -1145,7 +1148,7 @@ local function performBuy()
         return
     end
 
-    drawCenteredText(20, "Выполняется покупка...", colors.accent_main)
+        drawCenteredText(20, "Выполняется покупка...", colors.accent_main)
     os.sleep(0.4)
 
     local id = item.internalName
@@ -1251,6 +1254,9 @@ local function performBuy()
         }))
     end
 
+    -- ⬇️ ОЧИСТКА СТРОКИ 20 ПЕРЕД ВЫВОДОМ НОВОГО СООБЩЕНИЯ ⬇️
+    gpu.setBackground(colors.bg_main)
+    gpu.fill(1, 20, 80, 1, " ")
     drawCenteredText(20, "Куплено " .. extracted .. " шт. за " .. string.format("%.2f", totalCost) .. " ₵", colors.success)
 
     loadBuyItems()
@@ -1265,7 +1271,7 @@ local function performBuy()
     drawBuyStatic()
     drawBuyItemsList()
     drawBuyButtons()
-end
+   end 
 
 -- ========== ЭКРАН РЕПОРТА ==========
 local function drawReportScreen()
@@ -2149,7 +2155,7 @@ local function drawCrashPopup(errText)
     local popupY = 9
 
     -- Затемняем весь экран
-    gpu.setBackground(colors.black_fon)
+    gpu.setBackground(colors.bg_main)
     gpu.fill(1, 1, 80, 25, " ")
     gpu.setBackground(colors.bg_main)
 
