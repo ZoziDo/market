@@ -10,6 +10,9 @@ local modem = component.modem
 modem.open(0xffef)
 modem.open(0xfffe)
 
+-- ========== ЗАЩИТА ОТ ПРЕРЫВАНИЯ ==========
+event.ignore("interrupted", true)
+
 -- ========== ANSI ЦВЕТА ==========
 local ansi = {
     reset   = "\27[0m",
@@ -37,8 +40,8 @@ local function resetColor()
     io.write(ansi.reset)
 end
 
--- ========== ПАРОЛЬ ДЛЯ ПОДКЛЮЧЕНИЯ ==========
-local ACCESS_PASSWORD = "secret"
+-- ========== ПАРОЛЬ ==========
+local ACCESS_PASSWORD = "secret"  -- смените на ваш настоящий пароль
 
 -- ========== БАЗА ДАННЫХ ИГРОКОВ ==========
 local DB_PATH = "/home/players.db"
@@ -99,36 +102,29 @@ local adminScroll = 0
 local selectedAdminIndex = 1
 local adminViewHeight = 20
 
--- Режим редактирования баланса
 local editBalanceMode = false
 local editingPlayer = nil
-local editInput = ""       -- вводимая сумма
+local editInput = ""
 
--- Кеш для ME статистики
-local cachedMeTotal = "Загрузка..."
-local cachedMeUnique = "Загрузка..."
-local meStatsTimer = nil
+-- ========== ИСТОРИЯ ПРОДАЖ ==========
+local sellHistory = {}   -- таблица записей: {item, qty, name}
+local MAX_SELL_HISTORY = 20  -- сколько последних продаж показывать
 
--- График активности
 local ACTIVITY_SIZE = 60
 local activityBuffer = {}
 for i=1, ACTIVITY_SIZE do activityBuffer[i] = 0 end
 local activityIndex = 0
 
--- Размеры экрана
 local screenW, screenH = 80, 25
 local colX = {5, 30, 55, 80}
 local colWidth = 25
 local logStartY = 20
 local maxLogLines = 14
 
--- Имя админа (кто может управлять через PIM)
 local ADMIN_NAME = "ZoziDo"
-
--- Флаг для предотвращения рекурсивной отрисовки
 local drawing = false
 
--- ========== ПРОВЕРКА, ЧТО АДМИН РЕАЛЬНО ПОДКЛЮЧЁН ==========
+-- ========== ПРОВЕРКА АДМИНА ==========
 local function isAdminConnected()
     local sess = sessions[ADMIN_NAME]
     if sess and sess.token and os.time() - (sess.lastAction or 0) < SESSION_TIMEOUT then
@@ -140,37 +136,18 @@ end
 -- ========== ФУНКЦИИ ОБНОВЛЕНИЯ ЭКРАНА ==========
 local function updateScreenSize()
     local w, h = gpu.getResolution()
-
-    if w > 200 then
-        w = 200
-    end
-
-    if w < 80 then
-        w = 80
-    end
-
-    if h < 15 then
-        h = 15
-    end
-
+    if w > 200 then w = 200 end
+    if w < 80 then w = 80 end
+    if h < 15 then h = 15 end
     screenW, screenH = w, h
-
     local usable = screenW - 8
     colWidth = math.max(12, math.floor(usable / 4))
     colX = {4, 4 + colWidth, 4 + colWidth * 2, 4 + colWidth * 3}
-
     logStartY = math.min(18, screenH - 5)
     maxLogLines = screenH - logStartY - 3
-
-    if maxLogLines < 3 then
-        maxLogLines = 3
-    end
-
+    if maxLogLines < 3 then maxLogLines = 3 end
     adminViewHeight = screenH - 8
-
-    if adminViewHeight < 3 then
-        adminViewHeight = 3
-    end
+    if adminViewHeight < 3 then adminViewHeight = 3 end
 end
 
 local function gotoxy(x, y)
@@ -184,7 +161,6 @@ local function fill(x, y, w, h, char)
     end
 end
 
--- ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 local function timeToMidnight()
     local now = os.date("*t")
     local secondsLeft = (24 - now.hour - 1) * 3600 + (60 - now.min - 1) * 60 + (60 - now.sec)
@@ -207,33 +183,6 @@ local function recordTransaction()
 end
 
 event.timer(60, addActivity, math.huge)
-
--- ========== ДАННЫЕ ИЗ ME ==========
-local function updateMeStats()
-    if not component.isAvailable("me_interface") then
-        cachedMeTotal = "Комп. не найден"
-        cachedMeUnique = "Проверь подключение"
-        return
-    end
-    local me = component.me_interface
-    local success, items = pcall(me.getItemsInNetwork, me)
-    if not success or not items then
-        cachedMeTotal = "Ошибка доступа"
-        cachedMeUnique = "Нет данных"
-        return
-    end
-    local totalItems = 0
-    local uniqueItems = 0
-    for _, it in ipairs(items) do
-        totalItems = totalItems + (it.size or 0)
-        uniqueItems = uniqueItems + 1
-    end
-    cachedMeTotal = tostring(totalItems)
-    cachedMeUnique = tostring(uniqueItems)
-end
-
-meStatsTimer = event.timer(10, updateMeStats, math.huge)
-updateMeStats()
 
 -- ========== АДМИН-ПАНЕЛЬ ==========
 local function updateAdminPlayerList()
@@ -293,7 +242,6 @@ local function drawAdminPanel()
     drawing = false
 end
 
--- ========== ОКНО РЕДАКТИРОВАНИЯ БАЛАНСА ==========
 local function drawEditBalanceWindow()
     if drawing then return end
     drawing = true
@@ -340,7 +288,6 @@ local function drawEditBalanceWindow()
     drawing = false
 end
 
--- ========== ОТРИСОВКА ОСНОВНОГО ИНТЕРФЕЙСА ==========
 function drawInterface()
     if editBalanceMode then
         drawEditBalanceWindow()
@@ -374,7 +321,7 @@ function drawInterface()
     fill(1, 4, screenW, 1, "─")
     resetColor()
     
-    local titles = {"👥 ИГРОКИ", "📦 ME СИСТЕМА", "🔒 БЕЗОПАСНОСТЬ", "📊 СТАТИСТИКА"}
+    local titles = {"👥 ИГРОКИ", "📦 ПРОДАЖИ", "🔒 БЕЗОПАСНОСТЬ", "📊 СТАТИСТИКА"}
     setColor(ansi.bold, ansi.yellow)
     for i=1,4 do
         gotoxy(colX[i], 5)
@@ -396,11 +343,19 @@ function drawInterface()
     end
     resetColor()
     
+    -- Блок "ПРОДАЖИ" – вместо ME-системы показываем историю продаж
     setColor(ansi.cyan)
     gotoxy(colX[2], 6)
-    io.write("Всего предметов: " .. cachedMeTotal)
-    gotoxy(colX[2], 7)
-    io.write("Уникальных типов: " .. cachedMeUnique)
+    io.write("Последние продажи:")
+    for i = 1, math.min(rowsAvailable, #sellHistory) do
+        local entry = sellHistory[#sellHistory - i + 1]  -- выводим с конца, последние сверху
+        if entry then
+            gotoxy(colX[2], 6 + i)
+            local line = entry.name .. ": " .. entry.item .. " x" .. entry.qty
+            if #line > colWidth then line = line:sub(1, colWidth) end
+            io.write(line)
+        end
+    end
     resetColor()
     
     setColor(ansi.magenta)
@@ -438,7 +393,7 @@ function drawInterface()
     
     setColor(ansi.white)
     gotoxy(1, screenH-1)
-    io.write("P - Пауза магазина | A - Админ-панель (только для " .. ADMIN_NAME .. " на PIM)")
+    io.write("R - обновить | P - Пауза | A - Админ-панель (только для " .. ADMIN_NAME .. " на PIM)")
     resetColor()
     
     setColor(ansi.white)
@@ -459,11 +414,9 @@ function drawInterface()
     drawing = false
 end
 
--- ========== ЛОГИРОВАНИЕ ==========
 function addLog(text, fg)
     table.insert(logBuffer, {text = text, color = fg or ansi.white})
     while #logBuffer > 200 do table.remove(logBuffer, 1) end
-    -- Перерисовка больше не вызывается здесь — только по таймеру
 end
 
 local function log(level, msg)
@@ -479,13 +432,13 @@ local function handleKey(key, char, player)
     local isAdmin = (player == ADMIN_NAME) and isAdminConnected()
 
     if editBalanceMode then
-        if char == 27 then -- Esc
+        if char == 27 then
             editBalanceMode = false
             editingPlayer = nil
             editInput = ""
             drawAdminPanel()
             return
-        elseif char == 13 then -- Enter
+        elseif char == 13 then
             if editInput ~= "" then
                 local amount = tonumber(editInput)
                 if amount then
@@ -502,13 +455,13 @@ local function handleKey(key, char, player)
             drawAdminPanel()
             return
         else
-            if char >= 48 and char <= 57 then -- цифры
+            if char >= 48 and char <= 57 then
                 editInput = editInput .. string.char(char)
-            elseif char == 46 then -- точка
+            elseif char == 46 then
                 if not editInput:find("%.") then
                     editInput = editInput .. "."
                 end
-            elseif char == 8 then -- Backspace
+            elseif char == 8 then
                 editInput = editInput:sub(1, -2)
             end
             drawEditBalanceWindow()
@@ -524,7 +477,7 @@ local function handleKey(key, char, player)
             return
         end
 
-        if key == 200 then -- стрелка вверх
+        if key == 200 then
             if selectedAdminIndex > 1 then
                 selectedAdminIndex = selectedAdminIndex - 1
                 if selectedAdminIndex < adminScroll + 1 then
@@ -533,7 +486,7 @@ local function handleKey(key, char, player)
                 drawAdminPanel()
             end
             return
-        elseif key == 208 then -- стрелка вниз
+        elseif key == 208 then
             if selectedAdminIndex < #adminPlayerList then
                 selectedAdminIndex = selectedAdminIndex + 1
                 if selectedAdminIndex > adminScroll + adminViewHeight then
@@ -571,8 +524,11 @@ local function handleKey(key, char, player)
                 log("WARN", "Попытка паузы магазина не админом: " .. tostring(player))
             end
             return
+        elseif pressed == "r" then
+            drawInterface()  -- ручное обновление экрана
+            return
         end
-    else -- adminMode == true
+    else
         if pressed == "p" then
             shopPaused = not shopPaused
             log("INFO", "Магазин " .. (shopPaused and "приостановлен" or "возобновлён"))
@@ -627,7 +583,6 @@ local function handleTouch(x, y, player)
     end
 end
 
--- ========== БАЗОВЫЕ ФУНКЦИИ ДЛЯ ИГРОКОВ ==========
 local function getOrCreatePlayer(name)
     if not players[name] then
         players[name] = {
@@ -648,204 +603,230 @@ local function validateSession(name, token)
     return s and s.token == token and os.time() - (s.lastAction or 0) < SESSION_TIMEOUT
 end
 
--- ========== ОСНОВНОЙ ЦИКЛ ==========
-local refreshTimer = event.timer(1, function()
-    if not adminMode and not editBalanceMode then
-        drawInterface()
-    elseif adminMode and not isAdminConnected() then
-        adminMode = false
-        drawInterface()
-        log("WARN", "Автоматический выход из админ-панели (потеря связи с PIM)")
-    end
-end, math.huge)
+-- ========== ОСНОВНОЙ ЦИКЛ (без таймера перерисовки) ==========
+local function main()
+    log("INFO", "Сервер запущен. Ожидание терминалов...")
+    drawInterface()
 
-log("INFO", "Сервер запущен. Ожидание терминалов...")
-drawInterface()
+    while true do
+        local ev = {event.pull(0.5)}
+        local etype = ev[1]
 
-while true do
-    local ev = {event.pull(0.5)}
-    local etype = ev[1]
-
-    if etype == "key_down" then
-        local key = ev[4]
-        local char = ev[3]
-        local player = ev[5]
-        handleKey(key, char, player)
-    elseif etype == "touch" then
-        local x = ev[3]
-        local y = ev[4]
-        local player = ev[5]
-        handleTouch(x, y, player)
-    elseif etype == "modem_message" then
-        local from = ev[3]
-        local raw = ev[6]
-        local success, msg = pcall(serialization.unserialize, raw)
-        if not success or not msg or type(msg) ~= "table" then
-            goto continue
-        end
-
-        local last = sessions["__modem_"..from] or 0
-        if os.time() - last < 0.5 then
-            log("WARN", "Спам от " .. from)
-            goto continue
-        end
-        sessions["__modem_"..from] = os.time()
-
-        log("INFO", string.format("От %s | op=%s | name=%s | token=%s", from, tostring(msg.op), msg.name or "?", msg.token or "нет"))
-
-        if msg.op == "register" then
-            if msg.password ~= ACCESS_PASSWORD then
-                modem.send(from, 0xffef, serialization.serialize({op="error", message="Неверный пароль"}))
-                log("WARN", "Попытка подключения с неверным паролем от " .. from)
-                goto continue
-            end
-            marketConnected = true
-            if not owner then
-                owner = from
-                log("INFO", "✅ АДМИН ЗАРЕГИСТРИРОВАН: " .. from)
-            end
-            modem.send(from, 0xffef, serialization.serialize({op="welcome", owner=(from==owner), shopPaused=shopPaused}))
-
-        elseif msg.op == "enter" then
-            if shopPaused then
-                modem.send(from, 0xffef, serialization.serialize({op="error", message="Магазин на паузе"}))
-                goto continue
-            end
-            local playerName = msg.name
-            if not playerName or playerName == "" then
-                log("WARN", "Вход без имени от " .. from)
-                goto continue
-            end
-            local player = getOrCreatePlayer(playerName)
-            if player.banned then
-                modem.send(from, 0xffef, serialization.serialize({op="error", message="Вы забанены"}))
+        if etype == "key_down" then
+            local key = ev[4]
+            local char = ev[3]
+            local player = ev[5]
+            handleKey(key, char, player)
+        elseif etype == "touch" then
+            local x = ev[3]
+            local y = ev[4]
+            local player = ev[5]
+            handleTouch(x, y, player)
+        elseif etype == "modem_message" then
+            local from = ev[3]
+            local raw = ev[6]
+            local success, msg = pcall(serialization.unserialize, raw)
+            if not success or not msg or type(msg) ~= "table" then
                 goto continue
             end
 
-            local existingSession = sessions[playerName]
-            local token
-            if existingSession and os.time() - (existingSession.lastAction or 0) < SESSION_TIMEOUT then
-                token = existingSession.token
-                existingSession.lastAction = os.time()
-                log("INFO", "👤 " .. playerName .. " продлил сессию. Токен: " .. token)
-            else
-                token = tostring(math.floor(math.random() * 900000000 + 100000000))
-                sessions[playerName] = {token = token, lastAction = os.time()}
-                log("INFO", "👤 " .. playerName .. " вошёл. Токен: " .. token)
-            end
-
-            modem.send(from, 0xffef, serialization.serialize({
-                op="welcome", status="ok", token=token,
-                balance=player.balance or 0.0,
-                transactions=player.transactions,
-                regDate=player.regDate,
-                agreed = player.agreed or false,
-                shopPaused = shopPaused
-            }))
-
-        elseif msg.op == "getAccount" then
-            if not validateSession(msg.name, msg.token) then
-                log("WARN", "Неверный токен для getAccount от " .. (msg.name or "?"))
-                modem.send(from, 0xffef, serialization.serialize({op="accountData", error = true, message = "Токен устарел"}))
+            local last = sessions["__modem_"..from] or 0
+            if os.time() - last < 0.5 then
+                log("WARN", "Спам от " .. from)
                 goto continue
             end
-            local player = players[msg.name]
-            if not player then goto continue end
-            sessions[msg.name].lastAction = os.time()
-            modem.send(from, 0xffef, serialization.serialize({
-                op="accountData",
-                data = {
-                    balance = player.balance,
-                    transactions = player.transactions,
-                    regDate = player.regDate,
-                    agreed = player.agreed,
+            sessions["__modem_"..from] = os.time()
+
+            log("INFO", string.format("От %s | op=%s | name=%s | token=%s", from, tostring(msg.op), msg.name or "?", msg.token or "нет"))
+
+            if msg.op == "register" then
+                if msg.password ~= ACCESS_PASSWORD then
+                    modem.send(from, 0xffef, serialization.serialize({op="error", message="Неверный пароль"}))
+                    log("WARN", "Попытка подключения с неверным паролем от " .. from)
+                    drawInterface()
+                    goto continue
+                end
+                marketConnected = true
+                if not owner then
+                    owner = from
+                    log("INFO", "✅ АДМИН ЗАРЕГИСТРИРОВАН: " .. from)
+                end
+                modem.send(from, 0xffef, serialization.serialize({op="welcome", owner=(from==owner), shopPaused=shopPaused}))
+                drawInterface()
+                goto continue
+            elseif msg.op == "enter" then
+                if shopPaused then
+                    modem.send(from, 0xffef, serialization.serialize({op="error", message="Магазин на паузе"}))
+                    drawInterface()
+                    goto continue
+                end
+                local playerName = msg.name
+                if not playerName or playerName == "" then
+                    log("WARN", "Вход без имени от " .. from)
+                    drawInterface()
+                    goto continue
+                end
+                local player = getOrCreatePlayer(playerName)
+                if player.banned then
+                    modem.send(from, 0xffef, serialization.serialize({op="error", message="Вы забанены"}))
+                    drawInterface()
+                    goto continue
+                end
+
+                local existingSession = sessions[playerName]
+                local token
+                if existingSession and os.time() - (existingSession.lastAction or 0) < SESSION_TIMEOUT then
+                    token = existingSession.token
+                    existingSession.lastAction = os.time()
+                    log("INFO", "👤 " .. playerName .. " продлил сессию. Токен: " .. token)
+                else
+                    token = tostring(math.floor(math.random() * 900000000 + 100000000))
+                    sessions[playerName] = {token = token, lastAction = os.time()}
+                    log("INFO", "👤 " .. playerName .. " вошёл. Токен: " .. token)
+                end
+
+                modem.send(from, 0xffef, serialization.serialize({
+                    op="welcome", status="ok", token=token,
+                    balance=player.balance or 0.0,
+                    transactions=player.transactions,
+                    regDate=player.regDate,
+                    agreed = player.agreed or false,
                     shopPaused = shopPaused
-                }
-            }))
-            log("INFO", "Аккаунт отправлен для " .. msg.name)
-
-        elseif msg.op == "sell" then
-            if shopPaused then
-                modem.send(from, 0xffef, serialization.serialize({op="error", message="Магазин на паузе"}))
+                }))
+                drawInterface()
                 goto continue
-            end
-            if not validateSession(msg.name, msg.token) then
-                log("WARN", "Неверный токен для sell")
-                goto continue
-            end
-            local player = players[msg.name]
-            if not player or player.banned then goto continue end
-            local qty = tonumber(msg.qty) or 0
-            local value = tonumber(msg.value) or 0
-
-            player.balance = (player.balance or 0) + value
-            player.transactions = (player.transactions or 0) + 1
-            sessions[msg.name].lastAction = os.time()
-
-            globalStats.totalSells = (globalStats.totalSells or 0) + 1
-            saveGlobalStats()
-            saveDB()
-            recordTransaction()
-            log("INFO", string.format("💰 %s пополнил баланс: предмет '%s' x%d на сумму %.2f ₵", msg.name, msg.item, qty, value))
-
-        elseif msg.op == "buy" then
-            if shopPaused then
-                modem.send(from, 0xffef, serialization.serialize({op="error", message="Магазин на паузе"}))
-                goto continue
-            end
-            if not validateSession(msg.name, msg.token) then
-                log("WARN", "Неверный токен для buy")
-                goto continue
-            end
-            local player = players[msg.name]
-            if not player or player.banned then goto continue end
-            local value = tonumber(msg.value) or 0
-
-            player.balance = (player.balance or 0) - value
-            player.transactions = (player.transactions or 0) + 1
-            sessions[msg.name].lastAction = os.time()
-
-            globalStats.totalBuys = (globalStats.totalBuys or 0) + 1
-            saveGlobalStats()
-            saveDB()
-            recordTransaction()
-            log("INFO", string.format("🛒 %s купил %s x%d за %.2f ₵", msg.name, msg.item, msg.qty, value))
-
-        elseif msg.op == "report" then
-            if not validateSession(msg.name, msg.token) then
-                log("WARN", "Неверный токен для report")
-                goto continue
-            end
-            globalStats.totalReports = (globalStats.totalReports or 0) + 1
-            saveGlobalStats()
-            log("INFO", "📩 Репорт от " .. msg.name .. " (" .. msg.time .. ")")
-            log("INFO", "   Текст: " .. (msg.text or ""))
-            local file = io.open("/home/reports.log", "a")
-            if file then
-                file:write("[" .. msg.time .. "] " .. msg.name .. ": " .. msg.text .. "\n")
-                file:close()
-                log("INFO", "✅ Сохранено в reports.log")
-            else
-                log("ERROR", "❌ Не удалось открыть reports.log")
-            end
-
-        elseif msg.op == "agree" then
-            if not validateSession(msg.name, msg.token) then
-                log("WARN", "Неверный токен для agree")
-                modem.send(from, 0xffef, serialization.serialize({ op="agree", error = true, message = "Токен устарел" }))
-                goto continue
-            end
-            local player = players[msg.name]
-            if player then
-                player.agreed = true
-                saveDB()
+            elseif msg.op == "getAccount" then
+                if not validateSession(msg.name, msg.token) then
+                    log("WARN", "Неверный токен для getAccount от " .. (msg.name or "?"))
+                    modem.send(from, 0xffef, serialization.serialize({op="accountData", error = true, message = "Токен устарел"}))
+                    drawInterface()
+                    goto continue
+                end
+                local player = players[msg.name]
+                if not player then goto continue end
                 sessions[msg.name].lastAction = os.time()
-                log("INFO", "📝 " .. msg.name .. " принял пользовательское соглашение")
-                modem.send(from, 0xffef, serialization.serialize({ op = "agree", success = true, agreed = true }))
-            else
-                modem.send(from, 0xffef, serialization.serialize({ op = "agree", error = true, message = "Игрок не найден" }))
+                modem.send(from, 0xffef, serialization.serialize({
+                    op="accountData",
+                    data = {
+                        balance = player.balance,
+                        transactions = player.transactions,
+                        regDate = player.regDate,
+                        agreed = player.agreed,
+                        shopPaused = shopPaused
+                    }
+                }))
+                log("INFO", "Аккаунт отправлен для " .. msg.name)
+                drawInterface()
+                goto continue
+            elseif msg.op == "sell" then
+                if shopPaused then
+                    modem.send(from, 0xffef, serialization.serialize({op="error", message="Магазин на паузе"}))
+                    drawInterface()
+                    goto continue
+                end
+                if not validateSession(msg.name, msg.token) then
+                    log("WARN", "Неверный токен для sell")
+                    drawInterface()
+                    goto continue
+                end
+                local player = players[msg.name]
+                if not player or player.banned then goto continue end
+                local qty = tonumber(msg.qty) or 0
+                local value = tonumber(msg.value) or 0
+
+                player.balance = (player.balance or 0) + value
+                player.transactions = (player.transactions or 0) + 1
+                sessions[msg.name].lastAction = os.time()
+
+                globalStats.totalSells = (globalStats.totalSells or 0) + 1
+                saveGlobalStats()
+                saveDB()
+                recordTransaction()
+                log("INFO", string.format("💰 %s пополнил баланс: предмет '%s' x%d на сумму %.2f ₵", msg.name, msg.item, qty, value))
+                
+                -- Добавляем в историю продаж
+                table.insert(sellHistory, {item = msg.item, qty = qty, name = msg.name})
+                while #sellHistory > MAX_SELL_HISTORY do
+                    table.remove(sellHistory, 1)
+                end
+                drawInterface()
+                goto continue
+            elseif msg.op == "buy" then
+                if shopPaused then
+                    modem.send(from, 0xffef, serialization.serialize({op="error", message="Магазин на паузе"}))
+                    drawInterface()
+                    goto continue
+                end
+                if not validateSession(msg.name, msg.token) then
+                    log("WARN", "Неверный токен для buy")
+                    drawInterface()
+                    goto continue
+                end
+                local player = players[msg.name]
+                if not player or player.banned then goto continue end
+                local value = tonumber(msg.value) or 0
+
+                player.balance = (player.balance or 0) - value
+                player.transactions = (player.transactions or 0) + 1
+                sessions[msg.name].lastAction = os.time()
+
+                globalStats.totalBuys = (globalStats.totalBuys or 0) + 1
+                saveGlobalStats()
+                saveDB()
+                recordTransaction()
+                log("INFO", string.format("🛒 %s купил %s x%d за %.2f ₵", msg.name, msg.item, msg.qty, value))
+                drawInterface()
+                goto continue
+            elseif msg.op == "report" then
+                if not validateSession(msg.name, msg.token) then
+                    log("WARN", "Неверный токен для report")
+                    drawInterface()
+                    goto continue
+                end
+                globalStats.totalReports = (globalStats.totalReports or 0) + 1
+                saveGlobalStats()
+                log("INFO", "📩 Репорт от " .. msg.name .. " (" .. msg.time .. ")")
+                log("INFO", "   Текст: " .. (msg.text or ""))
+                local file = io.open("/home/reports.log", "a")
+                if file then
+                    file:write("[" .. msg.time .. "] " .. msg.name .. ": " .. msg.text .. "\n")
+                    file:close()
+                    log("INFO", "✅ Сохранено в reports.log")
+                else
+                    log("ERROR", "❌ Не удалось открыть reports.log")
+                end
+                drawInterface()
+                goto continue
+            elseif msg.op == "agree" then
+                if not validateSession(msg.name, msg.token) then
+                    log("WARN", "Неверный токен для agree")
+                    modem.send(from, 0xffef, serialization.serialize({ op="agree", error = true, message = "Токен устарел" }))
+                    drawInterface()
+                    goto continue
+                end
+                local player = players[msg.name]
+                if player then
+                    player.agreed = true
+                    saveDB()
+                    sessions[msg.name].lastAction = os.time()
+                    log("INFO", "📝 " .. msg.name .. " принял пользовательское соглашение")
+                    modem.send(from, 0xffef, serialization.serialize({ op = "agree", success = true, agreed = true }))
+                else
+                    modem.send(from, 0xffef, serialization.serialize({ op = "agree", error = true, message = "Игрок не найден" }))
+                end
+                drawInterface()
+                goto continue
             end
         end
+        ::continue::
     end
-    ::continue::
+end
+
+-- ========== БЕСКОНЕЧНЫЙ ПЕРЕЗАПУСК ПРИ ОШИБКАХ ==========
+while true do
+    local ok, err = pcall(main)
+    if not ok then
+        print("Ошибка сервера: " .. tostring(err))
+        os.sleep(5)
+    end
 end
