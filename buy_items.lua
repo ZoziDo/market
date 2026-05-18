@@ -358,7 +358,6 @@ return {
   { internalName = "minecraft:ender_pearl", displayName = "Жемчуг Эндера", price = 0.75, currency = "res" },
   { internalName = "minecraft:bone", displayName = "Кость", price = 0.30, currency = "res" },
   { internalName = "minecraft:slime_ball", displayName = "Сгусток слизи", price = 0.65, currency = "res" },
-  { internalName = "DraconicEvolution:draconiumDust", displayName = "Драконивая пыль", price = 0.55, currency = "res" },
   { internalName = "Forestry:royalJelly", displayName = "Маточное молочко", price = 0.80, currency = "res" },
   { internalName = "AFSU:AFSU:0", displayName = "AFSU", price = 1.0, currency = "res" },
   { internalName = "DraconicEvolution:draconicCore", displayName = "Awakened Core", price = 20.0, currency = "res" },
