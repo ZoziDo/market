@@ -11,8 +11,8 @@ modem.open(0xffef)
 modem.open(0xfffe)
 
 -- ========== ОТКЛЮЧЕНИЕ ВОЗМОЖНОСТИ ПРЕРЫВАНИЯ ==========
-event.ignore("interrupted")   -- Ctrl+C больше не работает
-event.ignore("terminate")     -- сигнал завершения
+event.ignore("interrupted", function() end)
+event.ignore("terminate", function() end)
 
 -- ========== ANSI ЦВЕТА ==========
 local ansi = {
