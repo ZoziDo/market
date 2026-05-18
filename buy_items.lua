@@ -21,6 +21,7 @@ return {
   { internalName = "appliedenergistics2:item.tile.BlockCraftingStorage", displayName = "64K хранилище создания", price = 36.487, currency = "res", damage = 3 },
   { internalName = "extracells:storage.component", displayName = "64K МЭ жидкостный компонент хранилища", price = 28.71, currency = "res", damage = 7 },
   { internalName = "dwcity:Chip_64bit", displayName = "64-битный чип", price = 14.22, currency = "res" },
+  { internalName = "mincraft:iron_ingot", displayName = "Железный слиток", price = 0.22, currency = "res", },
   { internalName = "EnderIO:blockSliceAndSplice", displayName = "Отрубатель и сращиватель", price = 4.73, currency = "res" },
   { internalName = "minecraft:nether_wart", displayName = "Адский нарост", price = 0.11, currency = "res" },
   { internalName = "dwcity:Akvamarin", displayName = "Аквамарин", price = 18.67, currency = "res" },
