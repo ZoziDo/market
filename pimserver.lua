@@ -10,8 +10,9 @@ local modem = component.modem
 modem.open(0xffef)
 modem.open(0xfffe)
 
--- ========== ЗАЩИТА ОТ ПРЕРЫВАНИЯ ==========
-event.ignore("interrupted", true)
+-- ========== ОТКЛЮЧЕНИЕ ВОЗМОЖНОСТИ ПРЕРЫВАНИЯ ==========
+event.ignore("interrupted")   -- Ctrl+C больше не работает
+event.ignore("terminate")     -- сигнал завершения
 
 -- ========== ANSI ЦВЕТА ==========
 local ansi = {
