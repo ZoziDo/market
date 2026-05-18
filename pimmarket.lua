@@ -1,9 +1,35 @@
+-- market_01 (защищённая версия)
 local component = require("component")
 local event = require("event")
 local gpu = component.gpu
 local unicode = require("unicode")
 local serialization = require("serialization")
 local keyboard = require("keyboard")
+local computer = require("computer")
+local fs = require("filesystem")
+
+-- ========== ОТКЛЮЧЕНИЕ ВОЗМОЖНОСТИ ПРЕРЫВАНИЯ ==========
+event.ignore("interrupted", true)   -- Ctrl+C больше не работает
+event.ignore("terminate", true)     -- сигнал завершения
+
+-- ========== НАСТРОЙКИ ПОДКЛЮЧЕНИЯ ==========
+local serverAddress = "535305a9-37c9-4645-b7c4-46204187ee7b"  -- ЗАМЕНИТЕ НА АДРЕС ВАШЕГО СЕРВЕРНОГО МОДЕМА
+
+-- Параметры шифрования пароля (одинаковые для всех терминалов)
+local ENC_KEY = "MySecretKey123"   -- смените на свой ключ
+-- Зашифрованный пароль "secret" (сгенерирован с ключом MySecretKey123)
+local ENCRYPTED_PASSWORD = "\x1b\x07\x11\x0e\x1d\x0f\x08\x0e\x1b\x07\x11\x0e"
+
+local function decryptPassword()
+    local dec = {}
+    for i = 1, #ENCRYPTED_PASSWORD do
+        local b = string.byte(ENCRYPTED_PASSWORD, i)
+        local k = string.byte(ENC_KEY, (i-1) % #ENC_KEY + 1)
+        dec[i] = string.char(b ~ k)  -- XOR
+    end
+    return table.concat(dec)
+end
+local ACCESS_PASSWORD = decryptPassword()
 
 -- Цветовая схема
 local colors = {
@@ -20,6 +46,14 @@ local colors = {
     star_glow = 0xC8C8FF,
     black_fon = 0x000000
 }
+
+-- ========== БЕЗОПАСНАЯ ЗАГРУЗКА ФАЙЛОВ ==========
+local function safeDoFile(path)
+    if not fs.exists(path) then
+        error("Файл не найден: " .. path, 2)
+    end
+    return dofile(path)
+end
 
 -- ========== НОРМАЛИЗАЦИЯ СТРОКИ ДЛЯ СОРТИРОВКИ ==========
 local function sortableName(name)
@@ -45,7 +79,6 @@ local function drawPopupBorder(x, y, w, h, color)
     gpu.set(x + w - 1, y + h - 1, "┘")
 end
 
--- ========== РАМКА ПО ПЕРИМЕТРУ ЭКРАНА ==========
 local function drawScreenBorder()
     local left = 1
     local right = 80
@@ -65,11 +98,11 @@ local function drawScreenBorder()
 end
 
 -- Загружаем внешние файлы
-local shopData = dofile("/home/shop_items.lua")
+local shopData = safeDoFile("/home/shop_items.lua")
 local sellItems = shopData.sellItems
 local vanillaItems = shopData.vanillaItems or {}
 
-local buyItemsData = dofile("/home/buy_items.lua")
+local buyItemsData = safeDoFile("/home/buy_items.lua")
 local buyItemMap = {}
 for _, item in ipairs(buyItemsData) do
     local dmg = item.damage or 0
@@ -77,7 +110,7 @@ for _, item in ipairs(buyItemsData) do
     buyItemMap[key] = item
 end
 
-local drawAgreementScreen = dofile("/home/agreement.lua")
+local drawAgreementScreen = safeDoFile("/home/agreement.lua")
 
 local modem = component.modem
 -- Динамический поиск PIM
@@ -121,7 +154,6 @@ end
 modem.open(0xffef)
 modem.open(0xfffe)
 
-local serverAddress = "535305a9-37c9-4645-b7c4-46204187ee7b"
 local currentPlayer, currentToken = nil, nil
 local coinBalance = 0.0
 local playerTransactions = 0
@@ -505,7 +537,6 @@ end
 local function drawBuyStatic()
     clear()
     drawScreenBorder()
-    -- Баланс: слово "Баланс:" цвет success, число и валюта цвет accent_main
     gpu.setForeground(colors.success)
     gpu.set(3, 1, "Баланс: ")
     gpu.setForeground(colors.accent_main)
@@ -704,7 +735,6 @@ local function drawPurchaseScreen()
     currentScreen = "purchase"
     clear()
     drawScreenBorder()
-    -- Баланс
     gpu.setForeground(colors.success)
     gpu.set(3, 1, "Баланс: ")
     gpu.setForeground(colors.accent_main)
@@ -904,7 +934,6 @@ local function drawPartialPopup()
     local line2X = popupX + math.floor((popupWidth - unicode.len(line2)) / 2)
     gpu.set(line2X, popupY+3, line2)
 
-    -- Исправленная центрированная строка "Списано: ..."
     local spentLabel = "Списано: "
     local spentValue = string.format("%.2f", partialRefund) .. " ₵"
     local fullSpentText = spentLabel .. spentValue
@@ -972,7 +1001,6 @@ local function drawSellScanScreen()
     currentScreen = "sell_scan"
     clear()
     drawScreenBorder()
-    -- Баланс
     gpu.setForeground(colors.success)
     gpu.set(3, 1, "Баланс: ")
     gpu.setForeground(colors.accent_main)
@@ -1080,7 +1108,6 @@ local function performBuy()
     local me = component.me_interface
     local item = purchaseItem
 
-    -- Проверка наличия предмета в ME-сети
     local actualQty = getActualItemQuantity(item.internalName, item.damage)
     if actualQty <= 0 then
         drawCenteredText(20, "Товар закончился! Обновление списка...", colors.error)
@@ -1122,14 +1149,12 @@ local function performBuy()
     drawCenteredText(20, "Выполняется покупка...", colors.accent_main)
     os.sleep(0.4)
 
-    -- Формируем fingerprint (как в селекторе)
     local id = item.internalName
     if not id:find(":") then
         id = "minecraft:" .. id
     end
     local fingerprint = { id = id, dmg = item.damage or 0 }
 
-    -- Определяем максимальный размер стака
     local maxStackSize = 64
     local ok, detail = pcall(me.getItemDetail, me, item.internalName, item.damage)
     if ok and detail and detail.maxSize then
@@ -1140,7 +1165,6 @@ local function performBuy()
     local extracted = 0
     local lastError = nil
 
-    -- Цикл выдачи предметов
     while remaining > 0 do
         local toTake = math.min(remaining, maxStackSize)
         local success, result = pcall(function()
@@ -1181,7 +1205,6 @@ local function performBuy()
         end
     end
 
-    -- Если не выдано ни одного предмета (инвентарь полон)
     if extracted == 0 then
         showInventoryFullPopup = true
         drawPurchaseScreen()
@@ -1189,7 +1212,6 @@ local function performBuy()
         return
     end
 
-    -- Частичная выдача (ДЕНЬГИ СПИСЫВАЕМ СРАЗУ)
     if extracted < qty then
         local actuallySpent = extracted * item.price
         coinBalance = coinBalance - actuallySpent
@@ -1216,7 +1238,6 @@ local function performBuy()
         return
     end
 
-    -- Полная выдача
     coinBalance = coinBalance - totalCost
     playerTransactions = playerTransactions + 1
 
@@ -1233,7 +1254,6 @@ local function performBuy()
 
     drawCenteredText(20, "Куплено " .. extracted .. " шт. за " .. string.format("%.2f", totalCost) .. " ₵", colors.success)
 
-    -- Обновление списка товаров
     loadBuyItems()
     for _, newItem in ipairs(shopItems) do
         if newItem.internalName == item.internalName and newItem.damage == item.damage then
@@ -1387,7 +1407,6 @@ local function drawMainMenu()
         gpu.setForeground(colors.text_bright)
         gpu.set(x1 + unicode.len(hello1), 4, hello2)
 
-        -- Баланс в главном меню
         gpu.setForeground(colors.success)
         local coinLabelX = math.floor((80 - (unicode.len("Ваш баланс: ") + unicode.len(string.format("%.2f", coinBalance) .. " Coina ₵"))) / 2) + 1
         gpu.set(coinLabelX, 5, "Ваш баланс: ")
@@ -1417,7 +1436,6 @@ local function drawAccount(data)
     drawScreenBorder()
     drawCenteredText(10, currentPlayer .. ":", colors.text_bright)
     local coin = data.balance or coinBalance
-    -- Баланс в аккаунте
     gpu.setForeground(colors.success)
     local coinLabelX = math.floor((80 - (unicode.len("Баланс: ") + unicode.len(string.format("%.2f", coin) .. " ₵"))) / 2) + 1
     gpu.set(coinLabelX, 12, "Баланс: ")
@@ -1573,550 +1591,598 @@ local function refreshAndAgree()
     end
 end
 
--- ======== ИНИЦИАЛИЗАЦИЯ ========
-drawWelcomeScreen()
-modem.send(serverAddress, 0xffef, serialization.serialize({op="register"}))
+-- ======== ВСЁ ОСТАЛЬНОЕ ОСТАЁТСЯ ВНУТРИ main() ========
+local function main()
+    -- ======== ИНИЦИАЛИЗАЦИЯ ========
+    drawWelcomeScreen()
+    modem.send(serverAddress, 0xffef, serialization.serialize({op="register", password=ACCESS_PASSWORD}))
 
--- ======== ГЛАВНЫЙ ЦИКЛ ========
-while true do
-    local ev = {event.pull(0.5)}
-    local e = ev[1]
+    -- ======== ГЛАВНЫЙ ЦИКЛ ========
+    while true do
+        local ev = {event.pull(0.5)}
+        local e = ev[1]
 
-    if currentScreen == "auth" then
-        if os.clock() - authStartTime >= AUTH_TIMEOUT then
-            currentScreen = "menu"
-            drawMainMenu()
+        if currentScreen == "auth" then
+            if os.clock() - authStartTime >= AUTH_TIMEOUT then
+                currentScreen = "menu"
+                drawMainMenu()
+            end
         end
-    end
 
-    if currentScreen == "account_loading" then
-        if os.clock() - accountRequestTime >= ACCOUNT_TIMEOUT then
-            retryAccountAfterTokenRefresh()
+        if currentScreen == "account_loading" then
+            if os.clock() - accountRequestTime >= ACCOUNT_TIMEOUT then
+                retryAccountAfterTokenRefresh()
+            end
         end
-    end
 
-    if e == "touch" then
-        local x, y = ev[3], ev[4]
+        if e == "touch" then
+            local x, y = ev[3], ev[4]
 
-        if showSellPopup and currentScreen == "sell_scan" then
-            local popupWidth = 40
-            local popupHeight = 10
-            local popupX = math.floor((80 - popupWidth) / 2)
-            local popupY = 10
-            local yesBtn = {x=popupX+5, y=popupY+7, xs=13, ys=1}
-            local noBtn  = {x=popupX+popupWidth-15, y=popupY+7, xs=12, ys=1}
-            if isButtonClicked(yesBtn, x, y) then
-                performSell()
-            elseif isButtonClicked(noBtn, x, y) then
-                showSellPopup = false
-                drawSellScanScreen()
-            elseif not (x >= popupX and x < popupX + popupWidth and y >= popupY and y < popupY + popupHeight) then
-                showSellPopup = false
-                drawSellScanScreen()
-            end
-            goto continue
-        elseif showInsufficientPopup then
-            local popupWidth = 52
-            local popupHeight = 10
-            local popupX = math.floor((80 - popupWidth) / 2)
-            local popupY = 7
-            local okBtnText = "[ ПОНЯТНО ]"
-            local okBtnWidth = unicode.len(okBtnText) + 2
-            local okBtn = {
-                x = popupX + math.floor((popupWidth - okBtnWidth) / 2),
-                y = popupY+7,
-                xs = okBtnWidth,
-                ys = 1
-            }
-            if isButtonClicked(okBtn, x, y) then
-                showInsufficientPopup = false
-                currentScreen = "shop_buy"
-                drawBuyStatic()
-                drawBuyItemsList()
-                drawBuyButtons()
-            end
-            goto continue
-        elseif showPartialPopup then
-            local popupWidth = 52
-            local popupHeight = 9
-            local popupX = math.floor((80 - popupWidth) / 2)
-            local popupY = 9
-            local okBtnText = "[ ПРИНЯТЬ ]"
-            local okBtnWidth = unicode.len(okBtnText) + 2
-            local okBtn = {
-                x = popupX + math.floor((popupWidth - okBtnWidth) / 2),
-                y = popupY+6,
-                xs = okBtnWidth,
-                ys = 1
-            }
-            if isButtonClicked(okBtn, x, y) then
-                showPartialPopup = false
-                currentScreen = "shop_buy"
-                drawBuyStatic()
-                drawBuyItemsList()
-                drawBuyButtons()
-            end
-            goto continue
-        elseif showInventoryFullPopup then
-            local popupWidth = 52
-            local popupHeight = 9
-            local popupX = math.floor((80 - popupWidth) / 2)
-            local popupY = 9
-            local okBtnText = "[ ПОНЯТНО ]"
-            local okBtnWidth = unicode.len(okBtnText) + 2
-            local okBtn = {
-                x = popupX + math.floor((popupWidth - okBtnWidth) / 2),
-                y = popupY+6,
-                xs = okBtnWidth,
-                ys = 1
-            }
-            if isButtonClicked(okBtn, x, y) then
-                showInventoryFullPopup = false
-                currentScreen = "shop_buy"
-                drawBuyStatic()
-                drawBuyItemsList()
-                drawBuyButtons()
-            end
-            goto continue
-        elseif currentScreen == "shop_buy" or currentScreen == "shop_sell" then
-            if y >= 7 and y <= 21 and x >= 2 and x <= 77 then
-                local relativeRow = y - 6
-                local clickedIndex = listScroll + relativeRow - 1
-                local item = filteredItems[clickedIndex]
-                if item and (currentShopMode ~= "buy" or item.qty > 0) then
-                    selectedIndex = clickedIndex
-                    selectedItem = item
-                    hoveredIndex = 0
-                    updateSelectorDisplay(selectedItem)
+            if showSellPopup and currentScreen == "sell_scan" then
+                local popupWidth = 40
+                local popupHeight = 10
+                local popupX = math.floor((80 - popupWidth) / 2)
+                local popupY = 10
+                local yesBtn = {x=popupX+5, y=popupY+7, xs=13, ys=1}
+                local noBtn  = {x=popupX+popupWidth-15, y=popupY+7, xs=12, ys=1}
+                if isButtonClicked(yesBtn, x, y) then
+                    performSell()
+                elseif isButtonClicked(noBtn, x, y) then
+                    showSellPopup = false
+                    drawSellScanScreen()
+                elseif not (x >= popupX and x < popupX + popupWidth and y >= popupY and y < popupY + popupHeight) then
+                    showSellPopup = false
+                    drawSellScanScreen()
+                end
+                goto continue
+            elseif showInsufficientPopup then
+                local popupWidth = 52
+                local popupHeight = 10
+                local popupX = math.floor((80 - popupWidth) / 2)
+                local popupY = 7
+                local okBtnText = "[ ПОНЯТНО ]"
+                local okBtnWidth = unicode.len(okBtnText) + 2
+                local okBtn = {
+                    x = popupX + math.floor((popupWidth - okBtnWidth) / 2),
+                    y = popupY+7,
+                    xs = okBtnWidth,
+                    ys = 1
+                }
+                if isButtonClicked(okBtn, x, y) then
+                    showInsufficientPopup = false
+                    currentScreen = "shop_buy"
+                    drawBuyStatic()
                     drawBuyItemsList()
                     drawBuyButtons()
                 end
                 goto continue
-            end
-
-            if x >= 78 and y >= 7 and y <= 21 then
-                local total = #filteredItems
-                if total > visibleRows then
-                    local clickPos = y - 6
-                    listScroll = math.floor((clickPos - 1) * (total - visibleRows) / visibleRows) + 1
+            elseif showPartialPopup then
+                local popupWidth = 52
+                local popupHeight = 9
+                local popupX = math.floor((80 - popupWidth) / 2)
+                local popupY = 9
+                local okBtnText = "[ ПРИНЯТЬ ]"
+                local okBtnWidth = unicode.len(okBtnText) + 2
+                local okBtn = {
+                    x = popupX + math.floor((popupWidth - okBtnWidth) / 2),
+                    y = popupY+6,
+                    xs = okBtnWidth,
+                    ys = 1
+                }
+                if isButtonClicked(okBtn, x, y) then
+                    showPartialPopup = false
+                    currentScreen = "shop_buy"
+                    drawBuyStatic()
                     drawBuyItemsList()
+                    drawBuyButtons()
                 end
                 goto continue
-            end
-
-            if y == 3 and x >= 42 and x <= 64 then
-                searchActive = true
-                searchInput = shopSearch
-                drawBuyStatic()
-                drawBuyItemsList()
-                drawBuyButtons()
+            elseif showInventoryFullPopup then
+                local popupWidth = 52
+                local popupHeight = 9
+                local popupX = math.floor((80 - popupWidth) / 2)
+                local popupY = 9
+                local okBtnText = "[ ПОНЯТНО ]"
+                local okBtnWidth = unicode.len(okBtnText) + 2
+                local okBtn = {
+                    x = popupX + math.floor((popupWidth - okBtnWidth) / 2),
+                    y = popupY+6,
+                    xs = okBtnWidth,
+                    ys = 1
+                }
+                if isButtonClicked(okBtn, x, y) then
+                    showInventoryFullPopup = false
+                    currentScreen = "shop_buy"
+                    drawBuyStatic()
+                    drawBuyItemsList()
+                    drawBuyButtons()
+                end
                 goto continue
-            end
-            if y == 3 and x >= 66 and x <= 78 then
-                shopSearch = ""
-                searchInput = ""
-                searchActive = false
-                drawBuyStatic()
-                drawBuyItemsList()
-                drawBuyButtons()
-                goto continue
-            end
+            elseif currentScreen == "shop_buy" or currentScreen == "shop_sell" then
+                if y >= 7 and y <= 21 and x >= 2 and x <= 77 then
+                    local relativeRow = y - 6
+                    local clickedIndex = listScroll + relativeRow - 1
+                    local item = filteredItems[clickedIndex]
+                    if item and (currentShopMode ~= "buy" or item.qty > 0) then
+                        selectedIndex = clickedIndex
+                        selectedItem = item
+                        hoveredIndex = 0
+                        updateSelectorDisplay(selectedItem)
+                        drawBuyItemsList()
+                        drawBuyButtons()
+                    end
+                    goto continue
+                end
 
-            if isButtonClicked(backButton, x, y) then
-                currentScreen = "shop"
-                selectedIndex = 0
-                selectedItem = nil
-                hoveredIndex = 0
-                updateSelectorDisplay(nil)
-                drawShopMenu()
-                goto continue
-            end
+                if x >= 78 and y >= 7 and y <= 21 then
+                    local total = #filteredItems
+                    if total > visibleRows then
+                        local clickPos = y - 6
+                        listScroll = math.floor((clickPos - 1) * (total - visibleRows) / visibleRows) + 1
+                        drawBuyItemsList()
+                    end
+                    goto continue
+                end
 
-            if isButtonClicked(nextButton, x, y) then
-                if selectedItem and (currentShopMode ~= "buy" or selectedItem.qty > 0) then
-                    if currentShopMode == "buy" then
-                        local price = selectedItem.price
-                        if coinBalance < price then
-                            showInsufficientPopup = true
-                            insufficientBalance = coinBalance
-                            drawBuyStatic()
-                            drawBuyItemsList()
-                            drawBuyButtons()
-                            drawInsufficientPopup()
-                            goto continue
+                if y == 3 and x >= 42 and x <= 64 then
+                    searchActive = true
+                    searchInput = shopSearch
+                    drawBuyStatic()
+                    drawBuyItemsList()
+                    drawBuyButtons()
+                    goto continue
+                end
+                if y == 3 and x >= 66 and x <= 78 then
+                    shopSearch = ""
+                    searchInput = ""
+                    searchActive = false
+                    drawBuyStatic()
+                    drawBuyItemsList()
+                    drawBuyButtons()
+                    goto continue
+                end
+
+                if isButtonClicked(backButton, x, y) then
+                    currentScreen = "shop"
+                    selectedIndex = 0
+                    selectedItem = nil
+                    hoveredIndex = 0
+                    updateSelectorDisplay(nil)
+                    drawShopMenu()
+                    goto continue
+                end
+
+                if isButtonClicked(nextButton, x, y) then
+                    if selectedItem and (currentShopMode ~= "buy" or selectedItem.qty > 0) then
+                        if currentShopMode == "buy" then
+                            local price = selectedItem.price
+                            if coinBalance < price then
+                                showInsufficientPopup = true
+                                insufficientBalance = coinBalance
+                                drawBuyStatic()
+                                drawBuyItemsList()
+                                drawBuyButtons()
+                                drawInsufficientPopup()
+                                goto continue
+                            end
+                            goToPurchase(selectedItem)
+                        else
+                            goToSellConfirm(selectedItem)
                         end
-                        goToPurchase(selectedItem)
+                    end
+                    goto continue
+                end
+
+                if searchActive then
+                    shopSearch = searchInput
+                    searchActive = false
+                    listScroll = 1
+                    selectedIndex = 0
+                    selectedItem = nil
+                    hoveredIndex = 0
+                    drawBuyItemsList()
+                    drawBuyButtons()
+                    goto continue
+                end
+            elseif currentScreen == "purchase" then
+                if (y >= 24 and y <= 24) and (x >= 19 and x <= 28) then
+                    if currentShopMode == "buy" then
+                        currentScreen = "shop_buy"
+                        drawBuyStatic()
+                        drawBuyItemsList()
+                        drawBuyButtons()
                     else
-                        goToSellConfirm(selectedItem)
+                        currentScreen = "shop_sell"
+                        drawBuyStatic()
+                        drawBuyItemsList()
+                        drawBuyButtons()
+                    end
+                elseif (y >= 24 and y <= 24) and (x >= 51 and x <= 61) then
+                    performBuy()
+                end
+                local startX = 34
+                local startY = 11
+                local btnW = 3
+                local btnH = 1
+                local spacing = 2
+                local keys = {
+                    {"1","2","3"},
+                    {"4","5","6"},
+                    {"7","8","9"},
+                    {"<","0","C"}
+                }
+                for row = 1, 4 do
+                    for col = 1, 3 do
+                        local bx = startX + (col-1)*(btnW + spacing)
+                        local by = startY + (row-1)*(btnH + 1)
+                        if x >= bx and x < bx+btnW and y >= by and y < by+btnH then
+                            handleQuantityButtonClick(keys[row][col])
+                            break
+                        end
                     end
                 end
-                goto continue
+            elseif currentScreen == "sell_scan" then
+                if isButtonClicked(backButton, x, y) then
+                    currentScreen = "shop_sell"
+                    showSellPopup = false
+                    drawBuyStatic()
+                    drawBuyItemsList()
+                    drawBuyButtons()
+                elseif y == 13 and x >= 30 and x <= 50 then
+                    drawCenteredText(17, "Сканирование...", colors.accent_secondary)
+                    os.sleep(0.4)
+                    foundAmount = scanPlayerInventory(sellConfirmItem.internalName, sellConfirmItem.damage or 0)
+                    if foundAmount > 0 then
+                        showSellPopup = true
+                        drawSellScanScreen()
+                    else
+                        drawCenteredText(17, "Предмет не найден!", colors.error)
+                        os.sleep(0.8)
+                        drawSellScanScreen()
+                    end
+                elseif y == 15 and x >= 30 and x <= 50 then
+                    drawCenteredText(17, "Сканирование инвентаря...", colors.accent_secondary)
+                    os.sleep(0.6)
+                    foundAmount = scanPlayerInventory(sellConfirmItem.internalName, sellConfirmItem.damage or 0)
+                    if foundAmount > 0 then
+                        showSellPopup = true
+                        drawSellScanScreen()
+                    else
+                        drawCenteredText(17, "Предмет не найден!", colors.error)
+                        os.sleep(0.8)
+                        drawSellScanScreen()
+                    end
+                end
+            elseif currentScreen == "menu" then
+                for name, btn in pairs(menuButtons) do
+                    if x >= btn.x and x < btn.x + btn.xs and y >= btn.y and y < btn.y + btn.ys then
+                        if name == "shop" then
+                            if playerAgreed then
+                                goToShop()
+                            else
+                                showShopDenied = true
+                                drawMainMenu()
+                            end
+                        elseif name == "util" then
+                            showShopDenied = false
+                            goToUtility()
+                        elseif name == "account" then
+                            showShopDenied = false
+                            goToAccount()
+                        end
+                        break
+                    end
+                end
+                if y == 24 then
+                    if x >= 4 and x <= 25 then
+                        showShopDenied = false
+                        goToReport()
+                    elseif x >= 35 and x <= 47 then
+                        showShopDenied = false
+                        goToHelp()
+                    elseif x >= 70 and x <= 78 then
+                        showShopDenied = false
+                        drawCenteredText(18, "Отзывы в разработке", colors.text_main)
+                        os.sleep(1)
+                        drawMainMenu()
+                    end
+                end
+            elseif currentScreen == "agreement" then
+                local btnText = "[ ПОНЯТНО ]"
+                local btnW = unicode.len(btnText) + 4
+                local btnX = math.floor((80 - btnW)/2) + 2
+                if y == 22 and x >= btnX and x <= btnX + btnW then
+                    refreshAndAgree()
+                end
+                if isButtonClicked(backButton, x, y) then
+                    goBackToMenu()
+                end
+            elseif currentScreen == "account" or currentScreen == "account_loading" then
+                if isButtonClicked(backButton, x, y) then
+                    goBackToMenu()
+                end
+            elseif currentScreen == "shop" then
+                for name, btn in pairs(shopMenuButtons) do
+                    if x >= btn.x and x < btn.x + btn.xs and y >= btn.y and y < btn.y + btn.ys then
+                        if name == "buy" then
+                            goToBuy()
+                        elseif name == "sell" then
+                            goToSell()
+                        elseif name == "bundle" then
+                            currentScreen = "shop_bundle"
+                            clear()
+                            drawCenteredText(10, "Наборы/Квесты (в разработке)", colors.text_bright)
+                            drawFlexButton(backButton)
+                        end
+                        break
+                    end
+                end
+                if isButtonClicked(backButton, x, y) then
+                    goBackToMenu()
+                end
+            elseif currentScreen == "shop_bundle" then
+                if isButtonClicked(backButton, x, y) then
+                    currentScreen = "shop"
+                    drawShopMenu()
+                end
+            elseif currentScreen == "utility" then
+                if isButtonClicked(backButton, x, y) then
+                    goBackToMenu()
+                end
+            elseif currentScreen == "report" then
+                if isButtonClicked(backButton, x, y) then
+                    goBackToMenu()
+                elseif canSendReport() then
+                    local sendBtn = {x=20, y=14, xs=40, ys=1}
+                    if isButtonClicked(sendBtn, x, y) and reportInput ~= "" then
+                        if currentToken then
+                            modem.send(serverAddress, 0xffef, serialization.serialize({
+                                op = "report",
+                                name = currentPlayer,
+                                token = currentToken,
+                                text = reportInput,
+                                time = os.date("%d.%m.%Y %H:%M:%S")
+                            }))
+                        end
+                        lastReportTime = os.time()
+                        drawCenteredText(18, "Сообщение успешно отправлено! Ожидайте ответа.", colors.success)
+                        os.sleep(0.8)
+                        goBackToMenu()
+                    end
+                end
             end
-
-            if searchActive then
+        elseif e == "scroll" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
+            local direction = ev[5]
+            local x = ev[3]
+            local y = ev[4]
+            if x >= 2 and x <= 78 and y >= 7 and y <= 21 then
+                if direction == -1 then
+                    smoothScroll(1)
+                elseif direction == 1 then
+                    smoothScroll(-1)
+                end
+            end
+        elseif e == "mouse_move" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
+            local x, y = ev[3], ev[4]
+            if y >= 7 and y <= 21 and x >= 2 and x <= 77 then
+                local rel = y - 6
+                local newHover = listScroll + rel - 1
+                if newHover <= #filteredItems and newHover ~= hoveredIndex then
+                    hoveredIndex = newHover
+                    drawBuyItemsList()
+                end
+            else
+                if hoveredIndex ~= 0 then
+                    hoveredIndex = 0
+                    drawBuyItemsList()
+                end
+            end
+        elseif e == "key_down" and currentScreen == "report" and canSendReport() then
+            local ch = ev[3]
+            if ch == 13 then
+                drawReportScreen()
+            elseif ch == 8 then
+                reportInput = unicode.sub(reportInput, 1, -2)
+                drawReportScreen()
+            elseif ch >= 32 then
+                reportInput = reportInput .. unicode.char(ch)
+                drawReportScreen()
+            end
+        elseif e == "key_down" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") and searchActive then
+            local ch = ev[3]
+            if ch == 13 then
                 shopSearch = searchInput
                 searchActive = false
                 listScroll = 1
                 selectedIndex = 0
                 selectedItem = nil
                 hoveredIndex = 0
-                drawBuyItemsList()
-                drawBuyButtons()
-                goto continue
-            end
-        elseif currentScreen == "purchase" then
-            if (y >= 24 and y <= 24) and (x >= 19 and x <= 28) then
-                if currentShopMode == "buy" then
-                    currentScreen = "shop_buy"
-                    drawBuyStatic()
-                    drawBuyItemsList()
-                    drawBuyButtons()
-                else
-                    currentScreen = "shop_sell"
-                    drawBuyStatic()
-                    drawBuyItemsList()
-                    drawBuyButtons()
-                end
-            elseif (y >= 24 and y <= 24) and (x >= 51 and x <= 61) then
-                performBuy()
-            end
-            local startX = 34
-            local startY = 11
-            local btnW = 3
-            local btnH = 1
-            local spacing = 2
-            local keys = {
-                {"1","2","3"},
-                {"4","5","6"},
-                {"7","8","9"},
-                {"<","0","C"}
-            }
-            for row = 1, 4 do
-                for col = 1, 3 do
-                    local bx = startX + (col-1)*(btnW + spacing)
-                    local by = startY + (row-1)*(btnH + 1)
-                    if x >= bx and x < bx+btnW and y >= by and y < by+btnH then
-                        handleQuantityButtonClick(keys[row][col])
-                        break
-                    end
-                end
-            end
-        elseif currentScreen == "sell_scan" then
-            if isButtonClicked(backButton, x, y) then
-                currentScreen = "shop_sell"
-                showSellPopup = false
                 drawBuyStatic()
                 drawBuyItemsList()
                 drawBuyButtons()
-            elseif y == 13 and x >= 30 and x <= 50 then
-                drawCenteredText(17, "Сканирование...", colors.accent_secondary)
-                os.sleep(0.4)
-                foundAmount = scanPlayerInventory(sellConfirmItem.internalName, sellConfirmItem.damage or 0)
-                if foundAmount > 0 then
-                    showSellPopup = true
-                    drawSellScanScreen()
-                else
-                    drawCenteredText(17, "Предмет не найден!", colors.error)
-                    os.sleep(0.8)
-                    drawSellScanScreen()
-                end
-            elseif y == 15 and x >= 30 and x <= 50 then
-                drawCenteredText(17, "Сканирование инвентаря...", colors.accent_secondary)
-                os.sleep(0.6)
-                foundAmount = scanPlayerInventory(sellConfirmItem.internalName, sellConfirmItem.damage or 0)
-                if foundAmount > 0 then
-                    showSellPopup = true
-                    drawSellScanScreen()
-                else
-                    drawCenteredText(17, "Предмет не найден!", colors.error)
-                    os.sleep(0.8)
-                    drawSellScanScreen()
-                end
+            elseif ch == 8 then
+                searchInput = unicode.sub(searchInput, 1, -2)
+                shopSearch = searchInput
+                drawBuyStatic()
+                drawBuyItemsList()
+                drawBuyButtons()
+            elseif ch >= 32 then
+                searchInput = searchInput .. unicode.char(ch)
+                shopSearch = searchInput
+                drawBuyStatic()
+                drawBuyItemsList()
+                drawBuyButtons()
             end
-        elseif currentScreen == "menu" then
-            for name, btn in pairs(menuButtons) do
-                if x >= btn.x and x < btn.x + btn.xs and y >= btn.y and y < btn.y + btn.ys then
-                    if name == "shop" then
-                        if playerAgreed then
-                            goToShop()
-                        else
-                            showShopDenied = true
-                            drawMainMenu()
-                        end
-                    elseif name == "util" then
-                        showShopDenied = false
-                        goToUtility()
-                    elseif name == "account" then
-                        showShopDenied = false
-                        goToAccount()
-                    end
-                    break
-                end
-            end
-            if y == 24 then
-                if x >= 4 and x <= 25 then
-                    showShopDenied = false
-                    goToReport()
-                elseif x >= 35 and x <= 47 then
-                    showShopDenied = false
-                    goToHelp()
-                elseif x >= 70 and x <= 78 then
-                    showShopDenied = false
-                    drawCenteredText(18, "Отзывы в разработке", colors.text_main)
-                    os.sleep(1)
+            goto continue
+        elseif e == "player_on" or e == "pim" or e == "pim_player_enter" then
+            local playerName = ev[2] or "Игрок"
+            currentPlayer = playerName:match("^%s*(.-)%s*$") or playerName
+            if alreadyAuthorized then
+                if currentScreen == "auth" or currentScreen == "account_loading" then
+                    currentScreen = "menu"
                     drawMainMenu()
                 end
-            end
-        elseif currentScreen == "agreement" then
-            local btnText = "[ ПОНЯТНО ]"
-            local btnW = unicode.len(btnText) + 4
-            local btnX = math.floor((80 - btnW)/2) + 2
-            if y == 22 and x >= btnX and x <= btnX + btnW then
-                refreshAndAgree()
-            end
-            if isButtonClicked(backButton, x, y) then
-                goBackToMenu()
-            end
-        elseif currentScreen == "account" or currentScreen == "account_loading" then
-            if isButtonClicked(backButton, x, y) then
-                goBackToMenu()
-            end
-        elseif currentScreen == "shop" then
-            for name, btn in pairs(shopMenuButtons) do
-                if x >= btn.x and x < btn.x + btn.xs and y >= btn.y and y < btn.y + btn.ys then
-                    if name == "buy" then
-                        goToBuy()
-                    elseif name == "sell" then
-                        goToSell()
-                    elseif name == "bundle" then
-                        currentScreen = "shop_bundle"
-                        clear()
-                        drawCenteredText(10, "Наборы/Квесты (в разработке)", colors.text_bright)
-                        drawFlexButton(backButton)
-                    end
-                    break
+            elseif currentToken then
+                alreadyAuthorized = true
+                if currentScreen == "auth" or currentScreen == "account_loading" then
+                    currentScreen = "menu"
+                    drawMainMenu()
                 end
+            else
+                coinBalance = 0.0
+                playerAgreed = false
+                currentScreen = "auth"
+                authStartTime = os.clock()
+                drawAuthScreen()
+                modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
             end
-            if isButtonClicked(backButton, x, y) then
-                goBackToMenu()
-            end
-        elseif currentScreen == "shop_bundle" then
-            if isButtonClicked(backButton, x, y) then
-                currentScreen = "shop"
-                drawShopMenu()
-            end
-        elseif currentScreen == "utility" then
-            if isButtonClicked(backButton, x, y) then
-                goBackToMenu()
-            end
-        elseif currentScreen == "report" then
-            if isButtonClicked(backButton, x, y) then
-                goBackToMenu()
-            elseif canSendReport() then
-                local sendBtn = {x=20, y=14, xs=40, ys=1}
-                if isButtonClicked(sendBtn, x, y) and reportInput ~= "" then
-                    if currentToken then
-                        modem.send(serverAddress, 0xffef, serialization.serialize({
-                            op = "report",
-                            name = currentPlayer,
-                            token = currentToken,
-                            text = reportInput,
-                            time = os.date("%d.%m.%Y %H:%M:%S")
-                        }))
-                    end
-                    lastReportTime = os.time()
-                    drawCenteredText(18, "Сообщение успешно отправлено! Ожидайте ответа.", colors.success)
-                    os.sleep(0.8)
-                    goBackToMenu()
-                end
-            end
-        end
-    elseif e == "scroll" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
-        local direction = ev[5]
-        local x = ev[3]
-        local y = ev[4]
-        if x >= 2 and x <= 78 and y >= 7 and y <= 21 then
-            if direction == -1 then
-                smoothScroll(1)
-            elseif direction == 1 then
-                smoothScroll(-1)
-            end
-        end
-    elseif e == "mouse_move" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
-        local x, y = ev[3], ev[4]
-        if y >= 7 and y <= 21 and x >= 2 and x <= 77 then
-            local rel = y - 6
-            local newHover = listScroll + rel - 1
-            if newHover <= #filteredItems and newHover ~= hoveredIndex then
-                hoveredIndex = newHover
-                drawBuyItemsList()
-            end
-        else
-            if hoveredIndex ~= 0 then
-                hoveredIndex = 0
-                drawBuyItemsList()
-            end
-        end
-    elseif e == "key_down" and currentScreen == "report" and canSendReport() then
-        local ch = ev[3]
-        if ch == 13 then
-            drawReportScreen()
-        elseif ch == 8 then
-            reportInput = unicode.sub(reportInput, 1, -2)
-            drawReportScreen()
-        elseif ch >= 32 then
-            reportInput = reportInput .. unicode.char(ch)
-            drawReportScreen()
-        end
-    elseif e == "key_down" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") and searchActive then
-        local ch = ev[3]
-        if ch == 13 then
-            shopSearch = searchInput
-            searchActive = false
-            listScroll = 1
-            selectedIndex = 0
+        elseif e == "player_off" or e == "pim_player_leave" then
+            currentPlayer = nil
+            currentToken = nil
+            alreadyAuthorized = false
+            currentScreen = "welcome"
             selectedItem = nil
             hoveredIndex = 0
-            drawBuyStatic()
-            drawBuyItemsList()
-            drawBuyButtons()
-        elseif ch == 8 then
-            searchInput = unicode.sub(searchInput, 1, -2)
-            shopSearch = searchInput
-            drawBuyStatic()
-            drawBuyItemsList()
-            drawBuyButtons()
-        elseif ch >= 32 then
-            searchInput = searchInput .. unicode.char(ch)
-            shopSearch = searchInput
-            drawBuyStatic()
-            drawBuyItemsList()
-            drawBuyButtons()
-        end
-        goto continue
-    elseif e == "player_on" or e == "pim" or e == "pim_player_enter" then
-        local playerName = ev[2] or "Игрок"
-        currentPlayer = playerName:match("^%s*(.-)%s*$") or playerName
-        if alreadyAuthorized then
-            if currentScreen == "auth" or currentScreen == "account_loading" then
-                currentScreen = "menu"
-                drawMainMenu()
-            end
-        elseif currentToken then
-            alreadyAuthorized = true
-            if currentScreen == "auth" or currentScreen == "account_loading" then
-                currentScreen = "menu"
-                drawMainMenu()
-            end
-        else
-            coinBalance = 0.0
-            playerAgreed = false
-            currentScreen = "auth"
-            authStartTime = os.clock()
-            drawAuthScreen()
-            modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
-        end
-    elseif e == "player_off" or e == "pim_player_leave" then
-        currentPlayer = nil
-        currentToken = nil
-        alreadyAuthorized = false
-        currentScreen = "welcome"
-        selectedItem = nil
-        hoveredIndex = 0
-        selectedIndex = 0
-        pcall(updateSelectorDisplay, nil)
-        pcall(selector.setSlot, 0, nil)
-        pcall(selector.setSlot, 1, nil)
-        drawWelcomeScreen()
-    elseif e == "modem_message" then
-        local sender = ev[3]
-        local data = ev[6]
-        if sender == serverAddress then
-            local success, msg = pcall(serialization.unserialize, data)
-            if success and msg then
-                if msg.op == "welcome" and msg.token then
-                    currentToken = msg.token
-                    coinBalance = msg.balance or 0.0
-                    playerTransactions = msg.transactions or 0
-                    playerRegDate = msg.regDate or ""
-                    playerAgreed = msg.agreed or false
-                    alreadyAuthorized = true
-                    if selector then
-                        modem.send(serverAddress, 0xffef, serialization.serialize({
-                            op = "selector_status",
-                            name = currentPlayer,
-                            token = currentToken,
-                            available = true
-                        }))
-                    end
-                    if currentScreen == "auth" or currentScreen == "account_loading" then
-                        currentScreen = "menu"
-                        drawMainMenu()
-                    end
-                elseif msg.op == "accountData" then
-                    if msg.error then
-                        retryAccountAfterTokenRefresh()
-                    else
-                        if currentScreen == "account_loading" then
-                            currentScreen = "account"
-                            playerAgreed = msg.data.agreed or false
-                            drawAccount(msg.data)
+            selectedIndex = 0
+            pcall(updateSelectorDisplay, nil)
+            pcall(selector.setSlot, 0, nil)
+            pcall(selector.setSlot, 1, nil)
+            drawWelcomeScreen()
+        elseif e == "modem_message" then
+            local sender = ev[3]
+            local data = ev[6]
+            if sender == serverAddress then
+                local success, msg = pcall(serialization.unserialize, data)
+                if success and msg then
+                    if msg.op == "welcome" and msg.token then
+                        currentToken = msg.token
+                        coinBalance = msg.balance or 0.0
+                        playerTransactions = msg.transactions or 0
+                        playerRegDate = msg.regDate or ""
+                        playerAgreed = msg.agreed or false
+                        alreadyAuthorized = true
+                        if selector then
+                            modem.send(serverAddress, 0xffef, serialization.serialize({
+                                op = "selector_status",
+                                name = currentPlayer,
+                                token = currentToken,
+                                available = true
+                            }))
                         end
-                    end
-                elseif msg.op == "agree" then
-                    if msg.success then
-                        playerAgreed = true
-                        showShopDenied = false
-                        drawCenteredText(20, "Спасибо! Теперь вам доступен магазин.", colors.success)
-                        os.sleep(0.8)
-                        drawMainMenu()
-                        currentScreen = "menu"
-                    elseif msg.error and msg.message == "Токен устарел" then
-                        drawCenteredText(20, "Сессия устарела. Обновление...", colors.accent_secondary)
-                        os.sleep(1)
-                        modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
-                        local start = os.clock()
-                        local refreshed = false
-                        while os.clock() - start < 3 do
-                            local evt = {event.pull(0.3)}
-                            if evt[1] == "modem_message" then
-                                local s, d = evt[3], evt[6]
-                                if s == serverAddress then
-                                    local ok, m = pcall(serialization.unserialize, d)
-                                    if ok and m and m.op == "welcome" and m.token then
-                                        currentToken = m.token
-                                        coinBalance = m.balance or 0.0
-                                        playerAgreed = m.agreed or false
-                                        refreshed = true
-                                        break
-                                    end
-                                end
-                            elseif evt[1] == "player_off" or evt[1] == "pim_player_leave" then
-                                break
+                        if currentScreen == "auth" or currentScreen == "account_loading" then
+                            currentScreen = "menu"
+                            drawMainMenu()
+                        end
+                    elseif msg.op == "accountData" then
+                        if msg.error then
+                            retryAccountAfterTokenRefresh()
+                        else
+                            if currentScreen == "account_loading" then
+                                currentScreen = "account"
+                                playerAgreed = msg.data.agreed or false
+                                drawAccount(msg.data)
                             end
                         end
-                        if refreshed then
-                            modem.send(serverAddress, 0xffef, serialization.serialize({
-                                op = "agree",
-                                name = currentPlayer,
-                                token = currentToken
-                            }))
-                            drawCenteredText(20, "Повторная отправка...", colors.success)
+                    elseif msg.op == "agree" then
+                        if msg.success then
+                            playerAgreed = true
+                            showShopDenied = false
+                            drawCenteredText(20, "Спасибо! Теперь вам доступен магазин.", colors.success)
+                            os.sleep(0.8)
+                            drawMainMenu()
+                            currentScreen = "menu"
+                        elseif msg.error and msg.message == "Токен устарел" then
+                            drawCenteredText(20, "Сессия устарела. Обновление...", colors.accent_secondary)
+                            os.sleep(1)
+                            modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
+                            local start = os.clock()
+                            local refreshed = false
+                            while os.clock() - start < 3 do
+                                local evt = {event.pull(0.3)}
+                                if evt[1] == "modem_message" then
+                                    local s, d = evt[3], evt[6]
+                                    if s == serverAddress then
+                                        local ok, m = pcall(serialization.unserialize, d)
+                                        if ok and m and m.op == "welcome" and m.token then
+                                            currentToken = m.token
+                                            coinBalance = m.balance or 0.0
+                                            playerAgreed = m.agreed or false
+                                            refreshed = true
+                                            break
+                                        end
+                                    end
+                                elseif evt[1] == "player_off" or evt[1] == "pim_player_leave" then
+                                    break
+                                end
+                            end
+                            if refreshed then
+                                modem.send(serverAddress, 0xffef, serialization.serialize({
+                                    op = "agree",
+                                    name = currentPlayer,
+                                    token = currentToken
+                                }))
+                                drawCenteredText(20, "Повторная отправка...", colors.success)
+                            else
+                                drawCenteredText(20, "Не удалось обновить сессию", colors.error)
+                                os.sleep(2)
+                                drawMainMenu()
+                                currentScreen = "menu"
+                            end
                         else
-                            drawCenteredText(20, "Не удалось обновить сессию", colors.error)
+                            drawCenteredText(20, "Ошибка: " .. (msg.message or "неизвестная"), colors.error)
                             os.sleep(2)
                             drawMainMenu()
                             currentScreen = "menu"
                         end
-                    else
-                        drawCenteredText(20, "Ошибка: " .. (msg.message or "неизвестная"), colors.error)
-                        os.sleep(2)
-                        drawMainMenu()
-                        currentScreen = "menu"
                     end
                 end
             end
         end
+        ::continue::
     end
-    ::continue::
+end
+
+-- ========== ПОПАП КРИТИЧЕСКОЙ ОШИБКИ ==========
+local function drawCrashPopup(errText)
+    local popupWidth = 50
+    local popupHeight = 8
+    local popupX = math.floor((80 - popupWidth) / 2)
+    local popupY = 9
+
+    -- Затемняем весь экран
+    gpu.setBackground(colors.black_fon)
+    gpu.fill(1, 1, 80, 25, " ")
+    gpu.setBackground(colors.bg_main)
+
+    -- Рамка попапа
+    drawPopupBorder(popupX, popupY, popupWidth, popupHeight, colors.error)
+
+    -- Заголовок
+    gpu.setForeground(colors.error)
+    local title = "ОШИБКА"
+    local titleX = popupX + math.floor((popupWidth - unicode.len(title)) / 2)
+    gpu.set(titleX, popupY, title)
+
+    -- Текст ошибки (обрезаем, чтобы влезло)
+    gpu.setForeground(colors.text_main)
+    local shortErr = errText:sub(1, popupWidth - 4)
+    local errX = popupX + 2
+    gpu.set(errX, popupY + 2, shortErr)
+
+    -- Обратный отсчёт
+    for i = 3, 1, -1 do
+        gpu.setForeground(colors.success)
+        local msg = "Перезагрузка через " .. i .. " сек..."
+        local msgX = popupX + math.floor((popupWidth - unicode.len(msg)) / 2)
+        gpu.set(msgX, popupY + 5, msg)
+        os.sleep(1)
+    end
+end
+
+-- ========== БЕСКОНЕЧНЫЙ ПЕРЕЗАПУСК ПРИ ОШИБКАХ ==========
+while true do
+    local ok, err = pcall(main)
+    if not ok then
+        pcall(drawCrashPopup, tostring(err))
+    end
 end
