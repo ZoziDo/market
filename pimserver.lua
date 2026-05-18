@@ -10,7 +10,7 @@ local modem = component.modem
 modem.open(0xffef)
 modem.open(0xfffe)
 
--- ========== ОТКЛЮЧЕНИЕ ВОЗМОЖНОСТИ ПРЕРЫВАНИЯ ==========
+-- ========== ЗАЩИТА ОТ ПРЕРЫВАНИЯ ==========
 event.ignore("interrupted", function() end)
 event.ignore("terminate", function() end)
 
@@ -290,10 +290,8 @@ local function drawEditBalanceWindow()
 end
 
 function drawInterface()
-    if editBalanceMode then
-        drawEditBalanceWindow()
-        return
-    end
+    -- Не рисуем основной интерфейс, если мы в админ-панели или редактируем баланс
+    if adminMode or editBalanceMode then return end
     if drawing then return end
     drawing = true
     io.write(ansi.hide_cursor .. ansi.clear)
@@ -344,12 +342,12 @@ function drawInterface()
     end
     resetColor()
     
-    -- Блок "ПРОДАЖИ" – вместо ME-системы показываем историю продаж
+    -- Блок "ПРОДАЖИ" – история продаж
     setColor(ansi.cyan)
     gotoxy(colX[2], 6)
     io.write("Последние продажи:")
     for i = 1, math.min(rowsAvailable, #sellHistory) do
-        local entry = sellHistory[#sellHistory - i + 1]  -- выводим с конца, последние сверху
+        local entry = sellHistory[#sellHistory - i + 1]  -- последние сверху
         if entry then
             gotoxy(colX[2], 6 + i)
             local line = entry.name .. ": " .. entry.item .. " x" .. entry.qty
@@ -604,7 +602,7 @@ local function validateSession(name, token)
     return s and s.token == token and os.time() - (s.lastAction or 0) < SESSION_TIMEOUT
 end
 
--- ========== ОСНОВНОЙ ЦИКЛ (без таймера перерисовки) ==========
+-- ========== ОСНОВНОЙ ЦИКЛ ==========
 local function main()
     log("INFO", "Сервер запущен. Ожидание терминалов...")
     drawInterface()
@@ -644,7 +642,7 @@ local function main()
                 if msg.password ~= ACCESS_PASSWORD then
                     modem.send(from, 0xffef, serialization.serialize({op="error", message="Неверный пароль"}))
                     log("WARN", "Попытка подключения с неверным паролем от " .. from)
-                    drawInterface()
+                    if not adminMode and not editBalanceMode then drawInterface() end
                     goto continue
                 end
                 marketConnected = true
@@ -653,24 +651,24 @@ local function main()
                     log("INFO", "✅ АДМИН ЗАРЕГИСТРИРОВАН: " .. from)
                 end
                 modem.send(from, 0xffef, serialization.serialize({op="welcome", owner=(from==owner), shopPaused=shopPaused}))
-                drawInterface()
+                if not adminMode and not editBalanceMode then drawInterface() end
                 goto continue
             elseif msg.op == "enter" then
                 if shopPaused then
                     modem.send(from, 0xffef, serialization.serialize({op="error", message="Магазин на паузе"}))
-                    drawInterface()
+                    if not adminMode and not editBalanceMode then drawInterface() end
                     goto continue
                 end
                 local playerName = msg.name
                 if not playerName or playerName == "" then
                     log("WARN", "Вход без имени от " .. from)
-                    drawInterface()
+                    if not adminMode and not editBalanceMode then drawInterface() end
                     goto continue
                 end
                 local player = getOrCreatePlayer(playerName)
                 if player.banned then
                     modem.send(from, 0xffef, serialization.serialize({op="error", message="Вы забанены"}))
-                    drawInterface()
+                    if not adminMode and not editBalanceMode then drawInterface() end
                     goto continue
                 end
 
@@ -694,13 +692,13 @@ local function main()
                     agreed = player.agreed or false,
                     shopPaused = shopPaused
                 }))
-                drawInterface()
+                if not adminMode and not editBalanceMode then drawInterface() end
                 goto continue
             elseif msg.op == "getAccount" then
                 if not validateSession(msg.name, msg.token) then
                     log("WARN", "Неверный токен для getAccount от " .. (msg.name or "?"))
                     modem.send(from, 0xffef, serialization.serialize({op="accountData", error = true, message = "Токен устарел"}))
-                    drawInterface()
+                    if not adminMode and not editBalanceMode then drawInterface() end
                     goto continue
                 end
                 local player = players[msg.name]
@@ -717,17 +715,17 @@ local function main()
                     }
                 }))
                 log("INFO", "Аккаунт отправлен для " .. msg.name)
-                drawInterface()
+                if not adminMode and not editBalanceMode then drawInterface() end
                 goto continue
             elseif msg.op == "sell" then
                 if shopPaused then
                     modem.send(from, 0xffef, serialization.serialize({op="error", message="Магазин на паузе"}))
-                    drawInterface()
+                    if not adminMode and not editBalanceMode then drawInterface() end
                     goto continue
                 end
                 if not validateSession(msg.name, msg.token) then
                     log("WARN", "Неверный токен для sell")
-                    drawInterface()
+                    if not adminMode and not editBalanceMode then drawInterface() end
                     goto continue
                 end
                 local player = players[msg.name]
@@ -750,17 +748,17 @@ local function main()
                 while #sellHistory > MAX_SELL_HISTORY do
                     table.remove(sellHistory, 1)
                 end
-                drawInterface()
+                if not adminMode and not editBalanceMode then drawInterface() end
                 goto continue
             elseif msg.op == "buy" then
                 if shopPaused then
                     modem.send(from, 0xffef, serialization.serialize({op="error", message="Магазин на паузе"}))
-                    drawInterface()
+                    if not adminMode and not editBalanceMode then drawInterface() end
                     goto continue
                 end
                 if not validateSession(msg.name, msg.token) then
                     log("WARN", "Неверный токен для buy")
-                    drawInterface()
+                    if not adminMode and not editBalanceMode then drawInterface() end
                     goto continue
                 end
                 local player = players[msg.name]
@@ -776,12 +774,12 @@ local function main()
                 saveDB()
                 recordTransaction()
                 log("INFO", string.format("🛒 %s купил %s x%d за %.2f ₵", msg.name, msg.item, msg.qty, value))
-                drawInterface()
+                if not adminMode and not editBalanceMode then drawInterface() end
                 goto continue
             elseif msg.op == "report" then
                 if not validateSession(msg.name, msg.token) then
                     log("WARN", "Неверный токен для report")
-                    drawInterface()
+                    if not adminMode and not editBalanceMode then drawInterface() end
                     goto continue
                 end
                 globalStats.totalReports = (globalStats.totalReports or 0) + 1
@@ -796,13 +794,13 @@ local function main()
                 else
                     log("ERROR", "❌ Не удалось открыть reports.log")
                 end
-                drawInterface()
+                if not adminMode and not editBalanceMode then drawInterface() end
                 goto continue
             elseif msg.op == "agree" then
                 if not validateSession(msg.name, msg.token) then
                     log("WARN", "Неверный токен для agree")
                     modem.send(from, 0xffef, serialization.serialize({ op="agree", error = true, message = "Токен устарел" }))
-                    drawInterface()
+                    if not adminMode and not editBalanceMode then drawInterface() end
                     goto continue
                 end
                 local player = players[msg.name]
@@ -815,7 +813,7 @@ local function main()
                 else
                     modem.send(from, 0xffef, serialization.serialize({ op = "agree", error = true, message = "Игрок не найден" }))
                 end
-                drawInterface()
+                if not adminMode and not editBalanceMode then drawInterface() end
                 goto continue
             end
         end
