@@ -5,6 +5,7 @@ local filesystem = require("filesystem")
 local gpu = component.gpu
 local math = require("math")
 local os = require("os")
+local unicode = require("unicode")
 
 local modem = component.modem
 modem.open(0xffef)
@@ -342,16 +343,18 @@ function drawInterface()
     end
     resetColor()
     
-    -- Блок "ПРОДАЖИ" – история продаж
+    -- Блок "ПРОДАЖИ"
     setColor(ansi.cyan)
     gotoxy(colX[2], 6)
     io.write("Последние продажи:")
     for i = 1, math.min(rowsAvailable, #sellHistory) do
-        local entry = sellHistory[#sellHistory - i + 1]  -- последние сверху
+        local entry = sellHistory[#sellHistory - i + 1]
         if entry then
             gotoxy(colX[2], 6 + i)
             local line = entry.name .. ": " .. entry.item .. " x" .. entry.qty
-            if #line > colWidth then line = line:sub(1, colWidth) end
+            if unicode.len(line) > colWidth then
+                line = unicode.sub(line, 1, colWidth)
+            end
             io.write(line)
         end
     end
