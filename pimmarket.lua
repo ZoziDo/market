@@ -1,4 +1,3 @@
--- market_01 (защищённая версия)
 local component = require("component")
 local event = require("event")
 local gpu = component.gpu
