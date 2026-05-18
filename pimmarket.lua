@@ -8,8 +8,8 @@ local computer = require("computer")
 local fs = require("filesystem")
 
 -- ========== ОТКЛЮЧЕНИЕ ВОЗМОЖНОСТИ ПРЕРЫВАНИЯ ==========
-event.ignore("interrupted")   -- Ctrl+C больше не работает
-event.ignore("terminate")     -- сигнал завершения
+event.ignore("interrupted", function() end)
+event.ignore("terminate", function() end)
 
 -- ========== НАСТРОЙКИ ПОДКЛЮЧЕНИЯ ==========
 local serverAddress = "535305a9-37c9-4645-b7c4-46204187ee7b"  -- ЗАМЕНИТЕ НА АДРЕС ВАШЕГО СЕРВЕРНОГО МОДЕМА
