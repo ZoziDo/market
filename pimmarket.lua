@@ -12,23 +12,8 @@ event.ignore("interrupted", function() end)
 event.ignore("terminate", function() end)
 
 -- ========== НАСТРОЙКИ ПОДКЛЮЧЕНИЯ ==========
-local serverAddress = "535305a9-37c9-4645-b7c4-46204187ee7b"  -- ЗАМЕНИТЕ НА АДРЕС ВАШЕГО СЕРВЕРНОГО МОДЕМА
-
--- Параметры шифрования пароля (одинаковые для всех терминалов)
-local ENC_KEY = "MySecretKey123"   -- смените на свой ключ
--- Зашифрованный пароль "secret" (сгенерирован с ключом MySecretKey123)
-local ENCRYPTED_PASSWORD = "\x1b\x07\x11\x0e\x1d\x0f\x08\x0e\x1b\x07\x11\x0e"
-
-local function decryptPassword()
-    local dec = {}
-    for i = 1, #ENCRYPTED_PASSWORD do
-        local b = string.byte(ENCRYPTED_PASSWORD, i)
-        local k = string.byte(ENC_KEY, (i-1) % #ENC_KEY + 1)
-        dec[i] = string.char(b ~ k)  -- XOR
-    end
-    return table.concat(dec)
-end
-local ACCESS_PASSWORD = decryptPassword()
+local serverAddress = "535305a9-37c9-4645-b7c4-46204187ee7b"  -- АДРЕС СЕРВЕРА (убедитесь, что верный)
+local ACCESS_PASSWORD = "secret"   -- ПАРОЛЬ (должен совпадать с серверным)
 
 -- Цветовая схема
 local colors = {
