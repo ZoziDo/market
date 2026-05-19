@@ -2139,6 +2139,13 @@ local function main()
                             drawMainMenu()
                             currentScreen = "menu"
                         end
+                    elseif msg.op == "add_buy_item_response" then
+                        -- Ответ от сервера на добавление предмета (можно игнорировать или логировать)
+                        if msg.success then
+                            print("Предмет успешно добавлен на сервере")
+                        else
+                            print("Ошибка добавления предмета: " .. (msg.error or "неизвестная"))
+                        end
                     end
                 end
             end
