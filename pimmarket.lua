@@ -196,6 +196,10 @@ local reportInput = ""
 local lastReportTime = nil
 local showShopDenied = false
 
+-- ========== ВРЕМЕННЫЕ СООБЩЕНИЯ ВНИЗУ ЭКРАНА ==========
+local tempMessage = ""
+local tempMessageTimer = nil
+
 -- ==================== ОБНОВЛЕНИЕ СЕЛЕКТОРА ====================
 local function updateSelectorDisplay(item)
     if not selector then return end
@@ -248,6 +252,46 @@ local function drawBigTitle()
     for i, line in ipairs(shopLines) do
         gpu.set(shopX, 10 + i, line)
     end
+end
+
+-- ========== ФУНКЦИИ ДЛЯ ВРЕМЕННЫХ СООБЩЕНИЙ ==========
+local function drawTempMessage()
+    if tempMessage ~= "" then
+        gpu.setBackground(colors.bg_main)
+        gpu.fill(1, 25, 80, 1, " ")
+        gpu.setForeground(colors.success)
+        local x = math.floor((80 - unicode.len(tempMessage)) / 2) + 1
+        gpu.set(x, 25, tempMessage)
+    else
+        gpu.setBackground(colors.bg_main)
+        gpu.fill(1, 25, 80, 1, " ")
+    end
+end
+
+local function showTempMessage(msg, duration)
+    tempMessage = msg
+    if tempMessageTimer then
+        event.cancel(tempMessageTimer)
+    end
+    tempMessageTimer = event.timer(duration, function()
+        tempMessage = ""
+        tempMessageTimer = nil
+        -- перерисовываем текущий экран
+        if currentScreen == "shop_buy" or currentScreen == "shop_sell" then
+            drawBuyStatic()
+            drawBuyItemsList()
+            drawBuyButtons()
+        elseif currentScreen == "menu" then
+            drawMainMenu()
+        elseif currentScreen == "shop" then
+            drawShopMenu()
+        elseif currentScreen == "account" then
+            drawAccount({balance=coinBalance, transactions=playerTransactions, regDate=playerRegDate, agreed=playerAgreed})
+        else
+            drawTempMessage()
+        end
+    end)
+    drawTempMessage()
 end
 
 -- ========== ФУНКЦИИ ЭКРАНА ==========
@@ -569,6 +613,8 @@ local function drawBuyStatic()
     gpu.set(42, 5, "Кол-во")
     gpu.set(65, 5, "Цена")
     gpu.setBackground(colors.bg_main)
+    
+    drawTempMessage()
 end
 
 local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
@@ -718,6 +764,7 @@ local function drawBuyButtons()
 
     drawFlexButton(backButton)
     drawFlexButton(nextButton)
+    drawTempMessage()
 end
 
 -- ========== ЭКРАН ПОКУПКИ ==========
@@ -784,6 +831,7 @@ local function drawPurchaseScreen()
     local buyBtn  = {x = 51, y = 24, xs = unicode.len("[ КУПИТЬ ]") + 2, ys = 1, text = "[ КУПИТЬ ]", bg = colors.bg_button, fg = colors.success}
     drawFlexButton(backBtn)
     drawFlexButton(buyBtn)
+    drawTempMessage()
 end
 
 local function handleQuantityButtonClick(btnText)
@@ -851,6 +899,7 @@ local function drawSellPopup()
     local noBtn  = {x=popupX+popupWidth-16, y=popupY+7, xs=12, ys=1, text="[ Отмена ]", bg=colors.bg_button, fg=colors.error}
     drawFlexButton(yesBtn)
     drawFlexButton(noBtn)
+    drawTempMessage()
 end
 
 -- ========== ПОПАП "НЕДОСТАТОЧНО СРЕДСТВ" ==========
@@ -896,6 +945,7 @@ local function drawInsufficientPopup()
         fg = colors.success
     }
     drawFlexButton(okBtn)
+    drawTempMessage()
 end
 
 -- ========== ПОПАП "ЧАСТИЧНАЯ ВЫДАЧА" ==========
@@ -945,6 +995,7 @@ local function drawPartialPopup()
         fg = colors.success
     }
     drawFlexButton(okBtn)
+    drawTempMessage()
 end
 
 -- ========== НОВЫЙ ПОПАП "ИНВЕНТАРЬ ПОЛОН" ==========
@@ -985,6 +1036,7 @@ local function drawInventoryFullPopup()
         fg = colors.success
     }
     drawFlexButton(okBtn)
+    drawTempMessage()
 end
 
 local function drawSellScanScreen()
@@ -1025,6 +1077,7 @@ local function drawSellScanScreen()
     if showSellPopup and sellConfirmItem then
         drawSellPopup()
     end
+    drawTempMessage()
 end
 
 local function goToSellConfirm(item)
@@ -1075,7 +1128,6 @@ local function performSell()
         }))
     end
 
-    -- Очищаем строку 17 перед выводом нового сообщения
     gpu.setBackground(colors.bg_main)
     gpu.fill(2, 17, 78, 1, " ")
     drawCenteredText(17, "Успешно! +" .. string.format("%.2f", value) .. " ₵", colors.success)
@@ -1088,7 +1140,7 @@ local function performSell()
     drawBuyButtons()
 end
 
--- ========== ИСПРАВЛЕННАЯ ПОКУПКА (работает с любым количеством) ==========
+-- ========== ИСПРАВЛЕННАЯ ПОКУПКА ==========
 local function performBuy()
     if not playerAgreed then
         drawCenteredText(20, "Сначала примите пользовательское соглашение", colors.error)
@@ -1139,7 +1191,7 @@ local function performBuy()
         return
     end
 
-        drawCenteredText(20, "Выполняется покупка...", colors.accent_main)
+    drawCenteredText(20, "Выполняется покупка...", colors.accent_main)
     os.sleep(0.4)
 
     local id = item.internalName
@@ -1245,7 +1297,6 @@ local function performBuy()
         }))
     end
 
-    -- ⬇️ ОЧИСТКА СТРОКИ 20 ПЕРЕД ВЫВОДОМ НОВОГО СООБЩЕНИЯ ⬇️
     gpu.setBackground(colors.bg_main)
     gpu.fill(2, 20, 78, 1, " ")
     drawCenteredText(20, "Куплено " .. extracted .. " шт. за " .. string.format("%.2f", totalCost) .. " ₵", colors.success)
@@ -1262,7 +1313,7 @@ local function performBuy()
     drawBuyStatic()
     drawBuyItemsList()
     drawBuyButtons()
-   end 
+end 
 
 -- ========== ЭКРАН РЕПОРТА ==========
 local function drawReportScreen()
@@ -1279,6 +1330,7 @@ local function drawReportScreen()
         drawCenteredText(9, "Вы уже отправляли репорт сегодня.", colors.error)
         drawCenteredText(10, "Лимит: 1 сообщение в сутки (сброс в 00:00 МСК).", colors.error)
         drawFlexButton(backButton)
+        drawTempMessage()
         return
     end
 
@@ -1298,6 +1350,7 @@ local function drawReportScreen()
     drawFlexButton(backButton)
     gpu.setForeground(colors.text_main)
     drawCenteredText(16, "Ограничение: 1 репорт в сутки (сброс в 00:00 МСК)", colors.text_main)
+    drawTempMessage()
 end
 
 -- ========== НАВИГАЦИЯ ==========
@@ -1359,12 +1412,14 @@ local function drawShopMenu()
         drawCenteredText(9, "Доступ запрещён.", colors.error)
         drawCenteredText(10, "Примите соглашение, нажав [Соглашение] в главном меню.", colors.accent_main)
         drawFlexButton(backButton)
+        drawTempMessage()
         return
     end
     for _, btn in pairs(shopMenuButtons) do
         drawButton(btn)
     end
     drawFlexButton(backButton)
+    drawTempMessage()
 end
 
 local function drawWelcomeScreen()
@@ -1377,6 +1432,7 @@ local function drawWelcomeScreen()
     gpu.setForeground(colors.text_main)
     drawCenteredText(22, "По любым вопросам пишите в Telegram: f0rb4ik", colors.text_main)
     gpu.setBackground(colors.bg_main)
+    drawTempMessage()
 end
 
 local function drawAuthScreen()
@@ -1388,6 +1444,7 @@ local function drawAuthScreen()
     gpu.setForeground(colors.text_main)
     drawCenteredText(22, "По любым вопросам пишите в Telegram: f0rb4ik", colors.text_main)
     gpu.setBackground(colors.bg_main)
+    drawTempMessage()
 end
 
 local function drawMainMenu()
@@ -1425,6 +1482,7 @@ local function drawMainMenu()
     else
         drawWelcomeScreen()
     end
+    drawTempMessage()
 end
 
 local function drawAccount(data)
@@ -1467,6 +1525,7 @@ local function drawAccount(data)
     gpu.set(agreeX + unicode.len(agreeLabel), 15, agreeStatus)
 
     drawFlexButton(backButton)
+    drawTempMessage()
 end
 
 local function drawAccountLoading()
@@ -1474,8 +1533,10 @@ local function drawAccountLoading()
     drawScreenBorder()
     drawCenteredText(12, "Загрузка...", colors.text_main)
     drawFlexButton(backButton)
+    drawTempMessage()
 end
 
+-- ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ТОКЕНОВ ==========
 local function retryAccountAfterTokenRefresh()
     if not currentPlayer then return end
     modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
@@ -1542,6 +1603,7 @@ local function goToUtility()
     currentScreen = "utility"
     clear()
     drawCenteredText(8, "Полезности (в разработке)", colors.success)
+    drawTempMessage()
 end
 
 local function goBackToMenu()
@@ -1587,13 +1649,11 @@ local function refreshAndAgree()
     end
 end
 
--- ======== ВСЁ ОСТАЛЬНОЕ ОСТАЁТСЯ ВНУТРИ main() ========
+-- ========== ОСНОВНОЙ ЦИКЛ ==========
 local function main()
-    -- ======== ИНИЦИАЛИЗАЦИЯ ========
     drawWelcomeScreen()
     modem.send(serverAddress, 0xffef, serialization.serialize({op="register", password=ACCESS_PASSWORD}))
 
-    -- ======== ГЛАВНЫЙ ЦИКЛ ========
     while true do
         local ev = {event.pull(0.5)}
         local e = ev[1]
@@ -1909,6 +1969,7 @@ local function main()
                             clear()
                             drawCenteredText(10, "Наборы/Квесты (в разработке)", colors.text_bright)
                             drawFlexButton(backButton)
+                            drawTempMessage()
                         end
                         break
                     end
@@ -2044,8 +2105,7 @@ local function main()
             pcall(selector.setSlot, 0, nil)
             pcall(selector.setSlot, 1, nil)
             drawWelcomeScreen()
-            
-            elseif e == "modem_message" then
+        elseif e == "modem_message" then
             local sender = ev[3]
             local data = ev[6]
             if sender == serverAddress then
@@ -2132,6 +2192,7 @@ local function main()
                             currentScreen = "menu"
                         end
                     elseif msg.op == "add_buy_item" then
+                        -- Добавляем предмет и отправляем ответ на ОТПРАВИТЕЛЯ (sender), а не на serverAddress
                         local ok, err = pcall(function()
                             local buyItems = dofile("/home/buy_items.lua")
                             if type(buyItems) ~= "table" then buyItems = {} end
@@ -2163,14 +2224,15 @@ local function main()
                             end
                         end)
                         if ok then
-                            modem.send(serverAddress, 0xffef, serialization.serialize({op = "add_buy_item_response", success = true}))
-                            print("✅ Предмет добавлен: " .. msg.displayName)
+                            modem.send(sender, 0xffef, serialization.serialize({op = "add_buy_item_response", success = true}))
+                            showTempMessage("✅ Предмет добавлен: " .. msg.displayName, 10)
                         else
-                            modem.send(serverAddress, 0xffef, serialization.serialize({op = "add_buy_item_response", success = false, error = tostring(err)}))
-                            print("❌ Ошибка добавления: " .. tostring(err))
+                            modem.send(sender, 0xffef, serialization.serialize({op = "add_buy_item_response", success = false, error = tostring(err)}))
+                            showTempMessage("❌ Ошибка добавления: " .. tostring(err), 10)
                         end
                         goto continue
                     elseif msg.op == "add_buy_item_response" then
+                        -- Эта часть нужна, если сервер шлёт ответ (уже есть в server_1)
                         if msg.success then
                             print("Предмет успешно добавлен на сервере")
                         else
@@ -2191,27 +2253,22 @@ local function drawCrashPopup(errText)
     local popupX = math.floor((80 - popupWidth) / 2)
     local popupY = 9
 
-    -- Затемняем весь экран
     gpu.setBackground(colors.bg_main)
     gpu.fill(1, 1, 80, 25, " ")
     gpu.setBackground(colors.bg_main)
 
-    -- Рамка попапа
     drawPopupBorder(popupX, popupY, popupWidth, popupHeight, colors.error)
 
-    -- Заголовок
     gpu.setForeground(colors.error)
     local title = "ОШИБКА"
     local titleX = popupX + math.floor((popupWidth - unicode.len(title)) / 2)
     gpu.set(titleX, popupY, title)
 
-    -- Текст ошибки (обрезаем, чтобы влезло)
     gpu.setForeground(colors.text_main)
     local shortErr = errText:sub(1, popupWidth - 4)
     local errX = popupX + 2
     gpu.set(errX, popupY + 2, shortErr)
 
-    -- Обратный отсчёт
     for i = 3, 1, -1 do
         gpu.setForeground(colors.success)
         local msg = "Перезагрузка через " .. i .. " сек..."
