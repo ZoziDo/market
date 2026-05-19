@@ -489,33 +489,33 @@ local function handleKey(key, char, player)
 
     -- Режим добавления предмета (приоритет)
     if addItemMode then
-        if char == 27 then  -- Esc
+        if char == 27 then
             addItemMode = false
             addItemResponse = nil
             if adminMode then drawAdminPanel() else drawInterface() end
             return
-        elseif char == 13 then  -- Enter
-            if addItemCurrentField < 4 then
-                addItemCurrentField = addItemCurrentField + 1
-                drawAddItemForm()
-                return
+        elseif char == 13 then
+            -- ... существующая логика ...
+        elseif char == 8 then
+            local field = addItemFieldNames[addItemCurrentField]
+            addItemFields[field] = addItemFields[field]:sub(1, -2)
+            drawAddItemForm()
+            return
+        elseif char >= 32 then
+            local c = unicode.char(char)  -- поддержка Unicode
+            local field = addItemFieldNames[addItemCurrentField]
+            if field == "price" or field == "damage" then
+                if c:match("%d") or (c == "." and field == "price" and not addItemFields.price:find("%.")) then
+                    addItemFields[field] = addItemFields[field] .. c
+                end
             else
-                -- Валидация и отправка
-                local price = tonumber(addItemFields.price)
-                if not price then
-                    addLog("Ошибка: цена должна быть числом", ansi.red)
-                    addItemMode = false
-                    drawAdminPanel()
-                    return
-                end
-                local damage = tonumber(addItemFields.damage) or 0
-                if damage < 0 then damage = 0 end
-                if addItemFields.internal == "" or addItemFields.display == "" then
-                    addLog("Ошибка: internalName и displayName не могут быть пустыми", ansi.red)
-                    addItemMode = false
-                    drawAdminPanel()
-                    return
-                end
+                addItemFields[field] = addItemFields[field] .. c
+            end
+            drawAddItemForm()
+            return
+        end
+        return
+    end
 
                 local data = {
                     op = "add_buy_item",
@@ -552,7 +552,7 @@ local function handleKey(key, char, player)
             addItemFields[field] = addItemFields[field]:sub(1, -2)
             drawAddItemForm()
             return
-        elseif char >= 32 and char <= 126 then
+        elseif char >= 32 and char <= 255 then
             local c = string.char(char)
             local field = addItemFieldNames[addItemCurrentField]
             if field == "price" or field == "damage" then
