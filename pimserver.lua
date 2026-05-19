@@ -42,8 +42,29 @@ local function resetColor()
     io.write(ansi.reset)
 end
 
--- ========== ПАРОЛЬ ==========
-local ACCESS_PASSWORD = "secret"  -- смените на ваш настоящий пароль
+local function gotoxy(x, y)
+    io.write("\27[", y, ";", x, "H")
+end
+
+local function fill(x, y, w, h, char)
+    for i = 0, h-1 do
+        gotoxy(x, y+i)
+        io.write(string.rep(char, w))
+    end
+end
+
+local function timeToMidnight()
+    local now = os.date("*t")
+    local secondsLeft = (24 - now.hour - 1) * 3600 + (60 - now.min - 1) * 60 + (60 - now.sec)
+    if secondsLeft < 0 then secondsLeft = 0 end
+    local h = math.floor(secondsLeft / 3600)
+    local m = math.floor((secondsLeft % 3600) / 60)
+    local s = secondsLeft % 60
+    return string.format("%02d:%02d:%02d", h, m, s)
+end
+
+-- ========== ПАРОЛЬ (должен совпадать с market_01) ==========
+local ACCESS_PASSWORD = "secret"
 
 -- ========== БАЗА ДАННЫХ ИГРОКОВ ==========
 local DB_PATH = "/home/players.db"
@@ -66,11 +87,7 @@ end
 
 -- ========== ГЛОБАЛЬНАЯ СТАТИСТИКА ==========
 local STATS_PATH = "/home/global_stats.db"
-local globalStats = {
-    totalReports = 0,
-    totalBuys = 0,
-    totalSells = 0
-}
+local globalStats = { totalReports = 0, totalBuys = 0, totalSells = 0 }
 if filesystem.exists(STATS_PATH) then
     local file = io.open(STATS_PATH, "r")
     local raw = file:read("*a")
@@ -94,7 +111,7 @@ end
 -- ========== ПЕРЕМЕННЫЕ СЕРВЕРА ==========
 local owner = nil
 local sessions = {}
-local SESSION_TIMEOUT = 31536000  -- 1 год
+local SESSION_TIMEOUT = 31536000
 local marketConnected = false
 local logBuffer = {}
 local shopPaused = false
@@ -103,7 +120,6 @@ local adminPlayerList = {}
 local adminScroll = 0
 local selectedAdminIndex = 1
 local adminViewHeight = 20
-
 local editBalanceMode = false
 local editingPlayer = nil
 local editInput = ""
@@ -111,39 +127,26 @@ local editInput = ""
 -- ========== РЕЖИМ ДОБАВЛЕНИЯ ПРЕДМЕТА ==========
 local addItemMode = false
 local addItemFields = { internal = "", display = "", price = "", damage = "0" }
-local addItemCurrentField = 1   -- 1=internal,2=display,3=price,4=damage
+local addItemCurrentField = 1
 local addItemFieldNames = { "internal", "display", "price", "damage" }
 local addItemResponse = nil
 local addItemResponseTimer = nil
 
--- ========== ИСТОРИЯ ПРОДАЖ ==========
-local sellHistory = {}   -- таблица записей: {item, qty, name}
-local MAX_SELL_HISTORY = 20  -- сколько последних продаж показывать
-
+-- ========== ИСТОРИЯ ПРОДАЖ И АКТИВНОСТЬ ==========
+local sellHistory = {}
+local MAX_SELL_HISTORY = 20
 local ACTIVITY_SIZE = 60
 local activityBuffer = {}
 for i=1, ACTIVITY_SIZE do activityBuffer[i] = 0 end
 local activityIndex = 0
-
 local screenW, screenH = 80, 25
 local colX = {5, 30, 55, 80}
 local colWidth = 25
 local logStartY = 20
 local maxLogLines = 14
-
 local ADMIN_NAME = "ZoziDo"
 local drawing = false
 
--- ========== ПРОВЕРКА АДМИНА ==========
-local function isAdminConnected()
-    local sess = sessions[ADMIN_NAME]
-    if sess and sess.token and os.time() - (sess.lastAction or 0) < SESSION_TIMEOUT then
-        return true
-    end
-    return false
-end
-
--- ========== ФУНКЦИИ ОБНОВЛЕНИЯ ЭКРАНА ==========
 local function updateScreenSize()
     local w, h = gpu.getResolution()
     if w > 200 then w = 200 end
@@ -160,31 +163,11 @@ local function updateScreenSize()
     if adminViewHeight < 3 then adminViewHeight = 3 end
 end
 
-local function gotoxy(x, y)
-    io.write("\27[", y, ";", x, "H")
-end
-
-local function fill(x, y, w, h, char)
-    for i = 0, h-1 do
-        gotoxy(x, y+i)
-        io.write(string.rep(char, w))
-    end
-end
-
-local function timeToMidnight()
-    local now = os.date("*t")
-    local secondsLeft = (24 - now.hour - 1) * 3600 + (60 - now.min - 1) * 60 + (60 - now.sec)
-    if secondsLeft < 0 then secondsLeft = 0 end
-    local h = math.floor(secondsLeft / 3600)
-    local m = math.floor((secondsLeft % 3600) / 60)
-    local s = secondsLeft % 60
-    return string.format("%02d:%02d:%02d", h, m, s)
-end
-
 local function addActivity()
     activityIndex = activityIndex % ACTIVITY_SIZE + 1
     activityBuffer[activityIndex] = 0
 end
+event.timer(60, addActivity, math.huge)
 
 local function recordTransaction()
     if activityBuffer[activityIndex] then
@@ -192,9 +175,24 @@ local function recordTransaction()
     end
 end
 
-event.timer(60, addActivity, math.huge)
+function addLog(text, fg)
+    table.insert(logBuffer, {text = text, color = fg or ansi.white})
+    while #logBuffer > 200 do table.remove(logBuffer, 1) end
+end
 
--- ========== АДМИН-ПАНЕЛЬ ==========
+local function log(level, msg)
+    local color = ansi.white
+    if level == "INFO" then color = ansi.green
+    elseif level == "WARN" then color = ansi.yellow
+    elseif level == "ERROR" then color = ansi.red end
+    addLog("[" .. os.date("%H:%M:%S") .. "] [" .. level .. "] " .. msg, color)
+end
+
+local function isAdminConnected()
+    local sess = sessions[ADMIN_NAME]
+    return sess and sess.token and os.time() - (sess.lastAction or 0) < SESSION_TIMEOUT
+end
+
 local function updateAdminPlayerList()
     adminPlayerList = {}
     for name, data in pairs(players) do
@@ -203,6 +201,7 @@ local function updateAdminPlayerList()
     table.sort(adminPlayerList, function(a,b) return a.name < b.name end)
 end
 
+-- ========== ОТРИСОВКА АДМИН-ПАНЕЛИ ==========
 local function drawAdminPanel()
     if drawing then return end
     drawing = true
@@ -252,6 +251,7 @@ local function drawAdminPanel()
     drawing = false
 end
 
+-- ========== ФОРМА РЕДАКТИРОВАНИЯ БАЛАНСА ==========
 local function drawEditBalanceWindow()
     if drawing then return end
     drawing = true
@@ -278,22 +278,17 @@ local function drawEditBalanceWindow()
     resetColor()
 
     setColor(ansi.yellow)
-    gotoxy(x+2, y+2)
-    io.write("Игрок: " .. editingPlayer.name)
-    gotoxy(x+2, y+3)
-    io.write("Текущий баланс: " .. string.format("%.2f", editingPlayer.data.balance) .. " ₵")
+    gotoxy(x+2, y+2) io.write("Игрок: " .. editingPlayer.name)
+    gotoxy(x+2, y+3) io.write("Текущий баланс: " .. string.format("%.2f", editingPlayer.data.balance) .. " ₵")
     resetColor()
 
     setColor(ansi.cyan)
-    gotoxy(x+2, y+5)
-    io.write("Введите новую сумму: " .. editInput .. "_")
+    gotoxy(x+2, y+5) io.write("Введите новую сумму: " .. editInput .. "_")
     resetColor()
 
     setColor(ansi.white)
-    gotoxy(x+2, y+6)
-    io.write("Enter - подтвердить | Esc - отмена")
+    gotoxy(x+2, y+6) io.write("Enter - подтвердить | Esc - отмена")
     resetColor()
-
     io.flush()
     drawing = false
 end
@@ -344,8 +339,8 @@ local function drawAddItemForm()
     drawing = false
 end
 
+-- ========== ОСНОВНОЙ ИНТЕРФЕЙС СЕРВЕРА ==========
 function drawInterface()
-    -- Не рисуем основной интерфейс, если мы в админ-панели или редактируем баланс или добавление
     if adminMode or editBalanceMode or addItemMode then return end
     if drawing then return end
     drawing = true
@@ -397,7 +392,6 @@ function drawInterface()
     end
     resetColor()
     
-    -- Блок "ПРОДАЖИ"
     setColor(ansi.cyan)
     gotoxy(colX[2], 6)
     io.write("Последние продажи:")
@@ -470,24 +464,32 @@ function drawInterface()
     drawing = false
 end
 
-function addLog(text, fg)
-    table.insert(logBuffer, {text = text, color = fg or ansi.white})
-    while #logBuffer > 200 do table.remove(logBuffer, 1) end
+-- ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
+local function getOrCreatePlayer(name)
+    if not players[name] then
+        players[name] = {
+            balance = 0.0,
+            transactions = 0,
+            regDate = os.date("%d.%m.%Y %H:%M:%S"),
+            agreed = false,
+            banned = false
+        }
+        saveDB()
+        log("INFO", "Создан игрок " .. name)
+    end
+    return players[name]
 end
 
-local function log(level, msg)
-    local color = ansi.white
-    if level == "INFO" then color = ansi.green
-    elseif level == "WARN" then color = ansi.yellow
-    elseif level == "ERROR" then color = ansi.red end
-    addLog("[" .. os.date("%H:%M:%S") .. "] [" .. level .. "] " .. msg, color)
+local function validateSession(name, token)
+    local s = sessions[name]
+    return s and s.token == token and os.time() - (s.lastAction or 0) < SESSION_TIMEOUT
 end
 
--- ========== ОБРАБОТКА КЛАВИШ ==========
+-- ========== ОБРАБОТЧИК КЛАВИШ ==========
 local function handleKey(key, char, player)
     local isAdmin = (player == ADMIN_NAME) and isAdminConnected()
 
-    -- Режим добавления предмета (приоритет)
+    -- Режим добавления предмета
     if addItemMode then
         if char == 27 then
             addItemMode = false
@@ -495,27 +497,26 @@ local function handleKey(key, char, player)
             if adminMode then drawAdminPanel() else drawInterface() end
             return
         elseif char == 13 then
-            -- ... существующая логика ...
-        elseif char == 8 then
-            local field = addItemFieldNames[addItemCurrentField]
-            addItemFields[field] = addItemFields[field]:sub(1, -2)
-            drawAddItemForm()
-            return
-        elseif char >= 32 then
-            local c = unicode.char(char)  -- поддержка Unicode
-            local field = addItemFieldNames[addItemCurrentField]
-            if field == "price" or field == "damage" then
-                if c:match("%d") or (c == "." and field == "price" and not addItemFields.price:find("%.")) then
-                    addItemFields[field] = addItemFields[field] .. c
-                end
+            if addItemCurrentField < 4 then
+                addItemCurrentField = addItemCurrentField + 1
+                drawAddItemForm()
+                return
             else
-                addItemFields[field] = addItemFields[field] .. c
-            end
-            drawAddItemForm()
-            return
-        end
-        return
-    end
+                local price = tonumber(addItemFields.price)
+                if not price then
+                    addLog("Ошибка: цена должна быть числом", ansi.red)
+                    addItemMode = false
+                    drawAdminPanel()
+                    return
+                end
+                local damage = tonumber(addItemFields.damage) or 0
+                if damage < 0 then damage = 0 end
+                if addItemFields.internal == "" or addItemFields.display == "" then
+                    addLog("Ошибка: internalName и displayName не могут быть пустыми", ansi.red)
+                    addItemMode = false
+                    drawAdminPanel()
+                    return
+                end
 
                 local data = {
                     op = "add_buy_item",
@@ -529,7 +530,6 @@ local function handleKey(key, char, player)
                     addLog("Отправка предмета на market_01...", ansi.yellow)
                     addItemResponse = nil
                     addItemResponseTimer = os.time()
-                    -- Ждём ответ до 5 секунд
                     while os.time() - addItemResponseTimer < 5 do
                         event.pull(0.2)
                         if addItemResponse then break end
@@ -547,13 +547,13 @@ local function handleKey(key, char, player)
                 if adminMode then drawAdminPanel() else drawInterface() end
                 return
             end
-        elseif char == 8 then  -- Backspace
+        elseif char == 8 then
             local field = addItemFieldNames[addItemCurrentField]
             addItemFields[field] = addItemFields[field]:sub(1, -2)
             drawAddItemForm()
             return
-        elseif char >= 32 and char <= 255 then
-            local c = string.char(char)
+        elseif char >= 32 then
+            local c = unicode.char(char)  -- поддержка русского и других языков
             local field = addItemFieldNames[addItemCurrentField]
             if field == "price" or field == "damage" then
                 if c:match("%d") or (c == "." and field == "price" and not addItemFields.price:find("%.")) then
@@ -565,7 +565,6 @@ local function handleKey(key, char, player)
             drawAddItemForm()
             return
         end
-        -- Если не обработали, выходим из функции
         return
     end
 
@@ -663,7 +662,7 @@ local function handleKey(key, char, player)
             end
             return
         elseif pressed == "r" then
-            drawInterface()  -- ручное обновление экрана
+            drawInterface()
             return
         end
     else
@@ -729,26 +728,6 @@ local function handleTouch(x, y, player)
             drawAdminPanel()
         end
     end
-end
-
-local function getOrCreatePlayer(name)
-    if not players[name] then
-        players[name] = {
-            balance = 0.0,
-            transactions = 0,
-            regDate = os.date("%d.%m.%Y %H:%M:%S"),
-            agreed = false,
-            banned = false
-        }
-        saveDB()
-        log("INFO", "Создан игрок " .. name)
-    end
-    return players[name]
-end
-
-local function validateSession(name, token)
-    local s = sessions[name]
-    return s and s.token == token and os.time() - (s.lastAction or 0) < SESSION_TIMEOUT
 end
 
 -- ========== ОСНОВНОЙ ЦИКЛ ==========
@@ -891,12 +870,8 @@ local function main()
                 saveDB()
                 recordTransaction()
                 log("INFO", string.format("💰 %s пополнил баланс: предмет '%s' x%d на сумму %.2f ₵", msg.name, msg.item, qty, value))
-                
-                -- Добавляем в историю продаж
                 table.insert(sellHistory, {item = msg.item, qty = qty, name = msg.name})
-                while #sellHistory > MAX_SELL_HISTORY do
-                    table.remove(sellHistory, 1)
-                end
+                while #sellHistory > MAX_SELL_HISTORY do table.remove(sellHistory, 1) end
                 if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
             elseif msg.op == "buy" then
@@ -966,14 +941,15 @@ local function main()
                 goto continue
             elseif msg.op == "add_buy_item_response" then
                 addItemResponse = { success = msg.success, error = msg.error }
-                -- Можно ничего не рисовать, просто сохраняем ответ
+                -- ответ получен, ничего не рисуем
+                goto continue
             end
         end
         ::continue::
     end
 end
 
--- ========== БЕСКОНЕЧНЫЙ ПЕРЕЗАПУСК ПРИ ОШИБКАХ ==========
+-- ========== БЕСКОНЕЧНЫЙ ПЕРЕЗАПУСК ==========
 while true do
     local ok, err = pcall(main)
     if not ok then
