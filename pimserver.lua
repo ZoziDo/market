@@ -111,6 +111,7 @@ end
 -- ========== ПЕРЕМЕННЫЕ СЕРВЕРА ==========
 local owner = nil
 local sessions = {}
+local markets = {}
 local SESSION_TIMEOUT = 31536000
 local marketConnected = false
 local logBuffer = {}
@@ -531,9 +532,17 @@ if addItemMode then
                 price = price,
                 damage = damage
             }
-            if owner then
-                modem.send(owner, 0xffef, serialization.serialize(data))
-                addLog("Отправка предмета на market_01...", ansi.yellow)
+            
+            if next(markets) == nil then
+                addLog("Нет подключённых терминалов market_01", ansi.red)
+            else
+                local sent = 0
+                for addr, _ in pairs(markets) do
+                    modem.send(addr, 0xffef, serialization.serialize(data))
+                    sent = sent + 1
+                end
+                addLog("Отправка предмета на " .. sent .. " терминал(ов)...", ansi.yellow)
+                
                 addItemResponse = nil
                 addItemResponseTimer = os.time()
                 while os.time() - addItemResponseTimer < 5 do
@@ -543,11 +552,8 @@ if addItemMode then
                 if addItemResponse and addItemResponse.success then
                     addLog("Предмет успешно добавлен!", ansi.green)
                 else
-                    -- Изменяем текст ошибки (можно оставить как есть, но предмет всё равно добавляется)
-                    addLog("Внимание: не получен ответ от market, но предмет мог быть добавлен.", ansi.yellow)
+                    addLog("Внимание: не получен ответ от терминалов, но предмет мог быть добавлен.", ansi.yellow)
                 end
-            else
-                addLog("Нет подключённого market_01", ansi.red)
             end
             addItemMode = false
             addItemResponse = nil
@@ -774,17 +780,23 @@ local function main()
             log("INFO", string.format("От %s | op=%s | name=%s | token=%s", from, tostring(msg.op), msg.name or "?", msg.token or "нет"))
 
             if msg.op == "register" then
-                if msg.password ~= ACCESS_PASSWORD then
-                    modem.send(from, 0xffef, serialization.serialize({op="error", message="Неверный пароль"}))
-                    log("WARN", "Попытка подключения с неверным паролем от " .. from)
-                    if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
-                    goto continue
-                end
-                marketConnected = true
-                if not owner then
-                    owner = from
-                    log("INFO", "✅ АДМИН ЗАРЕГИСТРИРОВАН: " .. from)
-                end
+            if msg.password ~= ACCESS_PASSWORD then
+                -- ... ошибка ...
+            end
+            marketConnected = true
+            if not owner then
+                owner = from
+                log("INFO", "✅ АДМИН ЗАРЕГИСТРИРОВАН: " .. from)
+            end
+            -- ДОБАВИТЬ В СПИСОК ВСЕХ ТЕРМИНАЛОВ
+            if not markets[from] then
+                markets[from] = true
+                log("INFO", "✅ Терминал добавлен в список рассылки: " .. from)
+            end
+                modem.send(from, 0xffef, serialization.serialize({op="welcome", owner=(from==owner), shopPaused=shopPaused}))
+                if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
+                goto continue
+            end
                 modem.send(from, 0xffef, serialization.serialize({op="welcome", owner=(from==owner), shopPaused=shopPaused}))
                 if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
