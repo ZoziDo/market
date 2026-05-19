@@ -108,6 +108,14 @@ local editBalanceMode = false
 local editingPlayer = nil
 local editInput = ""
 
+-- ========== РЕЖИМ ДОБАВЛЕНИЯ ПРЕДМЕТА ==========
+local addItemMode = false
+local addItemFields = { internal = "", display = "", price = "", damage = "0" }
+local addItemCurrentField = 1   -- 1=internal,2=display,3=price,4=damage
+local addItemFieldNames = { "internal", "display", "price", "damage" }
+local addItemResponse = nil
+local addItemResponseTimer = nil
+
 -- ========== ИСТОРИЯ ПРОДАЖ ==========
 local sellHistory = {}   -- таблица записей: {item, qty, name}
 local MAX_SELL_HISTORY = 20  -- сколько последних продаж показывать
@@ -220,7 +228,7 @@ local function drawAdminPanel()
     local startIdx = adminScroll + 1
     local endIdx = math.min(#adminPlayerList, adminScroll + adminViewHeight)
     setColor(ansi.yellow)
-    gotoxy(2, 3) io.write("Игроки (↑↓ выбор, клик мышкой, D - бан/разбан, R - сброс статистики, P - пауза, E - редактировать баланс)")
+    gotoxy(2, 3) io.write("Игроки (↑↓ выбор, клик мышкой, D - бан/разбан, R - сброс статистики, P - пауза, E - редактировать баланс, B - добавить предмет)")
     resetColor()
 
     for i=startIdx, endIdx do
@@ -238,7 +246,7 @@ local function drawAdminPanel()
 
     setColor(ansi.cyan)
     gotoxy(2, screenH-2)
-    io.write("BAN/UNBAN: D | RESET STATS: R | PAUSE: P | EDIT BALANCE: E | SCROLL: ↑↓ | MOUSE CLICK")
+    io.write("BAN/UNBAN: D | RESET STATS: R | PAUSE: P | EDIT BALANCE: E | ADD ITEM: B | SCROLL: ↑↓ | MOUSE CLICK")
     resetColor()
     io.flush()
     drawing = false
@@ -290,9 +298,55 @@ local function drawEditBalanceWindow()
     drawing = false
 end
 
+-- ========== ФОРМА ДОБАВЛЕНИЯ ПРЕДМЕТА ==========
+local function drawAddItemForm()
+    if drawing then return end
+    drawing = true
+    io.write(ansi.hide_cursor .. ansi.clear)
+    updateScreenSize()
+
+    local w = 70
+    local h = 12
+    local x = math.floor((screenW - w) / 2)
+    local y = math.floor((screenH - h) / 2)
+
+    setColor(ansi.white)
+    fill(x, y, w, h, " ")
+    setColor(ansi.bg_black, ansi.white)
+    for i = 0, h-1 do
+        gotoxy(x, y+i) io.write("│")
+        gotoxy(x+w-1, y+i) io.write("│")
+    end
+    fill(x+1, y, w-2, 1, "─")
+    fill(x+1, y+h-1, w-2, 1, "─")
+    setColor(ansi.bg_blue, ansi.white)
+    fill(x+2, y, w-4, 1, " ")
+    gotoxy(x+2, y) io.write(" ДОБАВЛЕНИЕ ПРЕДМЕТА В МАГАЗИН (покупка) ")
+    resetColor()
+
+    local labels = { "Internal Name (например extrautils:itemnode):", "Display Name:", "Price (число):", "Damage (0 = без damage):" }
+    for i = 1, 4 do
+        setColor(ansi.yellow)
+        gotoxy(x+3, y+2 + (i-1)*2)
+        io.write(labels[i])
+        setColor(ansi.cyan)
+        gotoxy(x+35, y+2 + (i-1)*2)
+        local val = addItemFields[addItemFieldNames[i]]
+        local cursor = (addItemCurrentField == i) and "█" or " "
+        io.write(val .. cursor)
+        resetColor()
+    end
+
+    setColor(ansi.white)
+    gotoxy(x+3, y+10)
+    io.write("Enter - далее / отправить | Esc - отмена")
+    io.flush()
+    drawing = false
+end
+
 function drawInterface()
-    -- Не рисуем основной интерфейс, если мы в админ-панели или редактируем баланс
-    if adminMode or editBalanceMode then return end
+    -- Не рисуем основной интерфейс, если мы в админ-панели или редактируем баланс или добавление
+    if adminMode or editBalanceMode or addItemMode then return end
     if drawing then return end
     drawing = true
     io.write(ansi.hide_cursor .. ansi.clear)
@@ -433,6 +487,88 @@ end
 local function handleKey(key, char, player)
     local isAdmin = (player == ADMIN_NAME) and isAdminConnected()
 
+    -- Режим добавления предмета (приоритет)
+    if addItemMode then
+        if char == 27 then  -- Esc
+            addItemMode = false
+            addItemResponse = nil
+            if adminMode then drawAdminPanel() else drawInterface() end
+            return
+        elseif char == 13 then  -- Enter
+            if addItemCurrentField < 4 then
+                addItemCurrentField = addItemCurrentField + 1
+                drawAddItemForm()
+                return
+            else
+                -- Валидация и отправка
+                local price = tonumber(addItemFields.price)
+                if not price then
+                    addLog("Ошибка: цена должна быть числом", ansi.red)
+                    addItemMode = false
+                    drawAdminPanel()
+                    return
+                end
+                local damage = tonumber(addItemFields.damage) or 0
+                if damage < 0 then damage = 0 end
+                if addItemFields.internal == "" or addItemFields.display == "" then
+                    addLog("Ошибка: internalName и displayName не могут быть пустыми", ansi.red)
+                    addItemMode = false
+                    drawAdminPanel()
+                    return
+                end
+
+                local data = {
+                    op = "add_buy_item",
+                    internalName = addItemFields.internal,
+                    displayName = addItemFields.display,
+                    price = price,
+                    damage = damage
+                }
+                if owner then
+                    modem.send(owner, 0xffef, serialization.serialize(data))
+                    addLog("Отправка предмета на market_01...", ansi.yellow)
+                    addItemResponse = nil
+                    addItemResponseTimer = os.time()
+                    -- Ждём ответ до 5 секунд
+                    while os.time() - addItemResponseTimer < 5 do
+                        event.pull(0.2)
+                        if addItemResponse then break end
+                    end
+                    if addItemResponse and addItemResponse.success then
+                        addLog("Предмет успешно добавлен!", ansi.green)
+                    else
+                        addLog("Ошибка: " .. (addItemResponse and addItemResponse.error or "нет ответа от market"), ansi.red)
+                    end
+                else
+                    addLog("Нет подключённого market_01", ansi.red)
+                end
+                addItemMode = false
+                addItemResponse = nil
+                if adminMode then drawAdminPanel() else drawInterface() end
+                return
+            end
+        elseif char == 8 then  -- Backspace
+            local field = addItemFieldNames[addItemCurrentField]
+            addItemFields[field] = addItemFields[field]:sub(1, -2)
+            drawAddItemForm()
+            return
+        elseif char >= 32 and char <= 126 then
+            local c = string.char(char)
+            local field = addItemFieldNames[addItemCurrentField]
+            if field == "price" or field == "damage" then
+                if c:match("%d") or (c == "." and field == "price" and not addItemFields.price:find("%.")) then
+                    addItemFields[field] = addItemFields[field] .. c
+                end
+            else
+                addItemFields[field] = addItemFields[field] .. c
+            end
+            drawAddItemForm()
+            return
+        end
+        -- Если не обработали, выходим из функции
+        return
+    end
+
     if editBalanceMode then
         if char == 27 then
             editBalanceMode = false
@@ -568,12 +704,22 @@ local function handleKey(key, char, player)
                 drawEditBalanceWindow()
             end
             return
+        elseif pressed == "b" then
+            if isAdmin then
+                addItemMode = true
+                addItemFields = { internal = "", display = "", price = "", damage = "0" }
+                addItemCurrentField = 1
+                drawAddItemForm()
+            else
+                log("WARN", "Попытка добавления предмета не админом: " .. tostring(player))
+            end
+            return
         end
     end
 end
 
 local function handleTouch(x, y, player)
-    if not adminMode or editBalanceMode then return end
+    if not adminMode or editBalanceMode or addItemMode then return end
     if player ~= ADMIN_NAME or not isAdminConnected() then return end
     if y >= 4 and y <= 3 + adminViewHeight then
         local lineIndex = y - 4
@@ -645,7 +791,7 @@ local function main()
                 if msg.password ~= ACCESS_PASSWORD then
                     modem.send(from, 0xffef, serialization.serialize({op="error", message="Неверный пароль"}))
                     log("WARN", "Попытка подключения с неверным паролем от " .. from)
-                    if not adminMode and not editBalanceMode then drawInterface() end
+                    if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                     goto continue
                 end
                 marketConnected = true
@@ -654,24 +800,24 @@ local function main()
                     log("INFO", "✅ АДМИН ЗАРЕГИСТРИРОВАН: " .. from)
                 end
                 modem.send(from, 0xffef, serialization.serialize({op="welcome", owner=(from==owner), shopPaused=shopPaused}))
-                if not adminMode and not editBalanceMode then drawInterface() end
+                if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
             elseif msg.op == "enter" then
                 if shopPaused then
                     modem.send(from, 0xffef, serialization.serialize({op="error", message="Магазин на паузе"}))
-                    if not adminMode and not editBalanceMode then drawInterface() end
+                    if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                     goto continue
                 end
                 local playerName = msg.name
                 if not playerName or playerName == "" then
                     log("WARN", "Вход без имени от " .. from)
-                    if not adminMode and not editBalanceMode then drawInterface() end
+                    if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                     goto continue
                 end
                 local player = getOrCreatePlayer(playerName)
                 if player.banned then
                     modem.send(from, 0xffef, serialization.serialize({op="error", message="Вы забанены"}))
-                    if not adminMode and not editBalanceMode then drawInterface() end
+                    if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                     goto continue
                 end
 
@@ -695,13 +841,13 @@ local function main()
                     agreed = player.agreed or false,
                     shopPaused = shopPaused
                 }))
-                if not adminMode and not editBalanceMode then drawInterface() end
+                if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
             elseif msg.op == "getAccount" then
                 if not validateSession(msg.name, msg.token) then
                     log("WARN", "Неверный токен для getAccount от " .. (msg.name or "?"))
                     modem.send(from, 0xffef, serialization.serialize({op="accountData", error = true, message = "Токен устарел"}))
-                    if not adminMode and not editBalanceMode then drawInterface() end
+                    if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                     goto continue
                 end
                 local player = players[msg.name]
@@ -718,17 +864,17 @@ local function main()
                     }
                 }))
                 log("INFO", "Аккаунт отправлен для " .. msg.name)
-                if not adminMode and not editBalanceMode then drawInterface() end
+                if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
             elseif msg.op == "sell" then
                 if shopPaused then
                     modem.send(from, 0xffef, serialization.serialize({op="error", message="Магазин на паузе"}))
-                    if not adminMode and not editBalanceMode then drawInterface() end
+                    if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                     goto continue
                 end
                 if not validateSession(msg.name, msg.token) then
                     log("WARN", "Неверный токен для sell")
-                    if not adminMode and not editBalanceMode then drawInterface() end
+                    if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                     goto continue
                 end
                 local player = players[msg.name]
@@ -751,17 +897,17 @@ local function main()
                 while #sellHistory > MAX_SELL_HISTORY do
                     table.remove(sellHistory, 1)
                 end
-                if not adminMode and not editBalanceMode then drawInterface() end
+                if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
             elseif msg.op == "buy" then
                 if shopPaused then
                     modem.send(from, 0xffef, serialization.serialize({op="error", message="Магазин на паузе"}))
-                    if not adminMode and not editBalanceMode then drawInterface() end
+                    if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                     goto continue
                 end
                 if not validateSession(msg.name, msg.token) then
                     log("WARN", "Неверный токен для buy")
-                    if not adminMode and not editBalanceMode then drawInterface() end
+                    if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                     goto continue
                 end
                 local player = players[msg.name]
@@ -777,12 +923,12 @@ local function main()
                 saveDB()
                 recordTransaction()
                 log("INFO", string.format("🛒 %s купил %s x%d за %.2f ₵", msg.name, msg.item, msg.qty, value))
-                if not adminMode and not editBalanceMode then drawInterface() end
+                if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
             elseif msg.op == "report" then
                 if not validateSession(msg.name, msg.token) then
                     log("WARN", "Неверный токен для report")
-                    if not adminMode and not editBalanceMode then drawInterface() end
+                    if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                     goto continue
                 end
                 globalStats.totalReports = (globalStats.totalReports or 0) + 1
@@ -797,13 +943,13 @@ local function main()
                 else
                     log("ERROR", "❌ Не удалось открыть reports.log")
                 end
-                if not adminMode and not editBalanceMode then drawInterface() end
+                if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
             elseif msg.op == "agree" then
                 if not validateSession(msg.name, msg.token) then
                     log("WARN", "Неверный токен для agree")
                     modem.send(from, 0xffef, serialization.serialize({ op="agree", error = true, message = "Токен устарел" }))
-                    if not adminMode and not editBalanceMode then drawInterface() end
+                    if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                     goto continue
                 end
                 local player = players[msg.name]
@@ -816,8 +962,11 @@ local function main()
                 else
                     modem.send(from, 0xffef, serialization.serialize({ op = "agree", error = true, message = "Игрок не найден" }))
                 end
-                if not adminMode and not editBalanceMode then drawInterface() end
+                if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
+            elseif msg.op == "add_buy_item_response" then
+                addItemResponse = { success = msg.success, error = msg.error }
+                -- Можно ничего не рисовать, просто сохраняем ответ
             end
         end
         ::continue::
