@@ -335,7 +335,7 @@ local function drawAddItemForm()
 
     setColor(ansi.white)
     gotoxy(x+3, y+10)
-    io.write("Enter - далее / отправить | Q - отмена")
+    io.write("Enter - далее / отправить | ] - отмена")
     io.flush()
     drawing = false
 end
@@ -496,7 +496,7 @@ local function handleKey(key, char, player)
         if char and char >= 1 and char <= 255 then
             pressed = string.lower(string.char(char))
         end
-        if pressed == "q" then
+        if char == 93 then
             addItemMode = false
             addItemResponse = nil
             if adminMode then drawAdminPanel() else drawInterface() end
