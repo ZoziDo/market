@@ -63,7 +63,7 @@ local function timeToMidnight()
     return string.format("%02d:%02d:%02d", h, m, s)
 end
 
--- ========== ПАРОЛЬ (должен совпадать с market_01) ==========
+-- ========== ПАРОЛЬ ==========
 local ACCESS_PASSWORD = "secret"
 
 -- ========== БАЗА ДАННЫХ ИГРОКОВ ==========
@@ -111,7 +111,7 @@ end
 -- ========== ПЕРЕМЕННЫЕ СЕРВЕРА ==========
 local owner = nil
 local sessions = {}
-local markets = {}
+local markets = {}          -- список адресов всех market_01
 local SESSION_TIMEOUT = 31536000
 local marketConnected = false
 local logBuffer = {}
@@ -320,7 +320,6 @@ local function drawAddItemForm()
     gotoxy(x+2, y) io.write(" ДОБАВЛЕНИЕ ПРЕДМЕТА В МАГАЗИН (покупка) ")
     resetColor()
 
-    -- Изменённые названия полей (убрали пример)
     local labels = { "Internal Name:", "Display Name:", "Price (число):", "Damage (0 = без damage):" }
     for i = 1, 4 do
         setColor(ansi.yellow)
@@ -334,7 +333,6 @@ local function drawAddItemForm()
         resetColor()
     end
 
-    -- Изменённая подсказка (Q вместо Esc)
     setColor(ansi.white)
     gotoxy(x+3, y+10)
     io.write("Enter - далее / отправить | Q - отмена")
@@ -493,93 +491,93 @@ local function handleKey(key, char, player)
     local isAdmin = (player == ADMIN_NAME) and isAdminConnected()
 
     -- Режим добавления предмета
-if addItemMode then
-    local pressed = nil
-    if char and char >= 1 and char <= 255 then
-        pressed = string.lower(string.char(char))
-    end
-    if pressed == "q" then                     -- вместо char == 27
-        addItemMode = false
-        addItemResponse = nil
-        if adminMode then drawAdminPanel() else drawInterface() end
-        return
-    elseif char == 13 then
-        if addItemCurrentField < 4 then
-            addItemCurrentField = addItemCurrentField + 1
-            drawAddItemForm()
-            return
-        else
-            local price = tonumber(addItemFields.price)
-            if not price then
-                addLog("Ошибка: цена должна быть числом", ansi.red)
-                addItemMode = false
-                drawAdminPanel()
-                return
-            end
-            local damage = tonumber(addItemFields.damage) or 0
-            if damage < 0 then damage = 0 end
-            if addItemFields.internal == "" or addItemFields.display == "" then
-                addLog("Ошибка: internalName и displayName не могут быть пустыми", ansi.red)
-                addItemMode = false
-                drawAdminPanel()
-                return
-            end
-
-            local data = {
-                op = "add_buy_item",
-                internalName = addItemFields.internal,
-                displayName = addItemFields.display,
-                price = price,
-                damage = damage
-            }
-            
-            if next(markets) == nil then
-                addLog("Нет подключённых терминалов market_01", ansi.red)
-            else
-                local sent = 0
-                for addr, _ in pairs(markets) do
-                    modem.send(addr, 0xffef, serialization.serialize(data))
-                    sent = sent + 1
-                end
-                addLog("Отправка предмета на " .. sent .. " терминал(ов)...", ansi.yellow)
-                
-                addItemResponse = nil
-                addItemResponseTimer = os.time()
-                while os.time() - addItemResponseTimer < 5 do
-                    event.pull(0.2)
-                    if addItemResponse then break end
-                end
-                if addItemResponse and addItemResponse.success then
-                    addLog("Предмет успешно добавлен!", ansi.green)
-                else
-                    addLog("Внимание: не получен ответ от терминалов, но предмет мог быть добавлен.", ansi.yellow)
-                end
-            end
+    if addItemMode then
+        local pressed = nil
+        if char and char >= 1 and char <= 255 then
+            pressed = string.lower(string.char(char))
+        end
+        if pressed == "q" then
             addItemMode = false
             addItemResponse = nil
             if adminMode then drawAdminPanel() else drawInterface() end
             return
-        end
-    elseif char == 8 then
-        local field = addItemFieldNames[addItemCurrentField]
-        addItemFields[field] = addItemFields[field]:sub(1, -2)
-        drawAddItemForm()
-        return
-    elseif char >= 32 then
-        local c = unicode.char(char)
-        local field = addItemFieldNames[addItemCurrentField]
-        if field == "price" or field == "damage" then
-            if c:match("%d") or (c == "." and field == "price" and not addItemFields.price:find("%.")) then
+        elseif char == 13 then
+            if addItemCurrentField < 4 then
+                addItemCurrentField = addItemCurrentField + 1
+                drawAddItemForm()
+                return
+            else
+                local price = tonumber(addItemFields.price)
+                if not price then
+                    addLog("Ошибка: цена должна быть числом", ansi.red)
+                    addItemMode = false
+                    drawAdminPanel()
+                    return
+                end
+                local damage = tonumber(addItemFields.damage) or 0
+                if damage < 0 then damage = 0 end
+                if addItemFields.internal == "" or addItemFields.display == "" then
+                    addLog("Ошибка: internalName и displayName не могут быть пустыми", ansi.red)
+                    addItemMode = false
+                    drawAdminPanel()
+                    return
+                end
+
+                local data = {
+                    op = "add_buy_item",
+                    internalName = addItemFields.internal,
+                    displayName = addItemFields.display,
+                    price = price,
+                    damage = damage
+                }
+                
+                if next(markets) == nil then
+                    addLog("Нет подключённых терминалов market_01", ansi.red)
+                else
+                    local sent = 0
+                    for addr, _ in pairs(markets) do
+                        modem.send(addr, 0xffef, serialization.serialize(data))
+                        sent = sent + 1
+                    end
+                    addLog("Отправка предмета на " .. sent .. " терминал(ов)...", ansi.yellow)
+                    
+                    addItemResponse = nil
+                    addItemResponseTimer = os.time()
+                    while os.time() - addItemResponseTimer < 5 do
+                        event.pull(0.2)
+                        if addItemResponse then break end
+                    end
+                    if addItemResponse and addItemResponse.success then
+                        addLog("Предмет успешно добавлен!", ansi.green)
+                    else
+                        addLog("Внимание: не получен ответ от терминалов, но предмет мог быть добавлен.", ansi.yellow)
+                    end
+                end
+                addItemMode = false
+                addItemResponse = nil
+                if adminMode then drawAdminPanel() else drawInterface() end
+                return
+            end
+        elseif char == 8 then
+            local field = addItemFieldNames[addItemCurrentField]
+            addItemFields[field] = addItemFields[field]:sub(1, -2)
+            drawAddItemForm()
+            return
+        elseif char >= 32 then
+            local c = unicode.char(char)
+            local field = addItemFieldNames[addItemCurrentField]
+            if field == "price" or field == "damage" then
+                if c:match("%d") or (c == "." and field == "price" and not addItemFields.price:find("%.")) then
+                    addItemFields[field] = addItemFields[field] .. c
+                end
+            else
                 addItemFields[field] = addItemFields[field] .. c
             end
-        else
-            addItemFields[field] = addItemFields[field] .. c
+            drawAddItemForm()
+            return
         end
-        drawAddItemForm()
         return
     end
-    return
-end
 
     if editBalanceMode then
         if char == 27 then
@@ -762,7 +760,7 @@ local function main()
             local y = ev[4]
             local player = ev[5]
             handleTouch(x, y, player)
-                elseif etype == "modem_message" then
+        elseif etype == "modem_message" then
             local from = ev[3]
             local raw = ev[6]
             local success, msg = pcall(serialization.unserialize, raw)
@@ -798,7 +796,6 @@ local function main()
                 modem.send(from, 0xffef, serialization.serialize({op="welcome", owner=(from==owner), shopPaused=shopPaused}))
                 if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
-
             elseif msg.op == "enter" then
                 if shopPaused then
                     modem.send(from, 0xffef, serialization.serialize({op="error", message="Магазин на паузе"}))
@@ -840,7 +837,6 @@ local function main()
                 }))
                 if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
-
             elseif msg.op == "getAccount" then
                 if not validateSession(msg.name, msg.token) then
                     log("WARN", "Неверный токен для getAccount от " .. (msg.name or "?"))
@@ -864,7 +860,6 @@ local function main()
                 log("INFO", "Аккаунт отправлен для " .. msg.name)
                 if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
-
             elseif msg.op == "sell" then
                 if shopPaused then
                     modem.send(from, 0xffef, serialization.serialize({op="error", message="Магазин на паузе"}))
@@ -894,7 +889,6 @@ local function main()
                 while #sellHistory > MAX_SELL_HISTORY do table.remove(sellHistory, 1) end
                 if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
-
             elseif msg.op == "buy" then
                 if shopPaused then
                     modem.send(from, 0xffef, serialization.serialize({op="error", message="Магазин на паузе"}))
@@ -921,7 +915,6 @@ local function main()
                 log("INFO", string.format("🛒 %s купил %s x%d за %.2f ₵", msg.name, msg.item, msg.qty, value))
                 if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
-
             elseif msg.op == "report" then
                 if not validateSession(msg.name, msg.token) then
                     log("WARN", "Неверный токен для report")
@@ -942,7 +935,6 @@ local function main()
                 end
                 if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
-
             elseif msg.op == "agree" then
                 if not validateSession(msg.name, msg.token) then
                     log("WARN", "Неверный токен для agree")
@@ -962,7 +954,6 @@ local function main()
                 end
                 if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
-
             elseif msg.op == "add_buy_item_response" then
                 addItemResponse = { success = msg.success, error = msg.error }
                 goto continue
