@@ -362,6 +362,7 @@ return {
   { internalName = "AFSU:AFSU:0", displayName = "AFSU", price = 1.0, currency = "res" },
   { internalName = "DraconicEvolution:draconicCore", displayName = "Awakened Core", price = 20.0, currency = "res" },
   { internalName = "IC2:itemPlutonium", displayName = "Плутоний", price = 4.90, currency = "res" },
-  { internalName = "minecraft:stone", displayName = "Камень", price = 0.02, currency = "res" }
+  { internalName = "minecraft:stone", displayName = "Камень", price = 0.02, currency = "res" },
+  { internalName = "dwcity:Powder11", displayName = "Трижды сжатый камень", price = 15.00, currency = "res" }
 
 }
