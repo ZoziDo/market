@@ -2045,136 +2045,137 @@ local function main()
             pcall(selector.setSlot, 1, nil)
             drawWelcomeScreen()
             
-        elseif e == "modem_message" then
-        local sender = ev[3]
-        local data = ev[6]
-        if sender == serverAddress then
-            local success, msg = pcall(serialization.unserialize, data)
-            if success and msg then
-                if msg.op == "welcome" and msg.token then
-                    currentToken = msg.token
-                    coinBalance = msg.balance or 0.0
-                    playerTransactions = msg.transactions or 0
-                    playerRegDate = msg.regDate or ""
-                    playerAgreed = msg.agreed or false
-                    alreadyAuthorized = true
-                    if selector then
-                        modem.send(serverAddress, 0xffef, serialization.serialize({
-                            op = "selector_status",
-                            name = currentPlayer,
-                            token = currentToken,
-                            available = true
-                        }))
-                    end
-                    if currentScreen == "auth" or currentScreen == "account_loading" then
-                        currentScreen = "menu"
-                        drawMainMenu()
-                    end
-                elseif msg.op == "accountData" then
-                    if msg.error then
-                        retryAccountAfterTokenRefresh()
-                    else
-                        if currentScreen == "account_loading" then
-                            currentScreen = "account"
-                            playerAgreed = msg.data.agreed or false
-                            drawAccount(msg.data)
+            elseif e == "modem_message" then
+            local sender = ev[3]
+            local data = ev[6]
+            if sender == serverAddress then
+                local success, msg = pcall(serialization.unserialize, data)
+                if success and msg then
+                    if msg.op == "welcome" and msg.token then
+                        currentToken = msg.token
+                        coinBalance = msg.balance or 0.0
+                        playerTransactions = msg.transactions or 0
+                        playerRegDate = msg.regDate or ""
+                        playerAgreed = msg.agreed or false
+                        alreadyAuthorized = true
+                        if selector then
+                            modem.send(serverAddress, 0xffef, serialization.serialize({
+                                op = "selector_status",
+                                name = currentPlayer,
+                                token = currentToken,
+                                available = true
+                            }))
                         end
-                    end
-                elseif msg.op == "agree" then
-                    if msg.success then
-                        playerAgreed = true
-                        showShopDenied = false
-                        drawCenteredText(20, "Спасибо! Теперь вам доступен магазин.", colors.success)
-                        os.sleep(0.8)
-                        drawMainMenu()
-                        currentScreen = "menu"
-                    elseif msg.error and msg.message == "Токен устарел" then
-                        drawCenteredText(20, "Сессия устарела. Обновление...", colors.accent_secondary)
-                        os.sleep(1)
-                        modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
-                        local start = os.clock()
-                        local refreshed = false
-                        while os.clock() - start < 3 do
-                            local evt = {event.pull(0.3)}
-                            if evt[1] == "modem_message" then
-                                local s, d = evt[3], evt[6]
-                                if s == serverAddress then
-                                    local ok, m = pcall(serialization.unserialize, d)
-                                    if ok and m and m.op == "welcome" and m.token then
-                                        currentToken = m.token
-                                        coinBalance = m.balance or 0.0
-                                        playerAgreed = m.agreed or false
-                                        refreshed = true
-                                        break
-                                    end
-                                end
-                            elseif evt[1] == "player_off" or evt[1] == "pim_player_leave" then
-                                break
+                        if currentScreen == "auth" or currentScreen == "account_loading" then
+                            currentScreen = "menu"
+                            drawMainMenu()
+                        end
+                    elseif msg.op == "accountData" then
+                        if msg.error then
+                            retryAccountAfterTokenRefresh()
+                        else
+                            if currentScreen == "account_loading" then
+                                currentScreen = "account"
+                                playerAgreed = msg.data.agreed or false
+                                drawAccount(msg.data)
                             end
                         end
-                        if refreshed then
-                            modem.send(serverAddress, 0xffef, serialization.serialize({
-                                op = "agree",
-                                name = currentPlayer,
-                                token = currentToken
-                            }))
-                            drawCenteredText(20, "Повторная отправка...", colors.success)
+                    elseif msg.op == "agree" then
+                        if msg.success then
+                            playerAgreed = true
+                            showShopDenied = false
+                            drawCenteredText(20, "Спасибо! Теперь вам доступен магазин.", colors.success)
+                            os.sleep(0.8)
+                            drawMainMenu()
+                            currentScreen = "menu"
+                        elseif msg.error and msg.message == "Токен устарел" then
+                            drawCenteredText(20, "Сессия устарела. Обновление...", colors.accent_secondary)
+                            os.sleep(1)
+                            modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
+                            local start = os.clock()
+                            local refreshed = false
+                            while os.clock() - start < 3 do
+                                local evt = {event.pull(0.3)}
+                                if evt[1] == "modem_message" then
+                                    local s, d = evt[3], evt[6]
+                                    if s == serverAddress then
+                                        local ok, m = pcall(serialization.unserialize, d)
+                                        if ok and m and m.op == "welcome" and m.token then
+                                            currentToken = m.token
+                                            coinBalance = m.balance or 0.0
+                                            playerAgreed = m.agreed or false
+                                            refreshed = true
+                                            break
+                                        end
+                                    end
+                                elseif evt[1] == "player_off" or evt[1] == "pim_player_leave" then
+                                    break
+                                end
+                            end
+                            if refreshed then
+                                modem.send(serverAddress, 0xffef, serialization.serialize({
+                                    op = "agree",
+                                    name = currentPlayer,
+                                    token = currentToken
+                                }))
+                                drawCenteredText(20, "Повторная отправка...", colors.success)
+                            else
+                                drawCenteredText(20, "Не удалось обновить сессию", colors.error)
+                                os.sleep(2)
+                                drawMainMenu()
+                                currentScreen = "menu"
+                            end
                         else
-                            drawCenteredText(20, "Не удалось обновить сессию", colors.error)
+                            drawCenteredText(20, "Ошибка: " .. (msg.message or "неизвестная"), colors.error)
                             os.sleep(2)
                             drawMainMenu()
                             currentScreen = "menu"
                         end
-                    else
-                        drawCenteredText(20, "Ошибка: " .. (msg.message or "неизвестная"), colors.error)
-                        os.sleep(2)
-                        drawMainMenu()
-                        currentScreen = "menu"
-                    end
-                elseif msg.op == "add_buy_item" then
-                    local ok, err = pcall(function()
-                        local buyItems = dofile("/home/buy_items.lua")
-                        if type(buyItems) ~= "table" then buyItems = {} end
-                        local newItem = {
-                            internalName = msg.internalName,
-                            displayName = msg.displayName,
-                            price = msg.price,
-                            currency = "res"
-                        }
-                        if msg.damage and msg.damage ~= 0 then
-                            newItem.damage = msg.damage
+                    elseif msg.op == "add_buy_item" then
+                        local ok, err = pcall(function()
+                            local buyItems = dofile("/home/buy_items.lua")
+                            if type(buyItems) ~= "table" then buyItems = {} end
+                            local newItem = {
+                                internalName = msg.internalName,
+                                displayName = msg.displayName,
+                                price = msg.price,
+                                currency = "res"
+                            }
+                            if msg.damage and msg.damage ~= 0 then
+                                newItem.damage = msg.damage
+                            end
+                            table.insert(buyItems, newItem)
+                            local file = io.open("/home/buy_items.lua", "w")
+                            file:write("return " .. serialization.serialize(buyItems))
+                            file:close()
+                            buyItemsData = dofile("/home/buy_items.lua")
+                            buyItemMap = {}
+                            for _, item in ipairs(buyItemsData) do
+                                local dmg = item.damage or 0
+                                local key = item.internalName .. ":" .. dmg
+                                buyItemMap[key] = item
+                            end
+                            if currentScreen == "shop_buy" then
+                                loadBuyItems()
+                                drawBuyStatic()
+                                drawBuyItemsList()
+                                drawBuyButtons()
+                            end
+                        end)
+                        if ok then
+                            modem.send(serverAddress, 0xffef, serialization.serialize({op = "add_buy_item_response", success = true}))
+                            print("✅ Предмет добавлен: " .. msg.displayName)
+                        else
+                            modem.send(serverAddress, 0xffef, serialization.serialize({op = "add_buy_item_response", success = false, error = tostring(err)}))
+                            print("❌ Ошибка добавления: " .. tostring(err))
                         end
-                        table.insert(buyItems, newItem)
-                        local file = io.open("/home/buy_items.lua", "w")
-                        file:write("return " .. serialization.serialize(buyItems))
-                        file:close()
-                        buyItemsData = dofile("/home/buy_items.lua")
-                        buyItemMap = {}
-                        for _, item in ipairs(buyItemsData) do
-                            local dmg = item.damage or 0
-                            local key = item.internalName .. ":" .. dmg
-                            buyItemMap[key] = item
+                        goto continue
+                    elseif msg.op == "add_buy_item_response" then
+                        if msg.success then
+                            print("Предмет успешно добавлен на сервере")
+                        else
+                            print("Ошибка добавления предмета: " .. (msg.error or "неизвестная"))
                         end
-                        if currentScreen == "shop_buy" then
-                            loadBuyItems()
-                            drawBuyStatic()
-                            drawBuyItemsList()
-                            drawBuyButtons()
-                        end
-                    end)
-                    if ok then
-                        modem.send(serverAddress, 0xffef, serialization.serialize({op = "add_buy_item_response", success = true}))
-                        print("✅ Предмет добавлен: " .. msg.displayName)
-                    else
-                        modem.send(serverAddress, 0xffef, serialization.serialize({op = "add_buy_item_response", success = false, error = tostring(err)}))
-                        print("❌ Ошибка добавления: " .. tostring(err))
-                    end
-                    goto continue
-                elseif msg.op == "add_buy_item_response" then
-                    if msg.success then
-                        print("Предмет успешно добавлен на сервере")
-                    else
-                        print("Ошибка добавления предмета: " .. (msg.error or "неизвестная"))
                     end
                 end
             end
