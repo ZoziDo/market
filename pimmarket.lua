@@ -31,12 +31,18 @@ local colors = {
     black_fon = 0x000000
 }
 
--- ========== БЕЗОПАСНАЯ ЗАГРУЗКА ФАЙЛОВ ==========
+-- ========== БЕЗОПАСНАЯ ЗАГРУЗКА ФАЙЛОВ (с проверкой) ==========
 local function safeDoFile(path)
     if not fs.exists(path) then
-        error("Файл не найден: " .. path, 2)
+        print("Файл не найден, создаём: " .. path)
+        return {}  -- возвращаем пустую таблицу, чтобы не падать
     end
-    return dofile(path)
+    local ok, result = pcall(dofile, path)
+    if not ok then
+        print("Ошибка загрузки файла " .. path .. ": " .. tostring(result))
+        return {}
+    end
+    return result
 end
 
 -- ========== НОРМАЛИЗАЦИЯ СТРОКИ ДЛЯ СОРТИРОВКИ ==========
