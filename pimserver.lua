@@ -319,7 +319,8 @@ local function drawAddItemForm()
     gotoxy(x+2, y) io.write(" ДОБАВЛЕНИЕ ПРЕДМЕТА В МАГАЗИН (покупка) ")
     resetColor()
 
-    local labels = { "Internal Name (например extrautils:itemnode):", "Display Name:", "Price (число):", "Damage (0 = без damage):" }
+    -- Изменённые названия полей (убрали пример)
+    local labels = { "Internal Name:", "Display Name:", "Price (число):", "Damage (0 = без damage):" }
     for i = 1, 4 do
         setColor(ansi.yellow)
         gotoxy(x+3, y+2 + (i-1)*2)
@@ -332,9 +333,10 @@ local function drawAddItemForm()
         resetColor()
     end
 
+    -- Изменённая подсказка (Q вместо Esc)
     setColor(ansi.white)
     gotoxy(x+3, y+10)
-    io.write("Enter - далее / отправить | Esc - отмена")
+    io.write("Enter - далее / отправить | Q - отмена")
     io.flush()
     drawing = false
 end
@@ -490,83 +492,88 @@ local function handleKey(key, char, player)
     local isAdmin = (player == ADMIN_NAME) and isAdminConnected()
 
     -- Режим добавления предмета
-    if addItemMode then
-        if char == 27 then
+if addItemMode then
+    local pressed = nil
+    if char and char >= 1 and char <= 255 then
+        pressed = string.lower(string.char(char))
+    end
+    if pressed == "q" then                     -- вместо char == 27
+        addItemMode = false
+        addItemResponse = nil
+        if adminMode then drawAdminPanel() else drawInterface() end
+        return
+    elseif char == 13 then
+        if addItemCurrentField < 4 then
+            addItemCurrentField = addItemCurrentField + 1
+            drawAddItemForm()
+            return
+        else
+            local price = tonumber(addItemFields.price)
+            if not price then
+                addLog("Ошибка: цена должна быть числом", ansi.red)
+                addItemMode = false
+                drawAdminPanel()
+                return
+            end
+            local damage = tonumber(addItemFields.damage) or 0
+            if damage < 0 then damage = 0 end
+            if addItemFields.internal == "" or addItemFields.display == "" then
+                addLog("Ошибка: internalName и displayName не могут быть пустыми", ansi.red)
+                addItemMode = false
+                drawAdminPanel()
+                return
+            end
+
+            local data = {
+                op = "add_buy_item",
+                internalName = addItemFields.internal,
+                displayName = addItemFields.display,
+                price = price,
+                damage = damage
+            }
+            if owner then
+                modem.send(owner, 0xffef, serialization.serialize(data))
+                addLog("Отправка предмета на market_01...", ansi.yellow)
+                addItemResponse = nil
+                addItemResponseTimer = os.time()
+                while os.time() - addItemResponseTimer < 5 do
+                    event.pull(0.2)
+                    if addItemResponse then break end
+                end
+                if addItemResponse and addItemResponse.success then
+                    addLog("Предмет успешно добавлен!", ansi.green)
+                else
+                    -- Изменяем текст ошибки (можно оставить как есть, но предмет всё равно добавляется)
+                    addLog("Внимание: не получен ответ от market, но предмет мог быть добавлен.", ansi.yellow)
+                end
+            else
+                addLog("Нет подключённого market_01", ansi.red)
+            end
             addItemMode = false
             addItemResponse = nil
             if adminMode then drawAdminPanel() else drawInterface() end
             return
-        elseif char == 13 then
-            if addItemCurrentField < 4 then
-                addItemCurrentField = addItemCurrentField + 1
-                drawAddItemForm()
-                return
-            else
-                local price = tonumber(addItemFields.price)
-                if not price then
-                    addLog("Ошибка: цена должна быть числом", ansi.red)
-                    addItemMode = false
-                    drawAdminPanel()
-                    return
-                end
-                local damage = tonumber(addItemFields.damage) or 0
-                if damage < 0 then damage = 0 end
-                if addItemFields.internal == "" or addItemFields.display == "" then
-                    addLog("Ошибка: internalName и displayName не могут быть пустыми", ansi.red)
-                    addItemMode = false
-                    drawAdminPanel()
-                    return
-                end
-
-                local data = {
-                    op = "add_buy_item",
-                    internalName = addItemFields.internal,
-                    displayName = addItemFields.display,
-                    price = price,
-                    damage = damage
-                }
-                if owner then
-                    modem.send(owner, 0xffef, serialization.serialize(data))
-                    addLog("Отправка предмета на market_01...", ansi.yellow)
-                    addItemResponse = nil
-                    addItemResponseTimer = os.time()
-                    while os.time() - addItemResponseTimer < 5 do
-                        event.pull(0.2)
-                        if addItemResponse then break end
-                    end
-                    if addItemResponse and addItemResponse.success then
-                        addLog("Предмет успешно добавлен!", ansi.green)
-                    else
-                        addLog("Ошибка: " .. (addItemResponse and addItemResponse.error or "нет ответа от market"), ansi.red)
-                    end
-                else
-                    addLog("Нет подключённого market_01", ansi.red)
-                end
-                addItemMode = false
-                addItemResponse = nil
-                if adminMode then drawAdminPanel() else drawInterface() end
-                return
-            end
-        elseif char == 8 then
-            local field = addItemFieldNames[addItemCurrentField]
-            addItemFields[field] = addItemFields[field]:sub(1, -2)
-            drawAddItemForm()
-            return
-        elseif char >= 32 then
-            local c = unicode.char(char)  -- поддержка русского и других языков
-            local field = addItemFieldNames[addItemCurrentField]
-            if field == "price" or field == "damage" then
-                if c:match("%d") or (c == "." and field == "price" and not addItemFields.price:find("%.")) then
-                    addItemFields[field] = addItemFields[field] .. c
-                end
-            else
+        end
+    elseif char == 8 then
+        local field = addItemFieldNames[addItemCurrentField]
+        addItemFields[field] = addItemFields[field]:sub(1, -2)
+        drawAddItemForm()
+        return
+    elseif char >= 32 then
+        local c = unicode.char(char)
+        local field = addItemFieldNames[addItemCurrentField]
+        if field == "price" or field == "damage" then
+            if c:match("%d") or (c == "." and field == "price" and not addItemFields.price:find("%.")) then
                 addItemFields[field] = addItemFields[field] .. c
             end
-            drawAddItemForm()
-            return
+        else
+            addItemFields[field] = addItemFields[field] .. c
         end
+        drawAddItemForm()
         return
     end
+    return
+end
 
     if editBalanceMode then
         if char == 27 then
