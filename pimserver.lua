@@ -531,7 +531,7 @@ local function handleKey(key, char, player)
                     damage = damage
                 }
                 
-                if next(markets) == nil then
+                                if next(markets) == nil then
                     addLog("Нет подключённых терминалов market_01", ansi.red)
                 else
                     local sent = 0
@@ -549,6 +549,11 @@ local function handleKey(key, char, player)
                     end
                     if addItemResponse and addItemResponse.success then
                         addLog("Предмет успешно добавлен!", ansi.green)
+                        -- После успешного добавления обновляем все терминалы
+                        for addr, _ in pairs(markets) do
+                            modem.send(addr, 0xffef, serialization.serialize({op = "reload_buy_items"}))
+                        end
+                        addLog("Отправлена команда перезагрузки на все терминалы", ansi.green)
                     else
                         addLog("Внимание: не получен ответ от терминалов, но предмет мог быть добавлен.", ansi.yellow)
                     end
