@@ -762,7 +762,7 @@ local function main()
             local y = ev[4]
             local player = ev[5]
             handleTouch(x, y, player)
-        elseif etype == "modem_message" then
+                elseif etype == "modem_message" then
             local from = ev[3]
             local raw = ev[6]
             local success, msg = pcall(serialization.unserialize, raw)
@@ -780,26 +780,25 @@ local function main()
             log("INFO", string.format("От %s | op=%s | name=%s | token=%s", from, tostring(msg.op), msg.name or "?", msg.token or "нет"))
 
             if msg.op == "register" then
-            if msg.password ~= ACCESS_PASSWORD then
-                -- ... ошибка ...
-            end
-            marketConnected = true
-            if not owner then
-                owner = from
-                log("INFO", "✅ АДМИН ЗАРЕГИСТРИРОВАН: " .. from)
-            end
-            -- ДОБАВИТЬ В СПИСОК ВСЕХ ТЕРМИНАЛОВ
-            if not markets[from] then
-                markets[from] = true
-                log("INFO", "✅ Терминал добавлен в список рассылки: " .. from)
-            end
+                if msg.password ~= ACCESS_PASSWORD then
+                    modem.send(from, 0xffef, serialization.serialize({op="error", message="Неверный пароль"}))
+                    log("WARN", "Попытка подключения с неверным паролем от " .. from)
+                    if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
+                    goto continue
+                end
+                marketConnected = true
+                if not owner then
+                    owner = from
+                    log("INFO", "✅ АДМИН ЗАРЕГИСТРИРОВАН: " .. from)
+                end
+                if not markets[from] then
+                    markets[from] = true
+                    log("INFO", "✅ Терминал добавлен в список рассылки: " .. from)
+                end
                 modem.send(from, 0xffef, serialization.serialize({op="welcome", owner=(from==owner), shopPaused=shopPaused}))
                 if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
-            end
-                modem.send(from, 0xffef, serialization.serialize({op="welcome", owner=(from==owner), shopPaused=shopPaused}))
-                if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
-                goto continue
+
             elseif msg.op == "enter" then
                 if shopPaused then
                     modem.send(from, 0xffef, serialization.serialize({op="error", message="Магазин на паузе"}))
@@ -841,6 +840,7 @@ local function main()
                 }))
                 if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
+
             elseif msg.op == "getAccount" then
                 if not validateSession(msg.name, msg.token) then
                     log("WARN", "Неверный токен для getAccount от " .. (msg.name or "?"))
@@ -864,6 +864,7 @@ local function main()
                 log("INFO", "Аккаунт отправлен для " .. msg.name)
                 if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
+
             elseif msg.op == "sell" then
                 if shopPaused then
                     modem.send(from, 0xffef, serialization.serialize({op="error", message="Магазин на паузе"}))
@@ -893,6 +894,7 @@ local function main()
                 while #sellHistory > MAX_SELL_HISTORY do table.remove(sellHistory, 1) end
                 if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
+
             elseif msg.op == "buy" then
                 if shopPaused then
                     modem.send(from, 0xffef, serialization.serialize({op="error", message="Магазин на паузе"}))
@@ -919,6 +921,7 @@ local function main()
                 log("INFO", string.format("🛒 %s купил %s x%d за %.2f ₵", msg.name, msg.item, msg.qty, value))
                 if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
+
             elseif msg.op == "report" then
                 if not validateSession(msg.name, msg.token) then
                     log("WARN", "Неверный токен для report")
@@ -939,6 +942,7 @@ local function main()
                 end
                 if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
+
             elseif msg.op == "agree" then
                 if not validateSession(msg.name, msg.token) then
                     log("WARN", "Неверный токен для agree")
@@ -958,9 +962,9 @@ local function main()
                 end
                 if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
+
             elseif msg.op == "add_buy_item_response" then
                 addItemResponse = { success = msg.success, error = msg.error }
-                -- ответ получен, ничего не рисуем
                 goto continue
             end
         end
