@@ -53,9 +53,63 @@ local function fill(x, y, w, h, char)
     end
 end
 
+-- ========== РЕАЛЬНОЕ ВРЕМЯ (синхронизация через интернет) ==========
+local realTimeOffset = 0          -- разница между реальным временем и uptime
+local lastSyncTime = 0
+
+local function getRealTimeFromInternet()
+    if not component.isAvailable("internet") then
+        return nil, "Нет интернет-карты"
+    end
+    local internet = component.internet
+    local ok, response = pcall(function()
+        local req = internet.request("http://worldtimeapi.org/api/timezone/Europe/Moscow")
+        local data = ""
+        while true do
+            local chunk = req.read()
+            if not chunk then break end
+            data = data .. chunk
+        end
+        return data
+    end)
+    if not ok then return nil, "Ошибка запроса" end
+    local success, parsed = pcall(serialization.unserialize, response)
+    if not success or not parsed or not parsed.datetime then
+        return nil, "Не удалось разобрать ответ"
+    end
+    -- datetime имеет вид "2025-05-20T15:30:45+03:00"
+    local dt = parsed.datetime
+    local year = tonumber(dt:sub(1,4))
+    local month = tonumber(dt:sub(6,7))
+    local day = tonumber(dt:sub(9,10))
+    local hour = tonumber(dt:sub(12,13))
+    local minute = tonumber(dt:sub(15,16))
+    local second = tonumber(dt:sub(18,19))
+    return os.time({year=year, month=month, day=day, hour=hour, min=minute, sec=second})
+end
+
+local function syncRealTime()
+    local real = getRealTimeFromInternet()
+    if real then
+        local uptime = computer.uptime()
+        realTimeOffset = real - uptime
+        lastSyncTime = uptime
+        addLog("Реальное время синхронизировано: " .. os.date("%H:%M:%S", real), ansi.green)
+        return true
+    else
+        addLog("Не удалось синхронизировать реальное время", ansi.red)
+        return false
+    end
+end
+
+local function currentRealTime()
+    return math.floor(realTimeOffset + computer.uptime() + 0.5)
+end
+
+-- ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 local function timeToMidnight()
-    local now = os.time()           -- реальное время в секундах с эпохи
-    local dt = os.date("*t", now)   -- разбираем на компоненты
+    local now = currentRealTime()
+    local dt = os.date("*t", now)
     local secondsLeft = (24 - dt.hour - 1) * 3600 + (60 - dt.min - 1) * 60 + (60 - dt.sec)
     if secondsLeft < 0 then secondsLeft = 0 end
     local h = math.floor(secondsLeft / 3600)
@@ -112,7 +166,7 @@ end
 -- ========== ПЕРЕМЕННЫЕ СЕРВЕРА ==========
 local owner = nil
 local sessions = {}
-local markets = {}          -- список адресов всех market_01
+local markets = {}
 local SESSION_TIMEOUT = 31536000
 local marketConnected = false
 local logBuffer = {}
@@ -187,7 +241,7 @@ local function log(level, msg)
     if level == "INFO" then color = ansi.green
     elseif level == "WARN" then color = ansi.yellow
     elseif level == "ERROR" then color = ansi.red end
-    addLog("[" .. os.date("%H:%M:%S", os.time()) .. "] [" .. level .. "] " .. msg, color)
+    addLog("[" .. os.date("%H:%M:%S", currentRealTime()) .. "] [" .. level .. "] " .. msg, color)
 end
 
 local function isAdminConnected()
@@ -359,7 +413,7 @@ function drawInterface()
     
     setColor(ansi.cyan)
     gotoxy(1, 3)
-    io.write("Время: " .. os.date("%H:%M:%S", os.time()) .. "  До сброса репортов: " .. timeToMidnight())
+    io.write("Время: " .. os.date("%H:%M:%S", currentRealTime()) .. "  До сброса репортов: " .. timeToMidnight())
     local activeCount = 0
     for _, v in pairs(sessions) do
         if type(v) == "table" and v.token then activeCount = activeCount + 1 end
@@ -472,7 +526,7 @@ local function getOrCreatePlayer(name)
         players[name] = {
             balance = 0.0,
             transactions = 0,
-            regDate = os.date("%d.%m.%Y %H:%M:%S", os.time()),
+            regDate = os.date("%d.%m.%Y %H:%M:%S", currentRealTime()),
             agreed = false,
             banned = false
         }
@@ -532,7 +586,7 @@ local function handleKey(key, char, player)
                     damage = damage
                 }
                 
-                                if next(markets) == nil then
+                if next(markets) == nil then
                     addLog("Нет подключённых терминалов market_01", ansi.red)
                 else
                     local sent = 0
@@ -550,7 +604,6 @@ local function handleKey(key, char, player)
                     end
                     if addItemResponse and addItemResponse.success then
                         addLog("Предмет успешно добавлен!", ansi.green)
-                        -- После успешного добавления обновляем все терминалы
                         for addr, _ in pairs(markets) do
                             modem.send(addr, 0xffef, serialization.serialize({op = "reload_buy_items"}))
                         end
@@ -750,6 +803,10 @@ end
 -- ========== ОСНОВНОЙ ЦИКЛ ==========
 local function main()
     log("INFO", "Сервер запущен. Ожидание терминалов...")
+    -- Первая синхронизация времени
+    syncRealTime()
+    -- Периодическая синхронизация раз в час
+    event.timer(3600, function() syncRealTime() end, math.huge)
     drawInterface()
 
     while true do
@@ -929,11 +986,12 @@ local function main()
                 end
                 globalStats.totalReports = (globalStats.totalReports or 0) + 1
                 saveGlobalStats()
-                log("INFO", "📩 Репорт от " .. msg.name .. " (" .. msg.time .. ")")
+                local realTimeStr = os.date("%d.%m.%Y %H:%M:%S", currentRealTime())
+                log("INFO", "📩 Репорт от " .. msg.name .. " (" .. realTimeStr .. ")")
                 log("INFO", "   Текст: " .. (msg.text or ""))
                 local file = io.open("/home/reports.log", "a")
                 if file then
-                    file:write("[" .. msg.time .. "] " .. msg.name .. ": " .. msg.text .. "\n")
+                    file:write("[" .. realTimeStr .. "] " .. msg.name .. ": " .. msg.text .. "\n")
                     file:close()
                     log("INFO", "✅ Сохранено в reports.log")
                 else
