@@ -21,6 +21,15 @@ local function getRealTimestamp()
     return tmpfs.lastModified("/time") / 1000 + TIMEZONE_OFFSET
 end
 
+-- добавить эти две строки ↓↓↓
+local function getRealTimeString()
+    return os.date("%d.%m.%Y %H:%M:%S", getRealTimestamp())
+end
+
+local function getRealTimeHM()
+    return os.date("%H:%M:%S", getRealTimestamp())
+end
+
 -- ========== НАСТРОЙКИ ПОДКЛЮЧЕНИЯ ==========
 local serverAddress = "535305a9-37c9-4645-b7c4-46204187ee7b"
 local ACCESS_PASSWORD = "secret"
@@ -2532,14 +2541,10 @@ local function drawCrashPopup(errText)
     end
 end
 
--- ========== ВРЕМЕННЫЙ ВЫВОД ПОЛНОЙ ОШИБКИ ==========
-local ok, err = pcall(main)
-if not ok then
-    print("\n================== КРИТИЧЕСКАЯ ОШИБКА ==================")
-    print("Ошибка: " .. tostring(err))
-    print("Полный стек вызовов:")
-    print(debug.traceback(err, 2))
-    print("========================================================\n")
-    print("Нажмите Ctrl+C для выхода.")
-    os.sleep(30)  -- даём время прочитать
+-- ========== БЕСКОНЕЧНЫЙ ПЕРЕЗАПУСК ПРИ ОШИБКАХ ==========
+while true do
+    local ok, err = pcall(main)
+    if not ok then
+        pcall(drawCrashPopup, tostring(err))
+    end
 end
