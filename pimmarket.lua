@@ -46,7 +46,7 @@ local colors = {
     black_fon = 0x000000
 }
 
--- ========== ФУНКЦИИ ЭКРАНА (ВЫНЕСЕНЫ В САМОЕ НАЧАЛО) ==========
+-- ========== ФУНКЦИИ ЭКРАНА ==========
 local function clear()
     gpu.setBackground(colors.bg_main)
     gpu.fill(1, 1, 80, 25, " ")
@@ -58,7 +58,7 @@ local function drawCenteredText(y, text, color)
     gpu.set(x, y, text)
 end
 
--- ========== ФУНКЦИИ ДЛЯ КНОПОК (ДОЛЖНЫ БЫТЬ ОПРЕДЕЛЕНЫ РАНЬШЕ ВСЕХ ИСПОЛЬЗОВАНИЙ) ==========
+-- ========== ФУНКЦИИ ДЛЯ КНОПОК ==========
 local function drawButton(btn)
     gpu.setBackground(btn.bg)
     gpu.fill(btn.x, btn.y, btn.xs, btn.ys, " ")
@@ -109,6 +109,7 @@ local feedbacksPage = 1
 local feedbacksTotalPages = 1
 local feedbackInput = ""
 local feedbackEditMode = false
+local playerHasFeedback = false   -- флаг, оставлял ли игрок отзыв
 
 local function drawPopupBorder(x, y, w, h, color)
     gpu.setForeground(color or colors.accent_secondary)
@@ -368,7 +369,9 @@ local function drawFeedbacksList()
     if #feedbacks == 0 then
         drawCenteredText(10, "Пока нет ни одного отзыва.", colors.text_main)
         drawCenteredText(11, "Будьте первым, кто оставит отзыв!", colors.accent_main)
-        drawCenteredText(12, "Нажмите [ДОБАВИТЬ] чтобы оставить отзыв", colors.text_main)
+        if not playerHasFeedback then
+            drawCenteredText(12, "Нажмите [ДОБАВИТЬ] чтобы оставить отзыв", colors.text_main)
+        end
     else
         local startIdx = (feedbacksPage - 1) * 3 + 1
         local endIdx = math.min(startIdx + 2, #feedbacks)
@@ -401,13 +404,16 @@ local function drawFeedbacksList()
         drawCenteredText(22, pageInfo, colors.text_main)
     end
     
-    local backBtn = {x = 10, y = 24, xs = 14, ys = 1, text = "[ НАЗАД ]", bg = colors.bg_button, fg = colors.accent_secondary}
-    local addBtn = {x = 33, y = 24, xs = 14, ys = 1, text = "[ ДОБАВИТЬ ]", bg = colors.bg_button, fg = colors.success}
-    local prevBtn = {x = 58, y = 24, xs = 8, ys = 1, text = "[ < ]", bg = colors.bg_button, fg = colors.accent_main}
-    local nextBtn = {x = 67, y = 24, xs = 8, ys = 1, text = "[ > ]", bg = colors.bg_button, fg = colors.accent_main}
+    -- Выровненные кнопки (одинаковые отступы)
+    local backBtn = {x = 5, y = 24, xs = 14, ys = 1, text = "[ НАЗАД ]", bg = colors.bg_button, fg = colors.accent_secondary}
+    local addBtn = {x = 27, y = 24, xs = 14, ys = 1, text = "[ ДОБАВИТЬ ]", bg = colors.bg_button, fg = colors.success}
+    local prevBtn = {x = 49, y = 24, xs = 8, ys = 1, text = "[ < ]", bg = colors.bg_button, fg = colors.accent_main}
+    local nextBtn = {x = 65, y = 24, xs = 8, ys = 1, text = "[ > ]", bg = colors.bg_button, fg = colors.accent_main}
     
+    if not playerHasFeedback then
+        drawFlexButton(addBtn)
+    end
     drawFlexButton(backBtn)
-    drawFlexButton(addBtn)
     if #feedbacks > 3 then
         drawFlexButton(prevBtn)
         drawFlexButton(nextBtn)
@@ -417,6 +423,11 @@ local function drawFeedbacksList()
 end
 
 local function drawFeedbackInputScreen()
+    if playerHasFeedback then
+        showTempMessage("Вы уже оставляли отзыв!", 2)
+        goBackToMenu()
+        return
+    end
     currentScreen = "feedback_input"
     clear()
     drawScreenBorder()
@@ -2136,23 +2147,27 @@ local function main()
                     end
                 end
             elseif currentScreen == "feedbacks" then
-                if isButtonClicked({x=10, y=24, xs=14, ys=1}, x, y) then
+                if isButtonClicked({x=5, y=24, xs=14, ys=1}, x, y) then
                     currentScreen = "menu"
                     drawMainMenu()
                     goto continue
                 end
-                if isButtonClicked({x=33, y=24, xs=14, ys=1}, x, y) then
-                    feedbackInput = ""
-                    feedbackEditMode = true
-                    drawFeedbackInputScreen()
+                if isButtonClicked({x=27, y=24, xs=14, ys=1}, x, y) then
+                    if playerHasFeedback then
+                        showTempMessage("Вы уже оставляли отзыв!", 2)
+                    else
+                        feedbackInput = ""
+                        feedbackEditMode = true
+                        drawFeedbackInputScreen()
+                    end
                     goto continue
                 end
-                if isButtonClicked({x=58, y=24, xs=8, ys=1}, x, y) and feedbacksPage > 1 then
+                if isButtonClicked({x=49, y=24, xs=8, ys=1}, x, y) and feedbacksPage > 1 then
                     feedbacksPage = feedbacksPage - 1
                     drawFeedbacksList()
                     goto continue
                 end
-                if isButtonClicked({x=67, y=24, xs=8, ys=1}, x, y) and feedbacksPage < feedbacksTotalPages then
+                if isButtonClicked({x=65, y=24, xs=8, ys=1}, x, y) and feedbacksPage < feedbacksTotalPages then
                     feedbacksPage = feedbacksPage + 1
                     drawFeedbacksList()
                     goto continue
@@ -2455,6 +2470,7 @@ local function main()
                         goto continue
                     elseif msg.op == "feedbacks_list" then
                         feedbacks = msg.feedbacks or {}
+                        playerHasFeedback = msg.hasFeedback or false
                         feedbacksPage = 1
                         if currentScreen == "feedbacks" then
                             drawFeedbacksList()
