@@ -1,7 +1,7 @@
 return {
   { internalName = "EnderIO:itemPowerConduit", displayName = "Энергопровод из вибрирующего сплава ", price = 1.00, currency = "res", damage = 2 },
   { internalName = "metadrive:block_ic2_1_solar_panel", displayName = "Индустриальная солнечная панель II уровня", price = 25.00, currency = "res" },
-  { internalName = "IC2:reactorMOXQuad", displayName = "Счетверённый топливный стержень (МОХ)", price = 60.00, currency = "res" },
+  { internalName = "ic2:reactormoxquad", displayName = "Счетверённый топливный стержень (МОХ)", price = 60.00, currency = "res" },
   { internalName = "extracells:storage.component", displayName = "1024k МЭ жидкостный компонент хранилища", price = 261.91, currency = "res", damage = 1 },
   { internalName = "extracells:storage.component", displayName = "1024k МЭ компонент хранилища", price = 282.59, currency = "res", damage = 9 },
   { internalName = "appliedenergistics2:item.ItemMultiMaterial", displayName = "16K МЭ компонент хранения", price = 10.86, currency = "res" },
@@ -49,7 +49,7 @@ return {
   { internalName = "appliedenergistics2:item.ToolWirelessTeminal", displayName = "Беспроводной терминал", price = 21.25, currency = "res" },
   { internalName = "ae2wct:wirelessCraftingTerminal", displayName = "Беспроводной терминал создания", price = 483.92, currency = "res" },
   { internalName = "appliedenergistics2:item.ToolBiometricCard", displayName = "Биометрическая карта", price = 0.99, currency = "res" },
-  { internalName = "IC2:blockMetal", displayName = "Блок закалённого железа", price = 1.98, currency = "res" },
+  { internalName = "IC2:blockMetal", displayName = "Блок закалённого железа", price = 1.98, currency = "res", damage = 5 },
   { internalName = "appliedenergistics2:tile.BlockCraftingUnit", displayName = "Блок обработки создания", price = 1.77, currency = "res" },
   { internalName = "appliedenergistics2:tile.BlockCraftingUnit", displayName = "Блок создания", price = 1.25, currency = "res" },
   { internalName = "ThermalExpansion:material", displayName = "Богатое удобрение", price = 0.11, currency = "res" },
