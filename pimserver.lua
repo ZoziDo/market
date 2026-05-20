@@ -21,13 +21,7 @@ local function getRealTimestamp()
     local handle = tmpfs.open("/time", "w")
     tmpfs.write(handle, "time")
     tmpfs.close(handle)
-    return tmpfs.lastModified("/time") / 1000
-end
-local function getRealTimeString()
-    return os.date("%H:%M:%S", getRealTimestamp())
-end
-local function getRealDateTimeString()
-    return os.date("%d.%m.%Y %H:%M:%S", getRealTimestamp())
+    return tmpfs.lastModified("/time") / 1000 + TIMEZONE_OFFSET
 end
 
 -- ========== ANSI ЦВЕТА ==========
