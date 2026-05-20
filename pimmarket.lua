@@ -46,6 +46,18 @@ local colors = {
     black_fon = 0x000000
 }
 
+-- ========== ФУНКЦИИ ЭКРАНА (ВЫНЕСЕНЫ В САМОЕ НАЧАЛО) ==========
+local function clear()
+    gpu.setBackground(colors.bg_main)
+    gpu.fill(1, 1, 80, 25, " ")
+end
+
+local function drawCenteredText(y, text, color)
+    gpu.setForeground(color or colors.text_main)
+    local x = math.floor((80 - unicode.len(text)) / 2) + 1 + 1
+    gpu.set(x, y, text)
+end
+
 -- ========== БЕЗОПАСНАЯ ЗАГРУЗКА ФАЙЛОВ ==========
 local function safeDoFile(path)
     if not fs.exists(path) then
@@ -424,18 +436,6 @@ local function drawFeedbackInputScreen()
     drawTempMessage()
 end
 
--- ========== ФУНКЦИИ ЭКРАНА ==========
-local function clear()
-    gpu.setBackground(colors.bg_main)
-    gpu.fill(1, 1, 80, 25, " ")
-end
-
-local function drawCenteredText(y, text, color)
-    gpu.setForeground(color or colors.text_main)
-    local x = math.floor((80 - unicode.len(text)) / 2) + 1 + 1
-    gpu.set(x, y, text)
-end
-
 local menuButtons = {
     shop    = {x=32, xs=20, y=9,  ys=3, text="🛒 Магазин",     tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main},
     util    = {x=32, xs=20, y=13, ys=3, text="🛠 Полезности",   tx=5, ty=1, bg=colors.bg_button, fg=colors.accent_main},
@@ -694,7 +694,7 @@ local function getFilteredItems()
     return filtered
 end
 
--- ========== ОТРИСОВКА СПИСКА (сокращённо, остальное без изменений) ==========
+-- ========== ОТРИСОВКА СПИСКА ==========
 local function drawBuyStatic()
     clear()
     drawScreenBorder()
@@ -894,7 +894,7 @@ local function drawBuyButtons()
     drawTempMessage()
 end
 
--- ========== ЭКРАН ПОКУПКИ И ПРОДАЖИ (оставлены без изменений для краткости) ==========
+-- ========== ЭКРАН ПОКУПКИ ==========
 local function drawPurchaseScreen()
     currentScreen = "purchase"
     clear()
@@ -987,6 +987,7 @@ local function goToPurchase(item)
     drawPurchaseScreen()
 end
 
+-- ========== ПРОДАЖА ==========
 local function drawSellPopup()
     local popupWidth = 40
     local popupHeight = 10
@@ -1028,6 +1029,7 @@ local function drawSellPopup()
     drawTempMessage()
 end
 
+-- ========== ПОПАП "НЕДОСТАТОЧНО СРЕДСТВ" ==========
 local function drawInsufficientPopup()
     local popupWidth = 52
     local popupHeight = 10
@@ -1073,6 +1075,7 @@ local function drawInsufficientPopup()
     drawTempMessage()
 end
 
+-- ========== ПОПАП "ЧАСТИЧНАЯ ВЫДАЧА" ==========
 local function drawPartialPopup()
     local popupWidth = 52
     local popupHeight = 9
@@ -1122,6 +1125,7 @@ local function drawPartialPopup()
     drawTempMessage()
 end
 
+-- ========== НОВЫЙ ПОПАП "ИНВЕНТАРЬ ПОЛОН" ==========
 local function drawInventoryFullPopup()
     local popupWidth = 52
     local popupHeight = 9
@@ -1263,6 +1267,7 @@ local function performSell()
     drawBuyButtons()
 end
 
+-- ========== ИСПРАВЛЕННАЯ ПОКУПКА ==========
 local function performBuy()
     if not playerAgreed then
         drawCenteredText(20, "Сначала примите пользовательское соглашение", colors.error)
@@ -1437,6 +1442,7 @@ local function performBuy()
     drawBuyButtons()
 end 
 
+-- ========== ЭКРАН РЕПОРТА ==========
 local function drawReportScreen()
     currentScreen = "report"
     clear()
@@ -1657,6 +1663,7 @@ local function drawAccountLoading()
     drawTempMessage()
 end
 
+-- ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ТОКЕНОВ ==========
 local function retryAccountAfterTokenRefresh()
     if not currentPlayer then return end
     modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
