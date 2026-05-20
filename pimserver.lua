@@ -6,6 +6,7 @@ local gpu = component.gpu
 local math = require("math")
 local os = require("os")
 local unicode = require("unicode")
+local computer = require("computer")
 
 local modem = component.modem
 modem.open(0xffef)
@@ -54,7 +55,7 @@ local function fill(x, y, w, h, char)
 end
 
 -- ========== РЕАЛЬНОЕ ВРЕМЯ (синхронизация через интернет) ==========
-local realTimeOffset = 0          -- разница между реальным временем и uptime
+local realTimeOffset = 0
 local lastSyncTime = 0
 
 local function getRealTimeFromInternet()
@@ -62,29 +63,36 @@ local function getRealTimeFromInternet()
         return nil, "Нет интернет-карты"
     end
     local internet = component.internet
+    -- Используем другой сервис
     local ok, response = pcall(function()
-        local req = internet.request("http://worldtimeapi.org/api/timezone/Europe/Moscow")
+        local req = internet.request("http://worldtimeapi.org/api/timezone/Europe/Moscow", nil, 3000)
         local data = ""
         while true do
-            local chunk = req.read()
+            local chunk = req.read(256)
             if not chunk then break end
             data = data .. chunk
         end
         return data
     end)
     if not ok then return nil, "Ошибка запроса" end
-    local success, parsed = pcall(serialization.unserialize, response)
-    if not success or not parsed or not parsed.datetime then
-        return nil, "Не удалось разобрать ответ"
+    
+    -- Ищем datetime в ответе
+    local dt_str = data:match('"datetime":"([^"]+)"')
+    if not dt_str then
+        return nil, "Не найден datetime в ответе"
     end
-    -- datetime имеет вид "2025-05-20T15:30:45+03:00"
-    local dt = parsed.datetime
-    local year = tonumber(dt:sub(1,4))
-    local month = tonumber(dt:sub(6,7))
-    local day = tonumber(dt:sub(9,10))
-    local hour = tonumber(dt:sub(12,13))
-    local minute = tonumber(dt:sub(15,16))
-    local second = tonumber(dt:sub(18,19))
+    
+    local year = tonumber(dt_str:sub(1,4))
+    local month = tonumber(dt_str:sub(6,7))
+    local day = tonumber(dt_str:sub(9,10))
+    local hour = tonumber(dt_str:sub(12,13))
+    local minute = tonumber(dt_str:sub(15,16))
+    local second = tonumber(dt_str:sub(18,19))
+    
+    if not (year and month and day and hour and minute and second) then
+        return nil, "Не удалось разобрать дату"
+    end
+    
     return os.time({year=year, month=month, day=day, hour=hour, min=minute, sec=second})
 end
 
@@ -97,7 +105,9 @@ local function syncRealTime()
         addLog("Реальное время синхронизировано: " .. os.date("%H:%M:%S", real), ansi.green)
         return true
     else
-        addLog("Не удалось синхронизировать реальное время", ansi.red)
+        addLog("Не удалось синхронизировать реальное время, используем игровое", ansi.red)
+        -- Используем игровое время как fallback
+        realTimeOffset = os.time() - computer.uptime()
         return false
     end
 end
