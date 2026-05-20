@@ -58,6 +58,27 @@ local function drawCenteredText(y, text, color)
     gpu.set(x, y, text)
 end
 
+-- ========== ФУНКЦИИ ДЛЯ КНОПОК (ДОЛЖНЫ БЫТЬ ОПРЕДЕЛЕНЫ РАНЬШЕ ВСЕХ ИСПОЛЬЗОВАНИЙ) ==========
+local function drawButton(btn)
+    gpu.setBackground(btn.bg)
+    gpu.fill(btn.x, btn.y, btn.xs, btn.ys, " ")
+    gpu.setForeground(btn.fg)
+    local textX = btn.x + math.floor((btn.xs - unicode.len(btn.text)) / 2)
+    local textY = btn.y + math.floor((btn.ys - 1) / 2)
+    gpu.set(textX, textY, btn.text)
+    gpu.setBackground(colors.bg_main)
+end
+
+local function drawFlexButton(btn)
+    gpu.setBackground(btn.bg)
+    gpu.fill(btn.x, btn.y, btn.xs, btn.ys, " ")
+    gpu.setForeground(btn.fg)
+    local textX = btn.x + math.floor((btn.xs - unicode.len(btn.text)) / 2)
+    local textY = btn.y + math.floor((btn.ys - 1) / 2)
+    gpu.set(textX, textY, btn.text)
+    gpu.setBackground(colors.bg_main)
+end
+
 -- ========== БЕЗОПАСНАЯ ЗАГРУЗКА ФАЙЛОВ ==========
 local function safeDoFile(path)
     if not fs.exists(path) then
@@ -442,31 +463,11 @@ local menuButtons = {
     account = {x=32, xs=20, y=17, ys=3, text="👤 Аккаунт",      tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main}
 }
 
-local function drawButton(btn)
-    gpu.setBackground(btn.bg)
-    gpu.fill(btn.x, btn.y, btn.xs, btn.ys, " ")
-    gpu.setForeground(btn.fg)
-    local textX = btn.x + math.floor((btn.xs - unicode.len(btn.text)) / 2)
-    local textY = btn.y + math.floor((btn.ys - 1) / 2)
-    gpu.set(textX, textY, btn.text)
-    gpu.setBackground(colors.bg_main)
-end
-
 local function drawBottomPanel()
     gpu.setForeground(colors.error)
     gpu.set(4, 24, "[ ПОДДЕРЖКА ]")
     gpu.set(35, 24, "[ СОГЛАШЕНИЕ ]")
     gpu.set(68, 24, "[ ОТЗЫВЫ ]")
-end
-
-local function drawFlexButton(btn)
-    gpu.setBackground(btn.bg)
-    gpu.fill(btn.x, btn.y, btn.xs, btn.ys, " ")
-    gpu.setForeground(btn.fg)
-    local textX = btn.x + math.floor((btn.xs - unicode.len(btn.text)) / 2)
-    local textY = btn.y + math.floor((btn.ys - 1) / 2)
-    gpu.set(textX, textY, btn.text)
-    gpu.setBackground(colors.bg_main)
 end
 
 local backButton = {
