@@ -976,24 +976,29 @@ local function main()
                 addItemResponse = { success = msg.success, error = msg.error }
                 goto continue
             elseif msg.op == "get_feedbacks" then
-                if not validateSession(msg.name, msg.token) then
-                    modem.send(from, 0xffef, serialization.serialize({op="feedbacks_list", error="Токен устарел"}))
-                    goto continue
-                end
-                local player = players[msg.name]
-                local feedbacks = {}
-                if filesystem.exists("/home/feedbacks.db") then
-                    local file = io.open("/home/feedbacks.db", "r")
-                    local data = file:read("*a")
-                    file:close()
-                    pcall(function() feedbacks = serialization.unserialize(data) end)
-                end
-                modem.send(from, 0xffef, serialization.serialize({
-                    op = "feedbacks_list",
-                    feedbacks = feedbacks,
-                    hasFeedback = player and player.hasFeedback or false
-                }))
+            if not validateSession(msg.name, msg.token) then
+                modem.send(from, 0xffef, serialization.serialize({op="feedbacks_list", error="Токен устарел"}))
                 goto continue
+            end
+            local player = players[msg.name]
+            local feedbacks = {}
+            if filesystem.exists("/home/feedbacks.db") then
+                local file = io.open("/home/feedbacks.db", "r")
+                local data = file:read("*a")
+                file:close()
+                if data and #data > 0 then
+                    local ok, result = pcall(serialization.unserialize, data)
+                    if ok and type(result) == "table" then
+                        feedbacks = result
+                    end
+                end
+            end
+            modem.send(from, 0xffef, serialization.serialize({
+                op = "feedbacks_list",
+                feedbacks = feedbacks,
+                hasFeedback = player and player.hasFeedback or false
+            }))
+            goto continue
             elseif msg.op == "add_feedback" then
             if not validateSession(msg.name, msg.token) then
                 modem.send(from, 0xffef, serialization.serialize({op="add_feedback_response", success=false, error="Токен устарел"}))
