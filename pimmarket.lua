@@ -468,7 +468,7 @@ local function drawFeedbackInputScreen()
         end
     end
     
-    local cancelBtn = {x = 20, y = 24, xs = 11, ys = 1, text = "[ ОТМЕНА ]", bg = colors.bg_button, fg = colors.error}
+    local cancelBtn = {x = 20, y = 24, xs = 12, ys = 1, text = "[ ОТМЕНА ]", bg = colors.bg_button, fg = colors.error}
     local sendBtn = {x = 46, y = 24, xs = 15, ys = 1, text = "[ ОТПРАВИТЬ ]", bg = colors.bg_button, fg = colors.success}
     
     drawFlexButton(cancelBtn)
@@ -2181,7 +2181,7 @@ local function main()
                     goto continue
                 end
             elseif currentScreen == "feedback_input" then
-                if isButtonClicked({x=20, y=24, xs=11, ys=1}, x, y) then
+                if isButtonClicked({x=20, y=24, xs=12, ys=1}, x, y) then
                     feedbackEditMode = false
                     feedbackInput = ""
                     currentScreen = "feedbacks"
@@ -2532,10 +2532,14 @@ local function drawCrashPopup(errText)
     end
 end
 
--- ========== БЕСКОНЕЧНЫЙ ПЕРЕЗАПУСК ПРИ ОШИБКАХ ==========
-while true do
-    local ok, err = pcall(main)
-    if not ok then
-        pcall(drawCrashPopup, tostring(err))
-    end
+-- ========== ВРЕМЕННЫЙ ВЫВОД ПОЛНОЙ ОШИБКИ ==========
+local ok, err = pcall(main)
+if not ok then
+    print("\n================== КРИТИЧЕСКАЯ ОШИБКА ==================")
+    print("Ошибка: " .. tostring(err))
+    print("Полный стек вызовов:")
+    print(debug.traceback(err, 2))
+    print("========================================================\n")
+    print("Нажмите Ctrl+C для выхода.")
+    os.sleep(30)  -- даём время прочитать
 end
