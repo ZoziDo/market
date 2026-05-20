@@ -2256,7 +2256,6 @@ local function main()
                     end
                 end
             end
-        end
         ::continue::
     end
 end
