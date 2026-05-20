@@ -15,6 +15,21 @@ modem.open(0xfffe)
 event.ignore("interrupted", function() end)
 event.ignore("terminate", function() end)
 
+-- ========== РЕАЛЬНОЕ ВРЕМЯ ЧЕРЕЗ TMPFS ==========
+local tmpfs = component.proxy(computer.tmpAddress())
+local function getRealTimestamp()
+    local handle = tmpfs.open("/time", "w")
+    tmpfs.write(handle, "time")
+    tmpfs.close(handle)
+    return tmpfs.lastModified("/time") / 1000
+end
+local function getRealTimeString()
+    return os.date("%H:%M:%S", getRealTimestamp())
+end
+local function getRealDateTimeString()
+    return os.date("%d.%m.%Y %H:%M:%S", getRealTimestamp())
+end
+
 -- ========== ANSI ЦВЕТА ==========
 local ansi = {
     reset   = "\27[0m",
@@ -54,7 +69,7 @@ local function fill(x, y, w, h, char)
 end
 
 local function timeToMidnight()
-    local now = os.time()
+    local now = getRealTimestamp()
     local dt = os.date("*t", now)
     local secondsLeft = (24 - dt.hour - 1) * 3600 + (60 - dt.min - 1) * 60 + (60 - dt.sec)
     if secondsLeft < 0 then secondsLeft = 0 end
@@ -186,7 +201,7 @@ local function log(level, msg)
     if level == "INFO" then color = ansi.green
     elseif level == "WARN" then color = ansi.yellow
     elseif level == "ERROR" then color = ansi.red end
-    addLog("[" .. os.date("%H:%M:%S") .. "] [" .. level .. "] " .. msg, color)
+    addLog("[" .. getRealTimeString() .. "] [" .. level .. "] " .. msg, color)
 end
 
 local function isAdminConnected()
@@ -358,7 +373,7 @@ function drawInterface()
     
     setColor(ansi.cyan)
     gotoxy(1, 3)
-    io.write("Время: " .. os.date("%H:%M:%S") .. "  До сброса репортов: " .. timeToMidnight())
+    io.write("Время: " .. getRealTimeString() .. "  До сброса репортов: " .. timeToMidnight())
     local activeCount = 0
     for _, v in pairs(sessions) do
         if type(v) == "table" and v.token then activeCount = activeCount + 1 end
@@ -471,7 +486,7 @@ local function getOrCreatePlayer(name)
         players[name] = {
             balance = 0.0,
             transactions = 0,
-            regDate = os.date("%d.%m.%Y %H:%M:%S"),
+            regDate = getRealDateTimeString(),
             agreed = false,
             banned = false
         }
@@ -922,6 +937,7 @@ local function main()
                 end
                 globalStats.totalReports = (globalStats.totalReports or 0) + 1
                 saveGlobalStats()
+                -- Используем время, присланное клиентом (оно реальное)
                 log("INFO", "📩 Репорт от " .. msg.name .. " (" .. msg.time .. ")")
                 log("INFO", "   Текст: " .. (msg.text or ""))
                 local file = io.open("/home/reports.log", "a")
