@@ -364,7 +364,19 @@ end
 local function drawFeedbacksList()
     clear()
     drawScreenBorder()
-    drawCenteredText(2, "══════════════ ОТЗЫВЫ ══════════════", colors.accent_secondary)
+    
+    -- Новый заголовок: линии ═ цвета accent_main, слово "ОТЗЫВЫ" цвета text_bright
+    local line = string.rep("═", 15)
+    local title = " ОТЗЫВЫ "
+    local line2 = string.rep("═", 15)
+    local fullStr = line .. title .. line2
+    local x = math.floor((80 - unicode.len(fullStr)) / 2) + 1 + 1
+    gpu.setForeground(colors.accent_main)
+    gpu.set(x, 2, line)
+    gpu.setForeground(colors.text_bright)
+    gpu.set(x + unicode.len(line), 2, title)
+    gpu.setForeground(colors.accent_main)
+    gpu.set(x + unicode.len(line) + unicode.len(title), 2, line2)
     
     if #feedbacks == 0 then
         drawCenteredText(10, "Пока нет ни одного отзыва.", colors.text_main)
@@ -401,14 +413,17 @@ local function drawFeedbacksList()
         
         feedbacksTotalPages = math.max(1, math.ceil(#feedbacks / 3))
         local pageInfo = "Страница " .. feedbacksPage .. " из " .. feedbacksTotalPages
-        drawCenteredText(22, pageInfo, colors.text_main)
+        local x = math.floor((80 - unicode.len(pageInfo)) / 2) + 1 + 1   -- центрирование
+        x = x + 1   -- смещение на 1 пробел вправо
+        gpu.setForeground(colors.text_main)
+        gpu.set(x, 22, pageInfo)
     end
     
     -- Выровненные кнопки (одинаковые отступы)
-    local backBtn = {x = 5, y = 24, xs = 14, ys = 1, text = "[ НАЗАД ]", bg = colors.bg_button, fg = colors.accent_secondary}
-    local addBtn = {x = 27, y = 24, xs = 14, ys = 1, text = "[ ДОБАВИТЬ ]", bg = colors.bg_button, fg = colors.success}
-    local prevBtn = {x = 49, y = 24, xs = 8, ys = 1, text = "[ < ]", bg = colors.bg_button, fg = colors.accent_main}
-    local nextBtn = {x = 65, y = 24, xs = 8, ys = 1, text = "[ > ]", bg = colors.bg_button, fg = colors.accent_main}
+    local backBtn = {x = 5, y = 24, xs = 11, ys = 1, text = "[ НАЗАД ]", bg = colors.bg_button, fg = colors.accent_secondary}
+    local addBtn = {x = 36, y = 24, xs = 14, ys = 1, text = "[ ДОБАВИТЬ ]", bg = colors.bg_button, fg = colors.success}
+    local prevBtn = {x = 59, y = 24, xs = 7, ys = 1, text = "[ < ]", bg = colors.bg_button, fg = colors.accent_main}
+    local nextBtn = {x = 69, y = 24, xs = 7, ys = 1, text = "[ > ]", bg = colors.bg_button, fg = colors.accent_main}
     
     if not playerHasFeedback then
         drawFlexButton(addBtn)
@@ -438,30 +453,28 @@ local function drawFeedbackInputScreen()
     drawCenteredText(9, "Оставьте свой отзыв о магазине:", colors.text_main)
     drawCenteredText(10, "Ваше мнение поможет нам стать лучше!", colors.inactive)
     
-    gpu.setBackground(colors.bg_secondary)
-    gpu.fill(10, 12, 60, 3, " ")
+    -- Поле ввода, такое же как в репорте (3 строки)
     gpu.setBackground(colors.black_fon)
-    gpu.fill(11, 13, 58, 1, " ")
-    
+    gpu.fill(10, 12, 60, 3, " ")
     gpu.setForeground(colors.text_bright)
     if feedbackEditMode then
         if feedbackInput ~= "" then
-            gpu.set(12, 13, unicode.sub(feedbackInput, 1, 56) .. "_")
+            gpu.set(11, 13, unicode.sub(feedbackInput, -58) .. "_")
         else
             gpu.setForeground(colors.inactive)
-            gpu.set(12, 13, "Введите ваш отзыв..._")
+            gpu.set(11, 13, "Введите ваш отзыв..._")
         end
     else
         if feedbackInput ~= "" then
-            gpu.set(12, 13, unicode.sub(feedbackInput, 1, 56))
+            gpu.set(11, 13, unicode.sub(feedbackInput, -58))
         else
             gpu.setForeground(colors.inactive)
-            gpu.set(12, 13, "Введите ваш отзыв...")
+            gpu.set(11, 13, "Введите ваш отзыв...")
         end
     end
     
-    local cancelBtn = {x = 20, y = 20, xs = 14, ys = 1, text = "[ ОТМЕНА ]", bg = colors.bg_button, fg = colors.error}
-    local sendBtn = {x = 46, y = 20, xs = 14, ys = 1, text = "[ ОТПРАВИТЬ ]", bg = colors.bg_button, fg = colors.success}
+    local cancelBtn = {x = 20, y = 24, xs = 11, ys = 1, text = "[ ОТМЕНА ]", bg = colors.bg_button, fg = colors.error}
+    local sendBtn = {x = 46, y = 24, xs = 15, ys = 1, text = "[ ОТПРАВИТЬ ]", bg = colors.bg_button, fg = colors.success}
     
     drawFlexButton(cancelBtn)
     drawFlexButton(sendBtn)
@@ -2147,12 +2160,12 @@ local function main()
                     end
                 end
             elseif currentScreen == "feedbacks" then
-                if isButtonClicked({x=5, y=24, xs=14, ys=1}, x, y) then
+                if isButtonClicked({x=5, y=24, xs=11, ys=1}, x, y) then
                     currentScreen = "menu"
                     drawMainMenu()
                     goto continue
                 end
-                if isButtonClicked({x=27, y=24, xs=14, ys=1}, x, y) then
+                if isButtonClicked({x=36, y=24, xs=14, ys=1}, x, y) then
                     if playerHasFeedback then
                         showTempMessage("Вы уже оставляли отзыв!", 2)
                     else
@@ -2162,25 +2175,25 @@ local function main()
                     end
                     goto continue
                 end
-                if isButtonClicked({x=49, y=24, xs=8, ys=1}, x, y) and feedbacksPage > 1 then
+                if isButtonClicked({x=59, y=24, xs=7, ys=1}, x, y) and feedbacksPage > 1 then
                     feedbacksPage = feedbacksPage - 1
                     drawFeedbacksList()
                     goto continue
                 end
-                if isButtonClicked({x=65, y=24, xs=8, ys=1}, x, y) and feedbacksPage < feedbacksTotalPages then
+                if isButtonClicked({x=69, y=24, xs=7, ys=1}, x, y) and feedbacksPage < feedbacksTotalPages then
                     feedbacksPage = feedbacksPage + 1
                     drawFeedbacksList()
                     goto continue
                 end
             elseif currentScreen == "feedback_input" then
-                if isButtonClicked({x=20, y=20, xs=14, ys=1}, x, y) then
+                if isButtonClicked({x=20, y=24, xs=11, ys=1}, x, y) then
                     feedbackEditMode = false
                     feedbackInput = ""
                     currentScreen = "feedbacks"
                     drawFeedbacksList()
                     goto continue
                 end
-                if isButtonClicked({x=46, y=20, xs=14, ys=1}, x, y) and feedbackInput ~= "" then
+                if isButtonClicked({x=46, y=24, xs=15, ys=1}, x, y) and feedbackInput ~= "" then
                     if currentToken then
                         modem.send(serverAddress, 0xffef, serialization.serialize({
                             op = "add_feedback",
