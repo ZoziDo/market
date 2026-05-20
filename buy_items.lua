@@ -1,4 +1,5 @@
 return {
+  { internalName = "EnderIO:itemPowerConduit", displayName = "Энергопровод из вибрирующего сплава ", price = 1.00, currency = "res", damage = 2 },
   { internalName = "metadrive:block_ic2_1_solar_panel", displayName = "Индустриальная солнечная панель II уровня", price = 25.00, currency = "res" },
   { internalName = "IC2:reactorMOXQuad", displayName = "Счетверённый топливный стержень (МОХ)", price = 60.00, currency = "res" },
   { internalName = "extracells:storage.component", displayName = "1024k МЭ жидкостный компонент хранилища", price = 261.91, currency = "res", damage = 1 },
