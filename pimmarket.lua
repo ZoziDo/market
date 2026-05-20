@@ -12,8 +12,8 @@ event.ignore("interrupted", function() end)
 event.ignore("terminate", function() end)
 
 -- ========== НАСТРОЙКИ ПОДКЛЮЧЕНИЯ ==========
-local serverAddress = "535305a9-37c9-4645-b7c4-46204187ee7b"  -- АДРЕС СЕРВЕРА (убедитесь, что верный)
-local ACCESS_PASSWORD = "secret"   -- ПАРОЛЬ (должен совпадать с серверным)
+local serverAddress = "535305a9-37c9-4645-b7c4-46204187ee7b"
+local ACCESS_PASSWORD = "secret"
 
 -- Цветовая схема
 local colors = {
@@ -31,11 +31,11 @@ local colors = {
     black_fon = 0x000000
 }
 
--- ========== БЕЗОПАСНАЯ ЗАГРУЗКА ФАЙЛОВ (с проверкой) ==========
+-- ========== БЕЗОПАСНАЯ ЗАГРУЗКА ФАЙЛОВ ==========
 local function safeDoFile(path)
     if not fs.exists(path) then
         print("Файл не найден, создаём: " .. path)
-        return {}  -- возвращаем пустую таблицу, чтобы не падать
+        return {}
     end
     local ok, result = pcall(dofile, path)
     if not ok then
@@ -54,6 +54,13 @@ local function sortableName(name)
     end)
     return result
 end
+
+-- ========== ПЕРЕМЕННЫЕ ДЛЯ ОТЗЫВОВ ==========
+local feedbacks = {}
+local feedbacksPage = 1
+local feedbacksTotalPages = 1
+local feedbackInput = ""
+local feedbackEditMode = false
 
 local function drawPopupBorder(x, y, w, h, color)
     gpu.setForeground(color or colors.accent_secondary)
@@ -103,7 +110,7 @@ end
 local drawAgreementScreen = safeDoFile("/home/agreement.lua")
 
 local modem = component.modem
--- Динамический поиск PIM
+
 local function getPimAddr()
     for addr in component.list("pim") do
         return addr
@@ -276,7 +283,6 @@ local function showTempMessage(msg, duration)
     tempMessageTimer = event.timer(duration, function()
         tempMessage = ""
         tempMessageTimer = nil
-        -- перерисовываем текущий экран
         if currentScreen == "shop_buy" or currentScreen == "shop_sell" then
             drawBuyStatic()
             drawBuyItemsList()
@@ -287,11 +293,120 @@ local function showTempMessage(msg, duration)
             drawShopMenu()
         elseif currentScreen == "account" then
             drawAccount({balance=coinBalance, transactions=playerTransactions, regDate=playerRegDate, agreed=playerAgreed})
+        elseif currentScreen == "feedbacks" then
+            drawFeedbacksList()
         else
             drawTempMessage()
         end
     end)
     drawTempMessage()
+end
+
+-- ========== ФУНКЦИИ ДЛЯ ОТЗЫВОВ ==========
+local function drawFeedbacksList()
+    clear()
+    drawScreenBorder()
+    drawCenteredText(2, "══════════════ ОТЗЫВЫ ══════════════", colors.accent_secondary)
+    
+    if #feedbacks == 0 then
+        drawCenteredText(10, "Пока нет ни одного отзыва.", colors.text_main)
+        drawCenteredText(11, "Будьте первым, кто оставит отзыв!", colors.accent_main)
+        drawCenteredText(12, "Нажмите [ДОБАВИТЬ] чтобы оставить отзыв", colors.text_main)
+    else
+        local startIdx = (feedbacksPage - 1) * 3 + 1
+        local endIdx = math.min(startIdx + 2, #feedbacks)
+        local y = 5
+        
+        for i = startIdx, endIdx do
+            local fb = feedbacks[i]
+            if fb then
+                gpu.setForeground(colors.accent_secondary)
+                gpu.fill(5, y, 70, 3, " ")
+                gpu.setBackground(colors.bg_secondary)
+                gpu.fill(6, y+1, 68, 1, " ")
+                
+                gpu.setForeground(colors.accent_main)
+                gpu.set(7, y+1, fb.name)
+                gpu.setForeground(colors.inactive)
+                local timeStr = fb.time or ""
+                gpu.set(7 + unicode.len(fb.name) + 2, y+1, timeStr)
+                
+                gpu.setForeground(colors.text_bright)
+                local shortText = unicode.sub(fb.text, 1, 62)
+                gpu.set(7, y+2, shortText)
+                
+                y = y + 4
+            end
+        end
+        
+        feedbacksTotalPages = math.max(1, math.ceil(#feedbacks / 3))
+        local pageInfo = "Страница " .. feedbacksPage .. " из " .. feedbacksTotalPages
+        drawCenteredText(22, pageInfo, colors.text_main)
+    end
+    
+    local backBtn = {x = 10, y = 24, xs = 14, ys = 1, text = "[ НАЗАД ]", bg = colors.bg_button, fg = colors.accent_secondary}
+    local addBtn = {x = 33, y = 24, xs = 14, ys = 1, text = "[ ДОБАВИТЬ ]", bg = colors.bg_button, fg = colors.success}
+    local prevBtn = {x = 58, y = 24, xs = 8, ys = 1, text = "[ < ]", bg = colors.bg_button, fg = colors.accent_main}
+    local nextBtn = {x = 67, y = 24, xs = 8, ys = 1, text = "[ > ]", bg = colors.bg_button, fg = colors.accent_main}
+    
+    drawFlexButton(backBtn)
+    drawFlexButton(addBtn)
+    if #feedbacks > 3 then
+        drawFlexButton(prevBtn)
+        drawFlexButton(nextBtn)
+    end
+    
+    drawTempMessage()
+end
+
+local function drawFeedbackInputScreen()
+    currentScreen = "feedback_input"
+    clear()
+    drawScreenBorder()
+    drawCenteredText(4, "ОСТАВИТЬ ОТЗЫВ", colors.accent_secondary)
+    
+    gpu.setForeground(colors.text_main)
+    drawCenteredText(7, "Ваше имя: " .. currentPlayer, colors.accent_main)
+    drawCenteredText(9, "Оставьте свой отзыв о магазине:", colors.text_main)
+    drawCenteredText(10, "Ваше мнение поможет нам стать лучше!", colors.inactive)
+    
+    gpu.setBackground(colors.bg_secondary)
+    gpu.fill(10, 12, 60, 3, " ")
+    gpu.setBackground(colors.black_fon)
+    gpu.fill(11, 13, 58, 1, " ")
+    
+    gpu.setForeground(colors.text_bright)
+    if feedbackEditMode then
+        if feedbackInput ~= "" then
+            gpu.set(12, 13, unicode.sub(feedbackInput, 1, 56) .. "_")
+        else
+            gpu.setForeground(colors.inactive)
+            gpu.set(12, 13, "Введите ваш отзыв..._")
+        end
+    else
+        if feedbackInput ~= "" then
+            gpu.set(12, 13, unicode.sub(feedbackInput, 1, 56))
+        else
+            gpu.setForeground(colors.inactive)
+            gpu.set(12, 13, "Введите ваш отзыв...")
+        end
+    end
+    
+    local cancelBtn = {x = 20, y = 20, xs = 14, ys = 1, text = "[ ОТМЕНА ]", bg = colors.bg_button, fg = colors.error}
+    local sendBtn = {x = 46, y = 20, xs = 14, ys = 1, text = "[ ОТПРАВИТЬ ]", bg = colors.bg_button, fg = colors.success}
+    
+    drawFlexButton(cancelBtn)
+    drawFlexButton(sendBtn)
+    drawTempMessage()
+end
+
+local function loadFeedbacksFromServer()
+    if not currentToken then return end
+    modem.send(serverAddress, 0xffef, serialization.serialize({
+        op = "get_feedbacks",
+        name = currentPlayer,
+        token = currentToken
+    }))
 end
 
 -- ========== ФУНКЦИИ ЭКРАНА ==========
@@ -306,7 +421,6 @@ local function drawCenteredText(y, text, color)
     gpu.set(x, y, text)
 end
 
--- Кнопки главного меню
 local menuButtons = {
     shop    = {x=32, xs=20, y=9,  ys=3, text="🛒 Магазин",     tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main},
     util    = {x=32, xs=20, y=13, ys=3, text="🛠 Полезности",   tx=5, ty=1, bg=colors.bg_button, fg=colors.accent_main},
@@ -340,7 +454,6 @@ local function drawFlexButton(btn)
     gpu.setBackground(colors.bg_main)
 end
 
--- Кнопка "Назад" для нижней панели
 local backButton = {
     text = "[ НАЗАД ]",
     x = 37, y = 24,
@@ -354,7 +467,6 @@ local function isButtonClicked(btn, x, y)
     return y >= btn.y and y < btn.y + btn.ys and x >= btn.x and x < btn.x + btn.xs
 end
 
--- Кнопки для экрана магазина (нижняя панель)
 local nextButton    = {text = "[ КУПИТЬ ]",  x=59, y=24, xs=11, ys=1, bg=colors.bg_button, fg=colors.inactive}
 
 local shopMenuButtons = {
@@ -374,7 +486,6 @@ local function canSendReport()
     return false
 end
 
--- ========== ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ==========
 local function getActualItemQuantity(internalName, damage)
     if not component.isAvailable("me_interface") then return 0 end
     local me = component.me_interface
@@ -388,7 +499,6 @@ local function getActualItemQuantity(internalName, damage)
     return total
 end
 
--- ==================== ЗАГРУЗКА ПРЕДМЕТОВ ====================
 local function loadBuyItems()
     if not component.isAvailable("me_interface") then return end
     local me = component.me_interface
@@ -484,7 +594,6 @@ local function loadSellItems()
     end
 end
 
--- ==================== СКАНИРОВАНИЕ И ИЗЪЯТИЕ ====================
 local function scanPlayerInventory(targetName, targetDamage)
     local pimAddr = getPimAddr()
     if not pimAddr then return 0 end
@@ -545,7 +654,6 @@ local function extractToME(targetName, amount, targetDamage)
     return extracted
 end
 
--- ========== ФИЛЬТРАЦИЯ ==========
 local function getFilteredItems()
     local filtered = {}
     for _, item in ipairs(shopItems) do
@@ -567,7 +675,7 @@ local function getFilteredItems()
     return filtered
 end
 
--- ========== ОТРИСОВКА СПИСКА ==========
+-- ========== ОТРИСОВКА СПИСКА (сокращённо, остальное без изменений) ==========
 local function drawBuyStatic()
     clear()
     drawScreenBorder()
@@ -767,7 +875,7 @@ local function drawBuyButtons()
     drawTempMessage()
 end
 
--- ========== ЭКРАН ПОКУПКИ ==========
+-- ========== ЭКРАН ПОКУПКИ И ПРОДАЖИ (оставлены без изменений для краткости) ==========
 local function drawPurchaseScreen()
     currentScreen = "purchase"
     clear()
@@ -860,7 +968,6 @@ local function goToPurchase(item)
     drawPurchaseScreen()
 end
 
--- ========== ПРОДАЖА ==========
 local function drawSellPopup()
     local popupWidth = 40
     local popupHeight = 10
@@ -902,7 +1009,6 @@ local function drawSellPopup()
     drawTempMessage()
 end
 
--- ========== ПОПАП "НЕДОСТАТОЧНО СРЕДСТВ" ==========
 local function drawInsufficientPopup()
     local popupWidth = 52
     local popupHeight = 10
@@ -948,7 +1054,6 @@ local function drawInsufficientPopup()
     drawTempMessage()
 end
 
--- ========== ПОПАП "ЧАСТИЧНАЯ ВЫДАЧА" ==========
 local function drawPartialPopup()
     local popupWidth = 52
     local popupHeight = 9
@@ -998,7 +1103,6 @@ local function drawPartialPopup()
     drawTempMessage()
 end
 
--- ========== НОВЫЙ ПОПАП "ИНВЕНТАРЬ ПОЛОН" ==========
 local function drawInventoryFullPopup()
     local popupWidth = 52
     local popupHeight = 9
@@ -1140,7 +1244,6 @@ local function performSell()
     drawBuyButtons()
 end
 
--- ========== ИСПРАВЛЕННАЯ ПОКУПКА ==========
 local function performBuy()
     if not playerAgreed then
         drawCenteredText(20, "Сначала примите пользовательское соглашение", colors.error)
@@ -1315,7 +1418,6 @@ local function performBuy()
     drawBuyButtons()
 end 
 
--- ========== ЭКРАН РЕПОРТА ==========
 local function drawReportScreen()
     currentScreen = "report"
     clear()
@@ -1536,7 +1638,6 @@ local function drawAccountLoading()
     drawTempMessage()
 end
 
--- ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ТОКЕНОВ ==========
 local function retryAccountAfterTokenRefresh()
     if not currentPlayer then return end
     modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
@@ -1675,6 +1776,7 @@ local function main()
             local x, y = ev[3], ev[4]
 
             if showSellPopup and currentScreen == "sell_scan" then
+                -- обработка попапа продажи (оставлена)
                 local popupWidth = 40
                 local popupHeight = 10
                 local popupX = math.floor((80 - popupWidth) / 2)
@@ -1936,11 +2038,11 @@ local function main()
                     elseif x >= 35 and x <= 47 then
                         showShopDenied = false
                         goToHelp()
-                    elseif x >= 70 and x <= 78 then
+                    elseif x >= 68 and x <= 78 then
                         showShopDenied = false
-                        drawCenteredText(18, "Отзывы в разработке", colors.text_main)
-                        os.sleep(1)
-                        drawMainMenu()
+                        currentScreen = "feedbacks"
+                        loadFeedbacksFromServer()
+                        drawFeedbacksList()
                     end
                 end
             elseif currentScreen == "agreement" then
@@ -2007,6 +2109,53 @@ local function main()
                         goBackToMenu()
                     end
                 end
+            elseif currentScreen == "feedbacks" then
+                if isButtonClicked({x=10, y=24, xs=14, ys=1}, x, y) then
+                    currentScreen = "menu"
+                    drawMainMenu()
+                    goto continue
+                end
+                if isButtonClicked({x=33, y=24, xs=14, ys=1}, x, y) then
+                    feedbackInput = ""
+                    feedbackEditMode = true
+                    drawFeedbackInputScreen()
+                    goto continue
+                end
+                if isButtonClicked({x=58, y=24, xs=8, ys=1}, x, y) and feedbacksPage > 1 then
+                    feedbacksPage = feedbacksPage - 1
+                    drawFeedbacksList()
+                    goto continue
+                end
+                if isButtonClicked({x=67, y=24, xs=8, ys=1}, x, y) and feedbacksPage < feedbacksTotalPages then
+                    feedbacksPage = feedbacksPage + 1
+                    drawFeedbacksList()
+                    goto continue
+                end
+            elseif currentScreen == "feedback_input" then
+                if isButtonClicked({x=20, y=20, xs=14, ys=1}, x, y) then
+                    feedbackEditMode = false
+                    feedbackInput = ""
+                    currentScreen = "feedbacks"
+                    drawFeedbacksList()
+                    goto continue
+                end
+                if isButtonClicked({x=46, y=20, xs=14, ys=1}, x, y) and feedbackInput ~= "" then
+                    if currentToken then
+                        modem.send(serverAddress, 0xffef, serialization.serialize({
+                            op = "add_feedback",
+                            name = currentPlayer,
+                            token = currentToken,
+                            text = feedbackInput,
+                            time = os.date("%d.%m.%Y %H:%M:%S", os.time())
+                        }))
+                        showTempMessage("✅ Отзыв отправлен! Спасибо!", 10)
+                    end
+                    feedbackEditMode = false
+                    feedbackInput = ""
+                    currentScreen = "feedbacks"
+                    drawFeedbacksList()
+                    goto continue
+                end
             end
         elseif e == "scroll" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
             local direction = ev[5]
@@ -2071,6 +2220,33 @@ local function main()
                 drawBuyButtons()
             end
             goto continue
+        elseif e == "key_down" and currentScreen == "feedback_input" and feedbackEditMode then
+            local ch = ev[3]
+            if ch == 13 then
+                if feedbackInput ~= "" and currentToken then
+                    modem.send(serverAddress, 0xffef, serialization.serialize({
+                        op = "add_feedback",
+                        name = currentPlayer,
+                        token = currentToken,
+                        text = feedbackInput,
+                        time = os.date("%d.%m.%Y %H:%M:%S", os.time())
+                    }))
+                    showTempMessage("✅ Отзыв отправлен! Спасибо!", 10)
+                end
+                feedbackEditMode = false
+                feedbackInput = ""
+                currentScreen = "feedbacks"
+                drawFeedbacksList()
+            elseif ch == 8 then
+                feedbackInput = unicode.sub(feedbackInput, 1, -2)
+                drawFeedbackInputScreen()
+            elseif ch >= 32 then
+                if unicode.len(feedbackInput) < 200 then
+                    feedbackInput = feedbackInput .. unicode.char(ch)
+                    drawFeedbackInputScreen()
+                end
+            end
+            goto continue
         elseif e == "player_on" or e == "pim" or e == "pim_player_enter" then
             local playerName = ev[2] or "Игрок"
             currentPlayer = playerName:match("^%s*(.-)%s*$") or playerName
@@ -2105,139 +2281,109 @@ local function main()
             pcall(selector.setSlot, 0, nil)
             pcall(selector.setSlot, 1, nil)
             drawWelcomeScreen()
-                elseif e == "modem_message" then
-                local sender = ev[3]
-                local data = ev[6]
-                if sender == serverAddress then
-                    local success, msg = pcall(serialization.unserialize, data)
-                    if success and msg then
-                        if msg.op == "welcome" and msg.token then
-                            currentToken = msg.token
-                            coinBalance = msg.balance or 0.0
-                            playerTransactions = msg.transactions or 0
-                            playerRegDate = msg.regDate or ""
-                            playerAgreed = msg.agreed or false
-                            alreadyAuthorized = true
-                            if selector then
-                                modem.send(serverAddress, 0xffef, serialization.serialize({
-                                    op = "selector_status",
-                                    name = currentPlayer,
-                                    token = currentToken,
-                                    available = true
-                                }))
+        elseif e == "modem_message" then
+            local sender = ev[3]
+            local data = ev[6]
+            if sender == serverAddress then
+                local success, msg = pcall(serialization.unserialize, data)
+                if success and msg then
+                    if msg.op == "welcome" and msg.token then
+                        currentToken = msg.token
+                        coinBalance = msg.balance or 0.0
+                        playerTransactions = msg.transactions or 0
+                        playerRegDate = msg.regDate or ""
+                        playerAgreed = msg.agreed or false
+                        alreadyAuthorized = true
+                        if selector then
+                            modem.send(serverAddress, 0xffef, serialization.serialize({
+                                op = "selector_status",
+                                name = currentPlayer,
+                                token = currentToken,
+                                available = true
+                            }))
+                        end
+                        if currentScreen == "auth" or currentScreen == "account_loading" then
+                            currentScreen = "menu"
+                            drawMainMenu()
+                        end
+                    elseif msg.op == "accountData" then
+                        if msg.error then
+                            retryAccountAfterTokenRefresh()
+                        else
+                            if currentScreen == "account_loading" then
+                                currentScreen = "account"
+                                playerAgreed = msg.data.agreed or false
+                                drawAccount(msg.data)
                             end
-                            if currentScreen == "auth" or currentScreen == "account_loading" then
-                                currentScreen = "menu"
-                                drawMainMenu()
-                            end
-                        elseif msg.op == "accountData" then
-                            if msg.error then
-                                retryAccountAfterTokenRefresh()
-                            else
-                                if currentScreen == "account_loading" then
-                                    currentScreen = "account"
-                                    playerAgreed = msg.data.agreed or false
-                                    drawAccount(msg.data)
-                                end
-                            end
-                        elseif msg.op == "agree" then
-                            if msg.success then
-                                playerAgreed = true
-                                showShopDenied = false
-                                drawCenteredText(20, "Спасибо! Теперь вам доступен магазин.", colors.success)
-                                os.sleep(0.8)
-                                drawMainMenu()
-                                currentScreen = "menu"
-                            elseif msg.error and msg.message == "Токен устарел" then
-                                drawCenteredText(20, "Сессия устарела. Обновление...", colors.accent_secondary)
-                                os.sleep(1)
-                                modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
-                                local start = os.clock()
-                                local refreshed = false
-                                while os.clock() - start < 3 do
-                                    local evt = {event.pull(0.3)}
-                                    if evt[1] == "modem_message" then
-                                        local s, d = evt[3], evt[6]
-                                        if s == serverAddress then
-                                            local ok, m = pcall(serialization.unserialize, d)
-                                            if ok and m and m.op == "welcome" and m.token then
-                                                currentToken = m.token
-                                                coinBalance = m.balance or 0.0
-                                                playerAgreed = m.agreed or false
-                                                refreshed = true
-                                                break
-                                            end
+                        end
+                    elseif msg.op == "agree" then
+                        if msg.success then
+                            playerAgreed = true
+                            showShopDenied = false
+                            drawCenteredText(20, "Спасибо! Теперь вам доступен магазин.", colors.success)
+                            os.sleep(0.8)
+                            drawMainMenu()
+                            currentScreen = "menu"
+                        elseif msg.error and msg.message == "Токен устарел" then
+                            drawCenteredText(20, "Сессия устарела. Обновление...", colors.accent_secondary)
+                            os.sleep(1)
+                            modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
+                            local start = os.clock()
+                            local refreshed = false
+                            while os.clock() - start < 3 do
+                                local evt = {event.pull(0.3)}
+                                if evt[1] == "modem_message" then
+                                    local s, d = evt[3], evt[6]
+                                    if s == serverAddress then
+                                        local ok, m = pcall(serialization.unserialize, d)
+                                        if ok and m and m.op == "welcome" and m.token then
+                                            currentToken = m.token
+                                            coinBalance = m.balance or 0.0
+                                            playerAgreed = m.agreed or false
+                                            refreshed = true
+                                            break
                                         end
-                                    elseif evt[1] == "player_off" or evt[1] == "pim_player_leave" then
-                                        break
                                     end
+                                elseif evt[1] == "player_off" or evt[1] == "pim_player_leave" then
+                                    break
                                 end
-                                if refreshed then
-                                    modem.send(serverAddress, 0xffef, serialization.serialize({
-                                        op = "agree",
-                                        name = currentPlayer,
-                                        token = currentToken
-                                    }))
-                                    drawCenteredText(20, "Повторная отправка...", colors.success)
-                                else
-                                    drawCenteredText(20, "Не удалось обновить сессию", colors.error)
-                                    os.sleep(2)
-                                    drawMainMenu()
-                                    currentScreen = "menu"
-                                end
+                            end
+                            if refreshed then
+                                modem.send(serverAddress, 0xffef, serialization.serialize({
+                                    op = "agree",
+                                    name = currentPlayer,
+                                    token = currentToken
+                                }))
+                                drawCenteredText(20, "Повторная отправка...", colors.success)
                             else
-                                drawCenteredText(20, "Ошибка: " .. (msg.message or "неизвестная"), colors.error)
+                                drawCenteredText(20, "Не удалось обновить сессию", colors.error)
                                 os.sleep(2)
                                 drawMainMenu()
                                 currentScreen = "menu"
                             end
-                        elseif msg.op == "add_buy_item" then
-                            local ok, err = pcall(function()
-                                local buyItems = dofile("/home/buy_items.lua")
-                                if type(buyItems) ~= "table" then buyItems = {} end
-                                local newItem = {
-                                    internalName = msg.internalName,
-                                    displayName = msg.displayName,
-                                    price = msg.price,
-                                    currency = "res"
-                                }
-                                if msg.damage and msg.damage ~= 0 then
-                                    newItem.damage = msg.damage
-                                end
-                                table.insert(buyItems, newItem)
-                                local file = io.open("/home/buy_items.lua", "w")
-                                file:write("return " .. serialization.serialize(buyItems))
-                                file:close()
-                                buyItemsData = dofile("/home/buy_items.lua")
-                                buyItemMap = {}
-                                for _, item in ipairs(buyItemsData) do
-                                    local dmg = item.damage or 0
-                                    local key = item.internalName .. ":" .. dmg
-                                    buyItemMap[key] = item
-                                end
-                                if currentScreen == "shop_buy" then
-                                    loadBuyItems()
-                                    drawBuyStatic()
-                                    drawBuyItemsList()
-                                    drawBuyButtons()
-                                end
-                            end)
-                            if ok then
-                                modem.send(sender, 0xffef, serialization.serialize({op = "add_buy_item_response", success = true}))
-                                showTempMessage("✅ Предмет добавлен: " .. msg.displayName, 10)
-                            else
-                                modem.send(sender, 0xffef, serialization.serialize({op = "add_buy_item_response", success = false, error = tostring(err)}))
-                                showTempMessage("❌ Ошибка добавления: " .. tostring(err), 10)
+                        else
+                            drawCenteredText(20, "Ошибка: " .. (msg.message or "неизвестная"), colors.error)
+                            os.sleep(2)
+                            drawMainMenu()
+                            currentScreen = "menu"
+                        end
+                    elseif msg.op == "add_buy_item" then
+                        local ok, err = pcall(function()
+                            local buyItems = dofile("/home/buy_items.lua")
+                            if type(buyItems) ~= "table" then buyItems = {} end
+                            local newItem = {
+                                internalName = msg.internalName,
+                                displayName = msg.displayName,
+                                price = msg.price,
+                                currency = "res"
+                            }
+                            if msg.damage and msg.damage ~= 0 then
+                                newItem.damage = msg.damage
                             end
-                            goto continue
-                        elseif msg.op == "add_buy_item_response" then
-                            if msg.success then
-                                print("Предмет успешно добавлен на сервере")
-                            else
-                                print("Ошибка добавления предмета: " .. (msg.error or "неизвестная"))
-                            end
-                        elseif msg.op == "reload_buy_items" then
-                            -- Перезагружаем данные из файла и обновляем магазин
+                            table.insert(buyItems, newItem)
+                            local file = io.open("/home/buy_items.lua", "w")
+                            file:write("return " .. serialization.serialize(buyItems))
+                            file:close()
                             buyItemsData = dofile("/home/buy_items.lua")
                             buyItemMap = {}
                             for _, item in ipairs(buyItemsData) do
@@ -2251,11 +2397,55 @@ local function main()
                                 drawBuyItemsList()
                                 drawBuyButtons()
                             end
-                            goto continue
+                        end)
+                        if ok then
+                            modem.send(sender, 0xffef, serialization.serialize({op = "add_buy_item_response", success = true}))
+                            showTempMessage("✅ Предмет добавлен: " .. msg.displayName, 10)
+                        else
+                            modem.send(sender, 0xffef, serialization.serialize({op = "add_buy_item_response", success = false, error = tostring(err)}))
+                            showTempMessage("❌ Ошибка добавления: " .. tostring(err), 10)
                         end
+                        goto continue
+                    elseif msg.op == "add_buy_item_response" then
+                        if msg.success then
+                            print("Предмет успешно добавлен на сервере")
+                        else
+                            print("Ошибка добавления предмета: " .. (msg.error or "неизвестная"))
+                        end
+                    elseif msg.op == "reload_buy_items" then
+                        buyItemsData = dofile("/home/buy_items.lua")
+                        buyItemMap = {}
+                        for _, item in ipairs(buyItemsData) do
+                            local dmg = item.damage or 0
+                            local key = item.internalName .. ":" .. dmg
+                            buyItemMap[key] = item
+                        end
+                        if currentScreen == "shop_buy" then
+                            loadBuyItems()
+                            drawBuyStatic()
+                            drawBuyItemsList()
+                            drawBuyButtons()
+                        end
+                        goto continue
+                    elseif msg.op == "feedbacks_list" then
+                        feedbacks = msg.feedbacks or {}
+                        feedbacksPage = 1
+                        if currentScreen == "feedbacks" then
+                            drawFeedbacksList()
+                        end
+                        goto continue
+                    elseif msg.op == "add_feedback_response" then
+                        if msg.success then
+                            showTempMessage("✅ Отзыв добавлен!", 10)
+                            loadFeedbacksFromServer()
+                        else
+                            showTempMessage("❌ Ошибка: " .. (msg.error or "неизвестная"), 10)
+                        end
+                        goto continue
                     end
                 end
             end
+        end
         ::continue::
     end
 end
