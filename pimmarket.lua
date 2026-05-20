@@ -171,18 +171,6 @@ local function getPimAddr()
     return nil
 end
 
-local function findFreeSlotInPim()
-    local pimAddr = getPimAddr()
-    if not pimAddr then return nil end
-    for slot = 1, 36 do
-        local stack = component.invoke(pimAddr, "getStackInSlot", slot)
-        if not stack or stack.size == 0 then
-            return slot
-        end
-    end
-    return nil
-end
-
 local PUSH_DIRECTION = "down"
 local PULL_DIRECTION = "up"
 
@@ -1360,7 +1348,7 @@ local function performBuy()
     end
 
     drawCenteredText(20, "Выполняется покупка...", colors.accent_main)
-    os.sleep(0.2)  -- небольшая задержка для отрисовки
+    os.sleep(0.4)
 
     local id = item.internalName
     if not id:find(":") then
@@ -1368,48 +1356,38 @@ local function performBuy()
     end
     local fingerprint = { id = id, dmg = item.damage or 0 }
 
-    -- Определяем максимальный размер стека
     local maxStackSize = 64
     local ok, detail = pcall(me.getItemDetail, me, item.internalName, item.damage)
     if ok and detail and detail.maxSize then
         maxStackSize = detail.maxSize
     end
 
-    local pimAddr = getPimAddr()
-    if not pimAddr then
-        drawCenteredText(20, "Ошибка: PIM не найден", colors.error)
-        os.sleep(2)
-        return
-    end
-
-    local extracted = 0
     local remaining = qty
+    local extracted = 0
     local lastError = nil
 
     while remaining > 0 do
         local toTake = math.min(remaining, maxStackSize)
-        
-        -- Находим свободный слот в PIM
-        local targetSlot = findFreeSlotInPim()
-        if not targetSlot then
-            drawCenteredText(20, "Инвентарь PIM полон! Освободите место.", colors.error)
-            os.sleep(2)
-            break
-        end
-        
-        -- Прямой экспорт в конкретный слот (быстрее)
         local success, result = pcall(function()
-            return me.exportItem(fingerprint, pimAddr, toTake, targetSlot)
+            return me.exportItem(fingerprint, PULL_DIRECTION, toTake)
         end)
-        
+
         local got = 0
         if success then
             if type(result) == "number" then
                 got = result
             elseif type(result) == "boolean" and result == true then
                 got = toTake
-            elseif type(result) == "table" and result.size then
-                got = result.size
+            elseif type(result) == "table" then
+                if result.count then
+                    got = result.count
+                elseif result.amount then
+                    got = result.amount
+                elseif result.size then
+                    got = result.size
+                else
+                    got = toTake
+                end
             else
                 lastError = "неизвестный ответ: " .. tostring(result)
             end
@@ -1422,19 +1400,16 @@ local function performBuy()
             remaining = remaining - got
         else
             if lastError == nil then
-                lastError = "не удалось выдать предмет (вернулось 0)"
+                lastError = "не удалось выдать (вернулось 0 или false)"
             end
             break
         end
     end
 
     if extracted == 0 then
-        drawCenteredText(20, "Не удалось выдать предмет! Проверьте инвентарь PIM.", colors.error)
-        os.sleep(2)
-        currentScreen = "shop_buy"
-        drawBuyStatic()
-        drawBuyItemsList()
-        drawBuyButtons()
+        showInventoryFullPopup = true
+        drawPurchaseScreen()
+        drawInventoryFullPopup()
         return
     end
 
@@ -1489,12 +1464,12 @@ local function performBuy()
             break
         end
     end
-    os.sleep(1.2)  -- чуть больше, чтобы игрок успел прочитать сообщение
+    os.sleep(0.8)
     currentScreen = "shop_buy"
     drawBuyStatic()
     drawBuyItemsList()
     drawBuyButtons()
-end
+end 
 
 -- ========== ЭКРАН РЕПОРТА ==========
 local function drawReportScreen()
