@@ -63,12 +63,11 @@ local function getRealTimeFromInternet()
         return nil, "Нет интернет-карты"
     end
     local internet = component.internet
-    -- Используем другой сервис
     local ok, response = pcall(function()
-        local req = internet.request("http://worldtimeapi.org/api/timezone/Europe/Moscow", nil, 3000)
+        local req = internet.request("http://worldtimeapi.org/api/timezone/Europe/Moscow")
         local data = ""
         while true do
-            local chunk = req.read(256)
+            local chunk = req.read()
             if not chunk then break end
             data = data .. chunk
         end
@@ -76,8 +75,7 @@ local function getRealTimeFromInternet()
     end)
     if not ok then return nil, "Ошибка запроса" end
     
-    -- Ищем datetime в ответе
-    local dt_str = data:match('"datetime":"([^"]+)"')
+    local dt_str = response:match('"datetime":"([^"]+)"')
     if not dt_str then
         return nil, "Не найден datetime в ответе"
     end
@@ -106,7 +104,6 @@ local function syncRealTime()
         return true
     else
         addLog("Не удалось синхронизировать реальное время, используем игровое", ansi.red)
-        -- Используем игровое время как fallback
         realTimeOffset = os.time() - computer.uptime()
         return false
     end
@@ -557,11 +554,7 @@ local function handleKey(key, char, player)
 
     -- Режим добавления предмета
     if addItemMode then
-        local pressed = nil
-        if char and char >= 1 and char <= 255 then
-            pressed = string.lower(string.char(char))
-        end
-        if char == 93 then
+        if char == 93 then   -- символ ']'
             addItemMode = false
             addItemResponse = nil
             if adminMode then drawAdminPanel() else drawInterface() end
@@ -813,9 +806,7 @@ end
 -- ========== ОСНОВНОЙ ЦИКЛ ==========
 local function main()
     log("INFO", "Сервер запущен. Ожидание терминалов...")
-    -- Первая синхронизация времени
     syncRealTime()
-    -- Периодическая синхронизация раз в час
     event.timer(3600, function() syncRealTime() end, math.huge)
     drawInterface()
 
