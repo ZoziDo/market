@@ -1998,7 +1998,7 @@ local function main()
                                 name = currentPlayer,
                                 token = currentToken,
                                 text = reportInput,
-                                time = os.date("%d.%m.%Y %H:%M:%S")
+                                time = os.date("%d.%m.%Y %H:%M:%S", os.time())
                             }))
                         end
                         lastReportTime = os.time()
