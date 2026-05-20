@@ -956,6 +956,39 @@ local function main()
             elseif msg.op == "add_buy_item_response" then
                 addItemResponse = { success = msg.success, error = msg.error }
                 goto continue
+            elseif msg.op == "get_feedbacks" then
+                if not validateSession(msg.name, msg.token) then
+                    modem.send(from, 0xffef, serialization.serialize({op="feedbacks_list", error="Токен устарел"}))
+                    goto continue
+                end
+                local feedbacks = {}
+                if filesystem.exists("/home/feedbacks.db") then
+                    local file = io.open("/home/feedbacks.db", "r")
+                    local data = file:read("*a")
+                    file:close()
+                    pcall(function() feedbacks = serialization.unserialize(data) end)
+                end
+                modem.send(from, 0xffef, serialization.serialize({op="feedbacks_list", feedbacks = feedbacks}))
+                goto continue
+            elseif msg.op == "add_feedback" then
+                if not validateSession(msg.name, msg.token) then
+                    modem.send(from, 0xffef, serialization.serialize({op="add_feedback_response", success=false, error="Токен устарел"}))
+                    goto continue
+                end
+                local feedbacks = {}
+                if filesystem.exists("/home/feedbacks.db") then
+                    local file = io.open("/home/feedbacks.db", "r")
+                    local data = file:read("*a")
+                    file:close()
+                    pcall(function() feedbacks = serialization.unserialize(data) end)
+                end
+                table.insert(feedbacks, 1, {name = msg.name, text = msg.text, time = msg.time})
+                local file = io.open("/home/feedbacks.db", "w")
+                file:write(serialization.serialize(feedbacks))
+                file:close()
+                modem.send(from, 0xffef, serialization.serialize({op="add_feedback_response", success=true}))
+                log("INFO", "📝 Новый отзыв от " .. msg.name .. ": " .. msg.text)
+                goto continue
             end
         end
         ::continue::
