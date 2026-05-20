@@ -7,6 +7,7 @@ local math = require("math")
 local os = require("os")
 local unicode = require("unicode")
 local computer = require("computer")
+local TIMEZONE_OFFSET = 3 * 3600   -- +3 часа для Москвы (UTC+3)
 
 local modem = component.modem
 modem.open(0xffef)
