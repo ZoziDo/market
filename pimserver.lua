@@ -24,6 +24,14 @@ local function getRealTimestamp()
     return tmpfs.lastModified("/time") / 1000 + TIMEZONE_OFFSET
 end
 
+local function getRealTimeString()
+    return os.date("%H:%M:%S", getRealTimestamp())
+end
+
+local function getRealDateTimeString()
+    return os.date("%d.%m.%Y %H:%M:%S", getRealTimestamp())
+end
+
 -- ========== ANSI ЦВЕТА ==========
 local ansi = {
     reset   = "\27[0m",
