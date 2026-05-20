@@ -54,8 +54,9 @@ local function fill(x, y, w, h, char)
 end
 
 local function timeToMidnight()
-    local now = os.date("*t")
-    local secondsLeft = (24 - now.hour - 1) * 3600 + (60 - now.min - 1) * 60 + (60 - now.sec)
+    local now = os.time()           -- реальное время в секундах с эпохи
+    local dt = os.date("*t", now)   -- разбираем на компоненты
+    local secondsLeft = (24 - dt.hour - 1) * 3600 + (60 - dt.min - 1) * 60 + (60 - dt.sec)
     if secondsLeft < 0 then secondsLeft = 0 end
     local h = math.floor(secondsLeft / 3600)
     local m = math.floor((secondsLeft % 3600) / 60)
@@ -186,7 +187,7 @@ local function log(level, msg)
     if level == "INFO" then color = ansi.green
     elseif level == "WARN" then color = ansi.yellow
     elseif level == "ERROR" then color = ansi.red end
-    addLog("[" .. os.date("%H:%M:%S") .. "] [" .. level .. "] " .. msg, color)
+    addLog("[" .. os.date("%H:%M:%S", os.time()) .. "] [" .. level .. "] " .. msg, color)
 end
 
 local function isAdminConnected()
@@ -358,7 +359,7 @@ function drawInterface()
     
     setColor(ansi.cyan)
     gotoxy(1, 3)
-    io.write("Время: " .. os.date("%H:%M:%S") .. "  До сброса репортов: " .. timeToMidnight())
+    io.write("Время: " .. os.date("%H:%M:%S", os.time()) .. "  До сброса репортов: " .. timeToMidnight())
     local activeCount = 0
     for _, v in pairs(sessions) do
         if type(v) == "table" and v.token then activeCount = activeCount + 1 end
@@ -471,7 +472,7 @@ local function getOrCreatePlayer(name)
         players[name] = {
             balance = 0.0,
             transactions = 0,
-            regDate = os.date("%d.%m.%Y %H:%M:%S"),
+            regDate = os.date("%d.%m.%Y %H:%M:%S", os.time()),
             agreed = false,
             banned = false
         }
