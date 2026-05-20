@@ -7,9 +7,24 @@ local keyboard = require("keyboard")
 local computer = require("computer")
 local fs = require("filesystem")
 
--- ========== ОТКЛЮЧЕНИЕ ВОЗМОЖНОСТИ ПРЕРЫВАНИЯ ==========
+-- ========== ОТКЛЮЧЕНИЕ ПРЕРЫВАНИЯ ==========
 event.ignore("interrupted", function() end)
 event.ignore("terminate", function() end)
+
+-- ========== РЕАЛЬНОЕ ВРЕМЯ ЧЕРЕЗ TMPFS ==========
+local tmpfs = component.proxy(computer.tmpAddress())
+local function getRealTimestamp()
+    local handle = tmpfs.open("/time", "w")
+    tmpfs.write(handle, "time")
+    tmpfs.close(handle)
+    return tmpfs.lastModified("/time") / 1000
+end
+local function getRealTimeString()
+    return os.date("%d.%m.%Y %H:%M:%S", getRealTimestamp())
+end
+local function getRealTimeHM()
+    return os.date("%H:%M:%S", getRealTimestamp())
+end
 
 -- ========== НАСТРОЙКИ ПОДКЛЮЧЕНИЯ ==========
 local serverAddress = "535305a9-37c9-4645-b7c4-46204187ee7b"
@@ -303,6 +318,15 @@ local function showTempMessage(msg, duration)
 end
 
 -- ========== ФУНКЦИИ ДЛЯ ОТЗЫВОВ ==========
+local function loadFeedbacksFromServer()
+    if not currentToken then return end
+    modem.send(serverAddress, 0xffef, serialization.serialize({
+        op = "get_feedbacks",
+        name = currentPlayer,
+        token = currentToken
+    }))
+end
+
 local function drawFeedbacksList()
     clear()
     drawScreenBorder()
@@ -400,15 +424,6 @@ local function drawFeedbackInputScreen()
     drawTempMessage()
 end
 
-local function loadFeedbacksFromServer()
-    if not currentToken then return end
-    modem.send(serverAddress, 0xffef, serialization.serialize({
-        op = "get_feedbacks",
-        name = currentPlayer,
-        token = currentToken
-    }))
-end
-
 -- ========== ФУНКЦИИ ЭКРАНА ==========
 local function clear()
     gpu.setBackground(colors.bg_main)
@@ -477,7 +492,7 @@ local shopMenuButtons = {
 
 local function canSendReport()
     if not lastReportTime then return true end
-    local now = os.time()
+    local now = getRealTimestamp()
     local reportDate = os.date("*t", lastReportTime)
     local nowDate = os.date("*t", now)
     if reportDate.day ~= nowDate.day or reportDate.month ~= nowDate.month or reportDate.year ~= nowDate.year then
@@ -486,6 +501,7 @@ local function canSendReport()
     return false
 end
 
+-- ========== ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ==========
 local function getActualItemQuantity(internalName, damage)
     if not component.isAvailable("me_interface") then return 0 end
     local me = component.me_interface
@@ -499,6 +515,7 @@ local function getActualItemQuantity(internalName, damage)
     return total
 end
 
+-- ==================== ЗАГРУЗКА ПРЕДМЕТОВ ====================
 local function loadBuyItems()
     if not component.isAvailable("me_interface") then return end
     local me = component.me_interface
@@ -594,6 +611,7 @@ local function loadSellItems()
     end
 end
 
+-- ==================== СКАНИРОВАНИЕ И ИЗЪЯТИЕ ====================
 local function scanPlayerInventory(targetName, targetDamage)
     local pimAddr = getPimAddr()
     if not pimAddr then return 0 end
@@ -654,6 +672,7 @@ local function extractToME(targetName, amount, targetDamage)
     return extracted
 end
 
+-- ========== ФИЛЬТРАЦИЯ ==========
 local function getFilteredItems()
     local filtered = {}
     for _, item in ipairs(shopItems) do
@@ -2039,7 +2058,6 @@ local function main()
                         showShopDenied = false
                         goToHelp()
                     elseif x >= 68 and x <= 78 then
-                        showShopDenied = false
                         currentScreen = "feedbacks"
                         loadFeedbacksFromServer()
                         drawFeedbacksList()
@@ -2100,10 +2118,10 @@ local function main()
                                 name = currentPlayer,
                                 token = currentToken,
                                 text = reportInput,
-                                time = os.date("%d.%m.%Y %H:%M:%S", os.time())
+                                time = getRealTimeString()
                             }))
                         end
-                        lastReportTime = os.time()
+                        lastReportTime = getRealTimestamp()
                         drawCenteredText(18, "Сообщение успешно отправлено! Ожидайте ответа.", colors.success)
                         os.sleep(0.8)
                         goBackToMenu()
@@ -2146,7 +2164,7 @@ local function main()
                             name = currentPlayer,
                             token = currentToken,
                             text = feedbackInput,
-                            time = os.date("%d.%m.%Y %H:%M:%S", os.time())
+                            time = getRealTimeString()
                         }))
                         showTempMessage("✅ Отзыв отправлен! Спасибо!", 10)
                     end
@@ -2229,7 +2247,7 @@ local function main()
                         name = currentPlayer,
                         token = currentToken,
                         text = feedbackInput,
-                        time = os.date("%d.%m.%Y %H:%M:%S", os.time())
+                        time = getRealTimeString()
                     }))
                     showTempMessage("✅ Отзыв отправлен! Спасибо!", 10)
                 end
