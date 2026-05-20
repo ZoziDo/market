@@ -488,7 +488,8 @@ local function getOrCreatePlayer(name)
             transactions = 0,
             regDate = getRealDateTimeString(),
             agreed = false,
-            banned = false
+            banned = false,
+            hasFeedback = false   -- <-- добавлено поле
         }
         saveDB()
         log("INFO", "Создан игрок " .. name)
@@ -937,7 +938,6 @@ local function main()
                 end
                 globalStats.totalReports = (globalStats.totalReports or 0) + 1
                 saveGlobalStats()
-                -- Используем время, присланное клиентом (оно реальное)
                 log("INFO", "📩 Репорт от " .. msg.name .. " (" .. msg.time .. ")")
                 log("INFO", "   Текст: " .. (msg.text or ""))
                 local file = io.open("/home/reports.log", "a")
@@ -977,6 +977,7 @@ local function main()
                     modem.send(from, 0xffef, serialization.serialize({op="feedbacks_list", error="Токен устарел"}))
                     goto continue
                 end
+                local player = players[msg.name]
                 local feedbacks = {}
                 if filesystem.exists("/home/feedbacks.db") then
                     local file = io.open("/home/feedbacks.db", "r")
@@ -984,11 +985,24 @@ local function main()
                     file:close()
                     pcall(function() feedbacks = serialization.unserialize(data) end)
                 end
-                modem.send(from, 0xffef, serialization.serialize({op="feedbacks_list", feedbacks = feedbacks}))
+                modem.send(from, 0xffef, serialization.serialize({
+                    op = "feedbacks_list",
+                    feedbacks = feedbacks,
+                    hasFeedback = player and player.hasFeedback or false
+                }))
                 goto continue
             elseif msg.op == "add_feedback" then
                 if not validateSession(msg.name, msg.token) then
                     modem.send(from, 0xffef, serialization.serialize({op="add_feedback_response", success=false, error="Токен устарел"}))
+                    goto continue
+                end
+                local player = players[msg.name]
+                if not player then
+                    modem.send(from, 0xffef, serialization.serialize({op="add_feedback_response", success=false, error="Игрок не найден"}))
+                    goto continue
+                end
+                if player.hasFeedback then
+                    modem.send(from, 0xffef, serialization.serialize({op="add_feedback_response", success=false, error="Вы уже оставляли отзыв"}))
                     goto continue
                 end
                 local feedbacks = {}
@@ -1002,6 +1016,8 @@ local function main()
                 local file = io.open("/home/feedbacks.db", "w")
                 file:write(serialization.serialize(feedbacks))
                 file:close()
+                player.hasFeedback = true
+                saveDB()
                 modem.send(from, 0xffef, serialization.serialize({op="add_feedback_response", success=true}))
                 log("INFO", "📝 Новый отзыв от " .. msg.name .. ": " .. msg.text)
                 goto continue
