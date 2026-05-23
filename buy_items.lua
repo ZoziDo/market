@@ -1,4 +1,5 @@
 return {
+  { internalName = "Forestry:craftingMaterial", displayName = "Пропитанная обшивка", price = 2.50, currency = "res", damage = 6 },
   { internalName = "Forestry:oakStick", displayName = "Полированная палка", price = 1.50, currency = "res" },
   { internalName = "metadrive:block_compressor", displayName = "Квантовый компрессор", price = 81.40, currency = "res" },
   { internalName = "metadrive:block_thermal_smelter", displayName = "Квантовая индукционная плавильня", price = 770.00, currency = "res" },
