@@ -1,4 +1,9 @@
 return {
+  { internalName = "metadrive:block_metal_former", displayName = "Квантовый металлоформовочный механизм", price = 82.88, currency = "res" },
+  { internalName = "Forestry:propolis", displayName = "Прополис", price = 0.30, currency = "res", damage = 3 },
+  { internalName = "minecraft:leather", displayName = "Кожа", price = 0.30, currency = "res" },
+  { internalName = "appliedenergistics2:tile.BlockController", displayName = "МЭ контроллер", price = 2.30, currency = "res" },
+  { internalName = "luxinfineitems:CompressedCPU", displayName = "Контроллер автокрафта", price = 375.21, currency = "res" },
   { internalName = "EnderIO:itemPowerConduit", displayName = "Энергопровод из вибрирующего сплава ", price = 5.00, currency = "res", damage = 2 },
   { internalName = "EnderIO:itemLiquidConduit", displayName = "Жидкостная труба из мелодичного сплава", price = 5.00, currency = "res", damage = 5 },
   { internalName = "dwcity:Nano_seal2", displayName = "Тусклая нано-печать", price = 294.00, currency = "res" },
