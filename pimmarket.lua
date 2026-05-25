@@ -826,7 +826,11 @@ local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
     local priceStr = ""
     if currentShopMode == "sell" then
         -- Режим продажи: используем обычную цену
-        priceStr = string.format("%.2f", item.price) .. " ₵"
+        if item.internalName == "customnpcs:npcMoney" then
+            priceStr = string.format("%.2f", item.price) .. " ۞"
+        else
+            priceStr = string.format("%.2f", item.price) .. " ₵"
+        end
     else
         -- Режим покупки: две валюты
         if item.priceCoin and item.priceCoin > 0 then
@@ -839,6 +843,7 @@ local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
         if priceStr == "" then priceStr = "0₵" end
     end
     gpu.set(65, y, priceStr)
+end
 
 local function drawScrollBar()
     local total = #filteredItems
@@ -1090,7 +1095,8 @@ local function drawSellPopup()
     gpu.setForeground(colors.success)
     gpu.set(popupX+3, popupY+5, "Вы получите: ")
     gpu.setForeground(colors.text_bright)
-    gpu.set(popupX+3 + unicode.len("Вы получите: "), popupY+5, string.format("%.2f", value) .. " ₵")
+    local currencySymbol = (sellConfirmItem.internalName == "customnpcs:npcMoney") and " ۞" or " ₵"
+    gpu.set(popupX+3 + unicode.len("Вы получите: "), popupY+5, string.format("%.2f", value) .. currencySymbol)
 
     local yesBtn = {x=popupX+5, y=popupY+7, xs=13, ys=1, text="[ Принять ]", bg=colors.bg_button, fg=colors.success}
     local noBtn  = {x=popupX+popupWidth-16, y=popupY+7, xs=12, ys=1, text="[ Отмена ]", bg=colors.bg_button, fg=colors.error}
@@ -1274,7 +1280,8 @@ local function drawSellScanScreen()
     gpu.setForeground(colors.success)
     gpu.set(55, 3, "Цена: ")
     gpu.setForeground(colors.text_bright)
-    gpu.set(62, 3, string.format("%.2f", sellConfirmItem.price) .. " ₵")
+    local currencySymbol = (sellConfirmItem.internalName == "customnpcs:npcMoney") and " ۞" or " ₵"
+    gpu.set(62, 3, string.format("%.2f", sellConfirmItem.price) .. currencySymbol)
 
     gpu.setForeground(colors.success)
     gpu.set(3, 5, "Можно продать: ")
@@ -1700,23 +1707,18 @@ local function drawMainMenu()
         gpu.setForeground(colors.text_bright)
         gpu.set(x1 + unicode.len(hello1), 4, hello2)
 
+        -- Баланс в одну строку
+        local balanceText = "Ваш баланс: " .. string.format("%.2f", coinBalance) .. " Coina ₵ | " .. string.format("%.2f", emaBalance) .. " ЭМЫ ۞"
+        local balanceX = math.floor((80 - unicode.len(balanceText)) / 2) + 1
         gpu.setForeground(colors.success)
-        local coinLabelX = math.floor((80 - (unicode.len("Ваш баланс: ") + unicode.len(string.format("%.2f", coinBalance) .. " Coina ₵"))) / 2) + 1
-        gpu.set(coinLabelX, 5, "Ваш баланс: ")
-        gpu.setForeground(colors.accent_main)
-        gpu.set(coinLabelX + unicode.len("Ваш баланс: "), 5, string.format("%.2f", coinBalance) .. " Coina ₵")
-        local emaLabelX = math.floor((80 - (unicode.len("Ваш баланс ЭМЫ: ") + unicode.len(string.format("%.2f", emaBalance) .. " ۞"))) / 2) + 1
-        gpu.setForeground(colors.success)
-        gpu.set(emaLabelX, 6, "Ваш баланс ЭМЫ: ")
-        gpu.setForeground(colors.accent_secondary)
-        gpu.set(emaLabelX + unicode.len("Ваш баланс ЭМЫ: "), 6, string.format("%.2f", emaBalance) .. " ۞")
+        gpu.set(balanceX, 5, balanceText)
 
         if not playerAgreed then
             gpu.setForeground(colors.accent_secondary)
             if showShopDenied then
-                drawCenteredText(8, "Доступ запрещён. Примите соглашение [Соглашение]", colors.error)
+                drawCenteredText(7, "Доступ запрещён. Примите соглашение [Соглашение]", colors.error)
             else
-                drawCenteredText(8, "Вы не приняли пользовательское соглашение! Нажмите [Соглашение]", colors.accent_secondary)
+                drawCenteredText(7, "Вы не приняли пользовательское соглашение! Нажмите [Соглашение]", colors.accent_secondary)
             end
         end
 
@@ -1736,34 +1738,28 @@ local function drawAccount(data)
     drawCenteredText(10, currentPlayer .. ":", colors.text_bright)
     local coin = data.balance or coinBalance
     local ema = data.emaBalance or emaBalance
+    local balanceText = "Баланс: " .. string.format("%.2f", coin) .. " Coina ₵ | " .. string.format("%.2f", ema) .. " ЭМЫ ۞"
+    local balanceX = math.floor((80 - unicode.len(balanceText)) / 2) + 1
     gpu.setForeground(colors.success)
-    local coinLabelX = math.floor((80 - (unicode.len("Coina: ") + unicode.len(string.format("%.2f", coin) .. " ₵"))) / 2) + 1
-    gpu.set(coinLabelX, 12, "Coina: ")
-    gpu.setForeground(colors.accent_main)
-    gpu.set(coinLabelX + unicode.len("Coina: "), 12, string.format("%.2f", coin) .. " ₵")
-    local emaLabelX = math.floor((80 - (unicode.len("ЭМЫ: ") + unicode.len(string.format("%.2f", ema) .. " ۞"))) / 2) + 1
-    gpu.setForeground(colors.success)
-    gpu.set(emaLabelX, 13, "ЭМЫ: ")
-    gpu.setForeground(colors.accent_secondary)
-    gpu.set(emaLabelX + unicode.len("ЭМЫ: "), 13, string.format("%.2f", ema) .. " ۞")
+    gpu.set(balanceX, 12, balanceText)
 
     local transLabel = "Совершенно транзакций: "
     local transCount = tostring(data.transactions or 0)
     local fullTrans = transLabel .. transCount
     local transX = math.floor((80 - unicode.len(fullTrans)) / 2) + 1
     gpu.setForeground(colors.success)
-    gpu.set(transX, 14, transLabel)
+    gpu.set(transX, 13, transLabel)
     gpu.setForeground(colors.text_bright)
-    gpu.set(transX + unicode.len(transLabel), 14, transCount)
+    gpu.set(transX + unicode.len(transLabel), 13, transCount)
 
     local regLabel = "Регистрация: "
     local regDate = data.regDate or "Неизвестно"
     local fullReg = regLabel .. regDate
     local regX = math.floor((80 - unicode.len(fullReg)) / 2) + 1
     gpu.setForeground(colors.success)
-    gpu.set(regX, 15, regLabel)
+    gpu.set(regX, 14, regLabel)
     gpu.setForeground(colors.text_bright)
-    gpu.set(regX + unicode.len(regLabel), 15, regDate)
+    gpu.set(regX + unicode.len(regLabel), 14, regDate)
 
     local agreeLabel = "Соглашение: "
     local agreeStatus = (data.agreed or playerAgreed) and "ознакомлен" or "не ознакомлен"
@@ -1771,9 +1767,9 @@ local function drawAccount(data)
     local fullAgree = agreeLabel .. agreeStatus
     local agreeX = math.floor((80 - unicode.len(fullAgree)) / 2) + 1
     gpu.setForeground(colors.success)
-    gpu.set(agreeX, 16, agreeLabel)
+    gpu.set(agreeX, 15, agreeLabel)
     gpu.setForeground(agreeColor)
-    gpu.set(agreeX + unicode.len(agreeLabel), 16, agreeStatus)
+    gpu.set(agreeX + unicode.len(agreeLabel), 15, agreeStatus)
 
     drawFlexButton(backButton)
     drawTempMessage()
