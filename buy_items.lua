@@ -1,4 +1,7 @@
 return {
+  { internalName = "GraviSuite:vajra", displayName = "Ваджра", price = 275.36, currency = "res" },
+  { internalName = "dwcity:Powder11", displayName = "Трижды сжатый камень", price = 11.00, currency = "res" },
+  { internalName = "dwcity:Powder7", displayName = "Дважды сжатый адский кирпич", price = 555.55, currency = "res" },
   { internalName = "dwcity:PalladiumReactorChamber", displayName = "Палладиевая реакторная камера", price = 555.55, currency = "res" },
   { internalName = "appliedenergistics2:item.ItemMultiPart", displayName = "МЭ плотный кабель - Изменчивый", price = 0.82, currency = "res", damage = 76 },
   { internalName = "ae2stuff:Cable", displayName = "МЭ улучшенный кабель - Изменчивый", price = 2.82, currency = "res", damage = 16 },
