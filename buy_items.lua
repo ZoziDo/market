@@ -1,4 +1,5 @@
 return {
+  { internalName = "dwcity:PalladiumReactorChamber", displayName = "Палладиевая реакторная камера", price = 555.55, currency = "res" },
   { internalName = "appliedenergistics2:item.ItemMultiPart", displayName = "МЭ плотный кабель - Изменчивый", price = 0.82, currency = "res", damage = 76 },
   { internalName = "ae2stuff:Cable", displayName = "МЭ улучшенный кабель - Изменчивый", price = 2.82, currency = "res", damage = 16 },
   { internalName = "Forestry:craftingMaterial", displayName = "Пропитанная обшивка", price = 2.50, currency = "res", damage = 6 },
