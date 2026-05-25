@@ -1,3 +1,4 @@
+-- server_1.lua (полный код сервера с поддержкой двух валют: Coina и ЭМЫ)
 local component = require("component")
 local event = require("event")
 local serialization = require("serialization")
@@ -145,9 +146,9 @@ local editInput = ""
 
 -- ========== РЕЖИМ ДОБАВЛЕНИЯ ПРЕДМЕТА ==========
 local addItemMode = false
-local addItemFields = { internal = "", display = "", price = "", damage = "0" }
+local addItemFields = { internal = "", display = "", price_coin = "", price_ema = "0", damage = "0" }
 local addItemCurrentField = 1
-local addItemFieldNames = { "internal", "display", "price", "damage" }
+local addItemFieldNames = { "internal", "display", "price_coin", "price_ema", "damage" }
 local addItemResponse = nil
 local addItemResponseTimer = nil
 
@@ -252,8 +253,8 @@ local function drawAdminPanel()
     for i=startIdx, endIdx do
         local ply = adminPlayerList[i]
         local bannedStr = ply.data.banned and " [ЗАБАНЕН]" or ""
-        local line = string.format("%-20s | Баланс: %8.2f ₵ | Транз: %d%s",
-            ply.name, ply.data.balance or 0, ply.data.transactions or 0, bannedStr)
+        local line = string.format("%-20s | Coin: %8.2f ₵ | ЭМЫ: %8.2f ۞ | Транз: %d%s",
+            ply.name, ply.data.balance or 0, ply.data.emaBalance or 0, ply.data.transactions or 0, bannedStr)
         if #line > screenW - 4 then line = line:sub(1, screenW-4) end
         local y = 4 + (i - startIdx)
         setColor((i == selectedAdminIndex) and ansi.bg_blue or ansi.white, (i == selectedAdminIndex) and ansi.white or nil)
@@ -298,15 +299,16 @@ local function drawEditBalanceWindow()
 
     setColor(ansi.yellow)
     gotoxy(x+2, y+2) io.write("Игрок: " .. editingPlayer.name)
-    gotoxy(x+2, y+3) io.write("Текущий баланс: " .. string.format("%.2f", editingPlayer.data.balance) .. " ₵")
+    gotoxy(x+2, y+3) io.write("Текущий баланс Coin: " .. string.format("%.2f", editingPlayer.data.balance) .. " ₵")
+    gotoxy(x+2, y+4) io.write("Текущий баланс ЭМЫ: " .. string.format("%.2f", editingPlayer.data.emaBalance or 0) .. " ۞")
     resetColor()
 
     setColor(ansi.cyan)
-    gotoxy(x+2, y+5) io.write("Введите новую сумму: " .. editInput .. "_")
+    gotoxy(x+2, y+6) io.write("Введите новую сумму (Coin + ЭМЫ через пробел, например \"100 50\"): " .. editInput .. "_")
     resetColor()
 
     setColor(ansi.white)
-    gotoxy(x+2, y+6) io.write("Enter - подтвердить | Esc - отмена")
+    gotoxy(x+2, y+7) io.write("Enter - подтвердить | Esc - отмена")
     resetColor()
     io.flush()
     drawing = false
@@ -320,7 +322,7 @@ local function drawAddItemForm()
     updateScreenSize()
 
     local w = 70
-    local h = 12
+    local h = 13
     local x = math.floor((screenW - w) / 2)
     local y = math.floor((screenH - h) / 2)
 
@@ -338,8 +340,8 @@ local function drawAddItemForm()
     gotoxy(x+2, y) io.write(" ДОБАВЛЕНИЕ ПРЕДМЕТА В МАГАЗИН (покупка) ")
     resetColor()
 
-    local labels = { "Internal Name:", "Display Name:", "Price (число):", "Damage (0 = без damage):" }
-    for i = 1, 4 do
+    local labels = { "Internal Name:", "Display Name:", "Price Coin (число):", "Price Ema (число):", "Damage (0 = без damage):" }
+    for i = 1, 5 do
         setColor(ansi.yellow)
         gotoxy(x+3, y+2 + (i-1)*2)
         io.write(labels[i])
@@ -352,7 +354,7 @@ local function drawAddItemForm()
     end
 
     setColor(ansi.white)
-    gotoxy(x+3, y+10)
+    gotoxy(x+3, y+11)
     io.write("Enter - далее / отправить | ] - отмена")
     io.flush()
     drawing = false
@@ -488,11 +490,12 @@ local function getOrCreatePlayer(name)
     if not players[name] then
         players[name] = {
             balance = 0.0,
+            emaBalance = 0.0,
             transactions = 0,
             regDate = getRealDateTimeString(),
             agreed = false,
             banned = false,
-            hasFeedback = false   -- <-- добавлено поле
+            hasFeedback = false
         }
         saveDB()
         log("INFO", "Создан игрок " .. name)
@@ -516,22 +519,27 @@ local function handleKey(key, char, player)
             if adminMode then drawAdminPanel() else drawInterface() end
             return
         elseif char == 13 then
-            if addItemCurrentField < 4 then
+            if addItemCurrentField < 5 then
                 addItemCurrentField = addItemCurrentField + 1
                 drawAddItemForm()
                 return
             else
-                local price = tonumber(addItemFields.price)
-                if not price then
-                    addLog("Ошибка: цена должна быть числом", ansi.red)
-                    addItemMode = false
-                    drawAdminPanel()
-                    return
-                end
+                local priceCoin = tonumber(addItemFields.price_coin)
+                local priceEma = tonumber(addItemFields.price_ema)
+                if not priceCoin then priceCoin = 0 end
+                if not priceEma then priceEma = 0 end
+                if priceCoin < 0 then priceCoin = 0 end
+                if priceEma < 0 then priceEma = 0 end
                 local damage = tonumber(addItemFields.damage) or 0
                 if damage < 0 then damage = 0 end
                 if addItemFields.internal == "" or addItemFields.display == "" then
                     addLog("Ошибка: internalName и displayName не могут быть пустыми", ansi.red)
+                    addItemMode = false
+                    drawAdminPanel()
+                    return
+                end
+                if priceCoin == 0 and priceEma == 0 then
+                    addLog("Ошибка: цена не может быть нулевой (хотя бы одна валюта >0)", ansi.red)
                     addItemMode = false
                     drawAdminPanel()
                     return
@@ -541,7 +549,8 @@ local function handleKey(key, char, player)
                     op = "add_buy_item",
                     internalName = addItemFields.internal,
                     displayName = addItemFields.display,
-                    price = price,
+                    price_coin = priceCoin,
+                    price_ema = priceEma,
                     damage = damage
                 }
                 
@@ -584,8 +593,8 @@ local function handleKey(key, char, player)
         elseif char >= 32 then
             local c = unicode.char(char)
             local field = addItemFieldNames[addItemCurrentField]
-            if field == "price" or field == "damage" then
-                if c:match("%d") or (c == "." and field == "price" and not addItemFields.price:find("%.")) then
+            if field == "price_coin" or field == "price_ema" or field == "damage" then
+                if c:match("%d") or (c == "." and not addItemFields[field]:find("%.")) then
                     addItemFields[field] = addItemFields[field] .. c
                 end
             else
@@ -606,14 +615,20 @@ local function handleKey(key, char, player)
             return
         elseif char == 13 then
             if editInput ~= "" then
-                local amount = tonumber(editInput)
-                if amount then
-                    editingPlayer.data.balance = amount
-                    log("INFO", "Баланс игрока " .. editingPlayer.name .. " изменён на " .. amount .. " ₵")
-                    saveDB()
-                else
-                    log("WARN", "Некорректная сумма: " .. editInput)
+                local parts = {}
+                for part in editInput:gmatch("%S+") do
+                    table.insert(parts, part)
                 end
+                local coinVal = tonumber(parts[1])
+                local emaVal = tonumber(parts[2])
+                if coinVal then
+                    editingPlayer.data.balance = coinVal
+                end
+                if emaVal then
+                    editingPlayer.data.emaBalance = emaVal
+                end
+                log("INFO", "Баланс игрока " .. editingPlayer.name .. " изменён: Coin=" .. (coinVal or editingPlayer.data.balance) .. " ₵, ЭМЫ=" .. (emaVal or editingPlayer.data.emaBalance) .. " ۞")
+                saveDB()
             end
             editBalanceMode = false
             editingPlayer = nil
@@ -621,7 +636,7 @@ local function handleKey(key, char, player)
             drawAdminPanel()
             return
         else
-            if char >= 48 and char <= 57 then
+            if (char >= 48 and char <= 57) or char == 32 then
                 editInput = editInput .. string.char(char)
             elseif char == 46 then
                 if not editInput:find("%.") then
@@ -718,6 +733,7 @@ local function handleKey(key, char, player)
             if ply then
                 ply.data.transactions = 0
                 ply.data.balance = 0
+                ply.data.emaBalance = 0
                 saveDB()
                 log("INFO", "Статистика игрока " .. ply.name .. " сброшена")
                 drawAdminPanel()
@@ -735,7 +751,7 @@ local function handleKey(key, char, player)
         elseif pressed == "b" then
             if isAdmin then
                 addItemMode = true
-                addItemFields = { internal = "", display = "", price = "", damage = "0" }
+                addItemFields = { internal = "", display = "", price_coin = "", price_ema = "0", damage = "0" }
                 addItemCurrentField = 1
                 drawAddItemForm()
             else
@@ -848,6 +864,7 @@ local function main()
                 modem.send(from, 0xffef, serialization.serialize({
                     op="welcome", status="ok", token=token,
                     balance=player.balance or 0.0,
+                    emaBalance=player.emaBalance or 0.0,
                     transactions=player.transactions,
                     regDate=player.regDate,
                     agreed = player.agreed or false,
@@ -869,6 +886,7 @@ local function main()
                     op="accountData",
                     data = {
                         balance = player.balance,
+                        emaBalance = player.emaBalance,
                         transactions = player.transactions,
                         regDate = player.regDate,
                         agreed = player.agreed,
@@ -893,8 +911,15 @@ local function main()
                 if not player or player.banned then goto continue end
                 local qty = tonumber(msg.qty) or 0
                 local value = tonumber(msg.value) or 0
+                local internalName = msg.internalName
 
-                player.balance = (player.balance or 0) + value
+                if internalName == "customnpcs:npcMoney" then
+                    player.emaBalance = (player.emaBalance or 0) + value
+                    log("INFO", string.format("💚 %s пополнил ЭМЫ: предмет '%s' x%d на сумму %.2f ۞", msg.name, msg.item, qty, value))
+                else
+                    player.balance = (player.balance or 0) + value
+                    log("INFO", string.format("💰 %s пополнил Coina: предмет '%s' x%d на сумму %.2f ₵", msg.name, msg.item, qty, value))
+                end
                 player.transactions = (player.transactions or 0) + 1
                 sessions[msg.name].lastAction = os.time()
 
@@ -902,7 +927,6 @@ local function main()
                 saveGlobalStats()
                 saveDB()
                 recordTransaction()
-                log("INFO", string.format("💰 %s пополнил баланс: предмет '%s' x%d на сумму %.2f ₵", msg.name, msg.item, qty, value))
                 table.insert(sellHistory, {item = msg.item, qty = qty, name = msg.name})
                 while #sellHistory > MAX_SELL_HISTORY do table.remove(sellHistory, 1) end
                 if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
@@ -920,9 +944,16 @@ local function main()
                 end
                 local player = players[msg.name]
                 if not player or player.banned then goto continue end
-                local value = tonumber(msg.value) or 0
+                local value_coin = tonumber(msg.value_coin) or 0
+                local value_ema = tonumber(msg.value_ema) or 0
 
-                player.balance = (player.balance or 0) - value
+                if player.balance < value_coin or player.emaBalance < value_ema then
+                    modem.send(from, 0xffef, serialization.serialize({op="error", message="Недостаточно средств"}))
+                    goto continue
+                end
+
+                player.balance = player.balance - value_coin
+                player.emaBalance = player.emaBalance - value_ema
                 player.transactions = (player.transactions or 0) + 1
                 sessions[msg.name].lastAction = os.time()
 
@@ -930,7 +961,13 @@ local function main()
                 saveGlobalStats()
                 saveDB()
                 recordTransaction()
-                log("INFO", string.format("🛒 %s купил %s x%d за %.2f ₵", msg.name, msg.item, msg.qty, value))
+                local priceStr = ""
+                if value_coin > 0 then priceStr = priceStr .. string.format("%.2f", value_coin) .. "₵" end
+                if value_ema > 0 then
+                    if priceStr ~= "" then priceStr = priceStr .. " + " end
+                    priceStr = priceStr .. string.format("%.2f", value_ema) .. "۞"
+                end
+                log("INFO", string.format("🛒 %s купил %s x%d за %s", msg.name, msg.item, msg.qty, priceStr))
                 if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
             elseif msg.op == "report" then
@@ -976,66 +1013,64 @@ local function main()
                 addItemResponse = { success = msg.success, error = msg.error }
                 goto continue
             elseif msg.op == "get_feedbacks" then
-            if not validateSession(msg.name, msg.token) then
-                modem.send(from, 0xffef, serialization.serialize({op="feedbacks_list", error="Токен устарел"}))
-                goto continue
-            end
-            local player = players[msg.name]
-            local feedbacks = {}
-            if filesystem.exists("/home/feedbacks.db") then
-                local file = io.open("/home/feedbacks.db", "r")
-                local data = file:read("*a")
-                file:close()
-                if data and #data > 0 then
-                    local ok, result = pcall(serialization.unserialize, data)
-                    if ok and type(result) == "table" then
-                        feedbacks = result
+                if not validateSession(msg.name, msg.token) then
+                    modem.send(from, 0xffef, serialization.serialize({op="feedbacks_list", error="Токен устарел"}))
+                    goto continue
+                end
+                local player = players[msg.name]
+                local feedbacks = {}
+                if filesystem.exists("/home/feedbacks.db") then
+                    local file = io.open("/home/feedbacks.db", "r")
+                    local data = file:read("*a")
+                    file:close()
+                    if data and #data > 0 then
+                        local ok, result = pcall(serialization.unserialize, data)
+                        if ok and type(result) == "table" then
+                            feedbacks = result
+                        end
                     end
                 end
-            end
-            modem.send(from, 0xffef, serialization.serialize({
-                op = "feedbacks_list",
-                feedbacks = feedbacks,
-                hasFeedback = player and player.hasFeedback or false
-            }))
-            goto continue
+                modem.send(from, 0xffef, serialization.serialize({
+                    op = "feedbacks_list",
+                    feedbacks = feedbacks,
+                    hasFeedback = player and player.hasFeedback or false
+                }))
+                goto continue
             elseif msg.op == "add_feedback" then
-            if not validateSession(msg.name, msg.token) then
-                modem.send(from, 0xffef, serialization.serialize({op="add_feedback_response", success=false, error="Токен устарел"}))
-                goto continue
-            end
-            local player = players[msg.name]
-            if not player then
-                modem.send(from, 0xffef, serialization.serialize({op="add_feedback_response", success=false, error="Игрок не найден"}))
-                goto continue
-            end
-            if player.hasFeedback then
-                modem.send(from, 0xffef, serialization.serialize({op="add_feedback_response", success=false, error="Вы уже оставляли отзыв"}))
-                goto continue
-            end
-            -- Безопасное чтение существующих отзывов
-            local feedbacks = {}
-            if filesystem.exists("/home/feedbacks.db") then
-                local file = io.open("/home/feedbacks.db", "r")
-                local data = file:read("*a")
-                file:close()
-                if data and #data > 0 then
-                    local ok, result = pcall(serialization.unserialize, data)
-                    if ok and type(result) == "table" then
-                        feedbacks = result
+                if not validateSession(msg.name, msg.token) then
+                    modem.send(from, 0xffef, serialization.serialize({op="add_feedback_response", success=false, error="Токен устарел"}))
+                    goto continue
+                end
+                local player = players[msg.name]
+                if not player then
+                    modem.send(from, 0xffef, serialization.serialize({op="add_feedback_response", success=false, error="Игрок не найден"}))
+                    goto continue
+                end
+                if player.hasFeedback then
+                    modem.send(from, 0xffef, serialization.serialize({op="add_feedback_response", success=false, error="Вы уже оставляли отзыв"}))
+                    goto continue
+                end
+                local feedbacks = {}
+                if filesystem.exists("/home/feedbacks.db") then
+                    local file = io.open("/home/feedbacks.db", "r")
+                    local data = file:read("*a")
+                    file:close()
+                    if data and #data > 0 then
+                        local ok, result = pcall(serialization.unserialize, data)
+                        if ok and type(result) == "table" then
+                            feedbacks = result
+                        end
                     end
                 end
-            end
-            -- Добавляем новый отзыв в начало
-            table.insert(feedbacks, 1, {name = msg.name, text = msg.text, time = msg.time})
-            local file = io.open("/home/feedbacks.db", "w")
-            file:write(serialization.serialize(feedbacks))
-            file:close()
-            player.hasFeedback = true
-            saveDB()
-            modem.send(from, 0xffef, serialization.serialize({op="add_feedback_response", success=true}))
-            log("INFO", "📝 Новый отзыв от " .. msg.name .. ": " .. msg.text)
-            goto continue
+                table.insert(feedbacks, 1, {name = msg.name, text = msg.text, time = msg.time})
+                local file = io.open("/home/feedbacks.db", "w")
+                file:write(serialization.serialize(feedbacks))
+                file:close()
+                player.hasFeedback = true
+                saveDB()
+                modem.send(from, 0xffef, serialization.serialize({op="add_feedback_response", success=true}))
+                log("INFO", "📝 Новый отзыв от " .. msg.name .. ": " .. msg.text)
+                goto continue
             end
         end
         ::continue::
