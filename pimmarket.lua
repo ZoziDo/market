@@ -822,19 +822,23 @@ local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
         gpu.setForeground(colors.text_bright)
     end
     gpu.set(42, y, tostring(item.qty))
-    -- Отображение цены (монеты и эмы)
+    -- Отображение цены
     local priceStr = ""
-    if item.priceCoin and item.priceCoin > 0 then
-        priceStr = priceStr .. string.format("%.2f", item.priceCoin) .. "₵"
+    if currentShopMode == "sell" then
+        -- Режим продажи: используем обычную цену
+        priceStr = string.format("%.2f", item.price) .. " ₵"
+    else
+        -- Режим покупки: две валюты
+        if item.priceCoin and item.priceCoin > 0 then
+            priceStr = priceStr .. string.format("%.2f", item.priceCoin) .. "₵"
+        end
+        if item.priceEma and item.priceEma > 0 then
+            if priceStr ~= "" then priceStr = priceStr .. " " end
+            priceStr = priceStr .. string.format("%.2f", item.priceEma) .. "۞"
+        end
+        if priceStr == "" then priceStr = "0₵" end
     end
-    if item.priceEma and item.priceEma > 0 then
-        if priceStr ~= "" then priceStr = priceStr .. " " end
-        priceStr = priceStr .. string.format("%.2f", item.priceEma) .. "۞"
-    end
-    if priceStr == "" then priceStr = "0₵" end
     gpu.set(65, y, priceStr)
-    gpu.setBackground(colors.bg_main)
-end
 
 local function drawScrollBar()
     local total = #filteredItems
