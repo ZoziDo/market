@@ -1,4 +1,4 @@
--- market_01.lua (полный код с поддержкой двух валют: Coina и ЭМЫ)
+-- market_01.lua (финальная версия с цветовым выделением валют)
 local component = require("component")
 local event = require("event")
 local gpu = component.gpu
@@ -206,7 +206,7 @@ modem.open(0xfffe)
 
 local currentPlayer, currentToken = nil, nil
 local coinBalance = 0.0
-local emaBalance = 0.0           -- новый баланс ЭМОВ
+local emaBalance = 0.0
 local playerTransactions = 0
 local playerRegDate = ""
 local playerAgreed = false
@@ -822,27 +822,39 @@ local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
         gpu.setForeground(colors.text_bright)
     end
     gpu.set(42, y, tostring(item.qty))
+    
     -- Отображение цены
-    local priceStr = ""
     if currentShopMode == "sell" then
-        -- Режим продажи: используем обычную цену
+        -- Режим продажи: одна валюта
         if item.internalName == "customnpcs:npcMoney" then
-            priceStr = string.format("%.2f", item.price) .. " ۞"
+            gpu.setForeground(colors.accent_secondary)
+            local priceStr = string.format("%.2f", item.price) .. " ۞"
+            gpu.set(65, y, priceStr)
         else
-            priceStr = string.format("%.2f", item.price) .. " ₵"
+            gpu.setForeground(colors.text_bright)
+            local priceStr = string.format("%.2f", item.price) .. " ₵"
+            gpu.set(65, y, priceStr)
         end
     else
-        -- Режим покупки: две валюты
+        -- Режим покупки: две валюты с разными цветами
+        local curX = 65
         if item.priceCoin and item.priceCoin > 0 then
-            priceStr = priceStr .. string.format("%.2f", item.priceCoin) .. "₵"
+            gpu.setForeground(colors.text_bright)
+            local coinStr = string.format("%.2f", item.priceCoin) .. "₵"
+            gpu.set(curX, y, coinStr)
+            curX = curX + unicode.len(coinStr) + 1
         end
         if item.priceEma and item.priceEma > 0 then
-            if priceStr ~= "" then priceStr = priceStr .. " " end
-            priceStr = priceStr .. string.format("%.2f", item.priceEma) .. "۞"
+            gpu.setForeground(colors.accent_secondary)
+            local emaStr = string.format("%.2f", item.priceEma) .. "۞"
+            gpu.set(curX, y, emaStr)
         end
-        if priceStr == "" then priceStr = "0₵" end
+        if (not item.priceCoin or item.priceCoin == 0) and (not item.priceEma or item.priceEma == 0) then
+            gpu.setForeground(colors.inactive)
+            gpu.set(65, y, "0₵")
+        end
     end
-    gpu.set(65, y, priceStr)
+    gpu.setBackground(colors.bg_main)
 end
 
 local function drawScrollBar()
@@ -975,30 +987,43 @@ local function drawPurchaseScreen()
 
     local totalCoin = (purchaseItem.priceCoin or 0) * purchaseQuantity
     local totalEma = (purchaseItem.priceEma or 0) * purchaseQuantity
+    
     gpu.setForeground(colors.success)
     gpu.set(3, 5, "На сумму: ")
-    gpu.setForeground(colors.error)
+    local sumX = 14
     if totalCoin > 0 then
-        gpu.set(14, 5, string.format("%.2f", totalCoin) .. " ₵")
-        if totalEma > 0 then
-            gpu.set(14 + unicode.len(string.format("%.2f", totalCoin) .. " ₵ ") + 1, 5, "+")
-            gpu.setForeground(colors.accent_main)
-            gpu.set(14 + unicode.len(string.format("%.2f", totalCoin) .. " ₵ + ") + 1, 5, string.format("%.2f", totalEma) .. " ۞")
+        gpu.setForeground(colors.error)
+        gpu.set(sumX, 5, string.format("%.2f", totalCoin) .. " ₵")
+        sumX = sumX + unicode.len(string.format("%.2f", totalCoin) .. " ₵ ") + 1
+    end
+    if totalEma > 0 then
+        if totalCoin > 0 then
+            gpu.setForeground(colors.success)
+            gpu.set(sumX, 5, "+")
+            sumX = sumX + unicode.len("+") + 1
         end
-    else
-        gpu.set(14, 5, string.format("%.2f", totalEma) .. " ۞")
+        gpu.setForeground(colors.accent_secondary)
+        gpu.set(sumX, 5, string.format("%.2f", totalEma) .. " ۞")
     end
 
-    local priceStr = ""
-    if purchaseItem.priceCoin > 0 then priceStr = priceStr .. string.format("%.2f", purchaseItem.priceCoin) .. "₵" end
-    if purchaseItem.priceEma > 0 then
-        if priceStr ~= "" then priceStr = priceStr .. " + " end
-        priceStr = priceStr .. string.format("%.2f", purchaseItem.priceEma) .. "۞"
-    end
+    -- Цена за штуку
     gpu.setForeground(colors.success)
     gpu.set(55, 5, "Цена: ")
-    gpu.setForeground(colors.text_bright)
-    gpu.set(62, 5, priceStr)
+    local priceX = 62
+    if purchaseItem.priceCoin and purchaseItem.priceCoin > 0 then
+        gpu.setForeground(colors.text_bright)
+        gpu.set(priceX, 5, string.format("%.2f", purchaseItem.priceCoin) .. "₵")
+        priceX = priceX + unicode.len(string.format("%.2f", purchaseItem.priceCoin) .. "₵ ") + 1
+    end
+    if purchaseItem.priceEma and purchaseItem.priceEma > 0 then
+        if purchaseItem.priceCoin and purchaseItem.priceCoin > 0 then
+            gpu.setForeground(colors.success)
+            gpu.set(priceX, 5, "+")
+            priceX = priceX + unicode.len("+") + 1
+        end
+        gpu.setForeground(colors.accent_secondary)
+        gpu.set(priceX, 5, string.format("%.2f", purchaseItem.priceEma) .. "۞")
+    end
 
     gpu.setForeground(colors.success)
     gpu.set(3, 7, "Кол-во: ")
@@ -1094,9 +1119,13 @@ local function drawSellPopup()
 
     gpu.setForeground(colors.success)
     gpu.set(popupX+3, popupY+5, "Вы получите: ")
-    gpu.setForeground(colors.text_bright)
-    local currencySymbol = (sellConfirmItem.internalName == "customnpcs:npcMoney") and " ۞" or " ₵"
-    gpu.set(popupX+3 + unicode.len("Вы получите: "), popupY+5, string.format("%.2f", value) .. currencySymbol)
+    if sellConfirmItem.internalName == "customnpcs:npcMoney" then
+        gpu.setForeground(colors.accent_secondary)
+        gpu.set(popupX+3 + unicode.len("Вы получите: "), popupY+5, string.format("%.2f", value) .. " ۞")
+    else
+        gpu.setForeground(colors.text_bright)
+        gpu.set(popupX+3 + unicode.len("Вы получите: "), popupY+5, string.format("%.2f", value) .. " ₵")
+    end
 
     local yesBtn = {x=popupX+5, y=popupY+7, xs=13, ys=1, text="[ Принять ]", bg=colors.bg_button, fg=colors.success}
     local noBtn  = {x=popupX+popupWidth-16, y=popupY+7, xs=12, ys=1, text="[ Отмена ]", bg=colors.bg_button, fg=colors.error}
@@ -1199,7 +1228,7 @@ local function drawPartialPopup()
         local spentStartXEma = popupX + math.floor((popupWidth - unicode.len(fullSpentTextEma)) / 2)
         gpu.setForeground(colors.success)
         gpu.set(spentStartXEma, popupY+5, spentLabelEma)
-        gpu.setForeground(colors.text_bright)
+        gpu.setForeground(colors.accent_secondary)
         gpu.set(spentStartXEma + unicode.len(spentLabelEma), popupY+5, spentValueEma)
     end
 
@@ -1279,9 +1308,13 @@ local function drawSellScanScreen()
 
     gpu.setForeground(colors.success)
     gpu.set(55, 3, "Цена: ")
-    gpu.setForeground(colors.text_bright)
-    local currencySymbol = (sellConfirmItem.internalName == "customnpcs:npcMoney") and " ۞" or " ₵"
-    gpu.set(62, 3, string.format("%.2f", sellConfirmItem.price) .. currencySymbol)
+    if sellConfirmItem.internalName == "customnpcs:npcMoney" then
+        gpu.setForeground(colors.accent_secondary)
+        gpu.set(62, 3, string.format("%.2f", sellConfirmItem.price) .. " ۞")
+    else
+        gpu.setForeground(colors.text_bright)
+        gpu.set(62, 3, string.format("%.2f", sellConfirmItem.price) .. " ₵")
+    end
 
     gpu.setForeground(colors.success)
     gpu.set(3, 5, "Можно продать: ")
