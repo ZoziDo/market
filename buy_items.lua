@@ -31,7 +31,7 @@ return {
   { internalName = "dwcity:Liquid_seal2", displayName = "Тусклая жидкостная печать", price = 20.00, currency = "res" },
   { internalName = "dwcity:Cube_seal2", displayName = "Тусклая кубическая печать", price = 70.00, currency = "res" },
   { internalName = "dwcity:Machine_seal2", displayName = "Тусклая механическая печать", price = 28.00, currency = "res" },
-  { internalName = "dwcity:Optic_seal2", displayName = "Тусклая оптическая печать", price = 240.10, currency = "res" },
+  { internalName = "dwcity:Optic_seal2", displayName = "Тусклая оптическая печать", price_coin = 175, price_ema = 65, currency = "res" },
   { internalName = "dwcity:Chest_seal22", displayName = "Тусклая печать безопастности", price = 40.00, currency = "res" },
   { internalName = "dwcity:Food_seal2", displayName = "Тусклая печать голода", price = 15.00, currency = "res" },
   { internalName = "dwcity:Dnk_seal2", displayName = "Тусклая печать ДНК", price = 125.00, currency = "res" },
