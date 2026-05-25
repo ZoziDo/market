@@ -182,7 +182,6 @@ return {
   { internalName = "minecraft:ender_eye", displayName = "Око Эндера", price = 0.66, currency = "res" },
   { internalName = "ThermalFoundation:tool.fishingRodTin", displayName = "Оловянная пластина", price = 0.11, currency = "res", damage = 1 },
   { internalName = "Botany:insulatedTube", displayName = "Оловянная электронная лампа", price = 0.65, currency = "res", damage = 1 },
-  { internalName = "dwcity:Optic_seal2", displayName = "Оптическая печать", price = 293.87, currency = "res" },
   { internalName = "ExtraBees:alveary", displayName = "Осветитель улья", price = 20.16, currency = "res", damage = 3 },
   { internalName = "EnderIO:itemBasicCapacitor", displayName = "Основной конденсатор", price = 0.64, currency = "res" },
   { internalName = "IC2:blockMachine", displayName = "Основной корпус механизма", price = 0.88, currency = "res" },
