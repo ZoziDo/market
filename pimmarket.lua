@@ -43,7 +43,8 @@ local colors = {
     inactive = 0x555566,
     star_glow = 0xC8C8FF,
     black_fon = 0x000000,
-    tomato = 0xFF6347
+    tomato = 0xFF6347,
+    white = 0xFFFFFF
 }
 
 local function clear()
@@ -703,18 +704,23 @@ local function getFilteredItems()
     return filtered
 end
 
+local function drawBalanceLine(x, y)
+    gpu.setForeground(colors.white)
+    gpu.set(x, y, "Баланс: ")
+    local coinStr = string.format("%.2f", coinBalance) .. " Coina ₵"
+    gpu.setForeground(colors.accent_main)
+    gpu.set(x + unicode.len("Баланс: "), y, coinStr)
+    gpu.setForeground(colors.white)
+    gpu.set(x + unicode.len("Баланс: ") + unicode.len(coinStr), y, " | ")
+    local emaStr = "ЭМЫ: " .. string.format("%.2f", emaBalance) .. " ۞"
+    gpu.setForeground(colors.tomato)
+    gpu.set(x + unicode.len("Баланс: ") + unicode.len(coinStr) + unicode.len(" | "), y, emaStr)
+end
+
 local function drawBuyStatic()
     clear()
     drawScreenBorder()
-
-    local balanceStr = "Баланс: " .. string.format("%.2f", coinBalance) .. " Coina ₵"
-    gpu.setForeground(colors.accent_main)
-    gpu.set(3, 1, balanceStr)
-    local emaStr = "ЭМЫ: " .. string.format("%.2f", emaBalance) .. " ۞"
-    gpu.setForeground(colors.tomato)
-    gpu.set(3 + unicode.len(balanceStr) + 1, 1, emaStr)
-    gpu.setForeground(colors.text_bright)
-    gpu.set(3 + unicode.len(balanceStr), 1, " | ")
+    drawBalanceLine(3, 1)
 
     if currentShopMode == "buy" then
         gpu.setForeground(colors.accent_secondary)
@@ -807,7 +813,7 @@ local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
 
     if currentShopMode == "sell" then
         if item.internalName == "customnpcs:npcMoney" then
-            gpu.setForeground(colors.accent_secondary)
+            gpu.setForeground(colors.tomato)
             local priceStr = string.format("%.2f", item.price) .. " ۞"
             gpu.set(65, y, priceStr)
         else
@@ -944,14 +950,7 @@ local function drawPurchaseScreen()
     currentScreen = "purchase"
     clear()
     drawScreenBorder()
-    local balanceStr = "Баланс: " .. string.format("%.2f", coinBalance) .. " Coina ₵"
-    gpu.setForeground(colors.accent_main)
-    gpu.set(3, 1, balanceStr)
-    local emaStr = "ЭМЫ: " .. string.format("%.2f", emaBalance) .. " ۞"
-    gpu.setForeground(colors.tomato)
-    gpu.set(3 + unicode.len(balanceStr) + 1, 1, emaStr)
-    gpu.setForeground(colors.text_bright)
-    gpu.set(3 + unicode.len(balanceStr), 1, " | ")
+    drawBalanceLine(3, 1)
 
     gpu.setForeground(colors.success)
     gpu.set(3, 3, "Имя предмета: ")
@@ -1265,15 +1264,7 @@ local function drawSellScanScreen()
     currentScreen = "sell_scan"
     clear()
     drawScreenBorder()
-
-    local balanceStr = "Баланс: " .. string.format("%.2f", coinBalance) .. " Coina ₵"
-    gpu.setForeground(colors.accent_main)
-    gpu.set(3, 1, balanceStr)
-    local emaStr = "ЭМЫ: " .. string.format("%.2f", emaBalance) .. " ۞"
-    gpu.setForeground(colors.tomato)
-    gpu.set(3 + unicode.len(balanceStr) + 1, 1, emaStr)
-    gpu.setForeground(colors.text_bright)
-    gpu.set(3 + unicode.len(balanceStr), 1, " | ")
+    drawBalanceLine(3, 1)
 
     gpu.setForeground(colors.success)
     gpu.set(3, 3, "Имя предмета: ")
@@ -1710,13 +1701,15 @@ local function drawMainMenu()
         gpu.set(x1 + unicode.len(hello1), 4, hello2)
 
         local balanceText = "Баланс: " .. string.format("%.2f", coinBalance) .. " Coina ₵"
-        gpu.setForeground(colors.accent_main)
+        gpu.setForeground(colors.white)
         local balanceX = math.floor((80 - unicode.len(balanceText .. " | ЭМЫ: " .. string.format("%.2f", emaBalance) .. " ۞")) / 2) + 1
-        gpu.set(balanceX, 5, balanceText)
-        gpu.setForeground(colors.text_bright)
-        gpu.set(balanceX + unicode.len(balanceText), 5, " | ")
+        gpu.set(balanceX, 5, "Баланс: ")
+        gpu.setForeground(colors.accent_main)
+        gpu.set(balanceX + unicode.len("Баланс: "), 5, string.format("%.2f", coinBalance) .. " Coina ₵")
+        gpu.setForeground(colors.white)
+        gpu.set(balanceX + unicode.len("Баланс: ") + unicode.len(string.format("%.2f", coinBalance) .. " Coina ₵"), 5, " | ")
         gpu.setForeground(colors.tomato)
-        gpu.set(balanceX + unicode.len(balanceText) + unicode.len(" | "), 5, "ЭМЫ: " .. string.format("%.2f", emaBalance) .. " ۞")
+        gpu.set(balanceX + unicode.len("Баланс: ") + unicode.len(string.format("%.2f", coinBalance) .. " Coina ₵") + unicode.len(" | "), 5, "ЭМЫ: " .. string.format("%.2f", emaBalance) .. " ۞")
 
         if not playerAgreed then
             gpu.setForeground(colors.accent_secondary)
@@ -1744,13 +1737,15 @@ local function drawAccount(data)
     local coin = data.balance or coinBalance
     local ema = data.emaBalance or emaBalance
     local balanceText = "Баланс: " .. string.format("%.2f", coin) .. " Coina ₵"
-    gpu.setForeground(colors.accent_main)
+    gpu.setForeground(colors.white)
     local balanceX = math.floor((80 - unicode.len(balanceText .. " | ЭМЫ: " .. string.format("%.2f", ema) .. " ۞")) / 2) + 1
-    gpu.set(balanceX, 12, balanceText)
-    gpu.setForeground(colors.text_bright)
-    gpu.set(balanceX + unicode.len(balanceText), 12, " | ")
+    gpu.set(balanceX, 12, "Баланс: ")
+    gpu.setForeground(colors.accent_main)
+    gpu.set(balanceX + unicode.len("Баланс: "), 12, string.format("%.2f", coin) .. " Coina ₵")
+    gpu.setForeground(colors.white)
+    gpu.set(balanceX + unicode.len("Баланс: ") + unicode.len(string.format("%.2f", coin) .. " Coina ₵"), 12, " | ")
     gpu.setForeground(colors.tomato)
-    gpu.set(balanceX + unicode.len(balanceText) + unicode.len(" | "), 12, "ЭМЫ: " .. string.format("%.2f", ema) .. " ۞")
+    gpu.set(balanceX + unicode.len("Баланс: ") + unicode.len(string.format("%.2f", coin) .. " Coina ₵") + unicode.len(" | "), 12, "ЭМЫ: " .. string.format("%.2f", ema) .. " ۞")
 
     local transLabel = "Совершенно транзакций: "
     local transCount = tostring(data.transactions or 0)
