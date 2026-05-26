@@ -1,4 +1,3 @@
--- market_01.lua (финальная версия с цветовым выделением валют)
 local component = require("component")
 local event = require("event")
 local gpu = component.gpu
@@ -9,11 +8,9 @@ local computer = require("computer")
 local fs = require("filesystem")
 local TIMEZONE_OFFSET = 3 * 3600
 
--- ========== ОТКЛЮЧЕНИЕ ПРЕРЫВАНИЯ ==========
 event.ignore("interrupted", function() end)
 event.ignore("terminate", function() end)
 
--- ========== РЕАЛЬНОЕ ВРЕМЯ ЧЕРЕЗ TMPFS ==========
 local tmpfs = component.proxy(computer.tmpAddress())
 local function getRealTimestamp()
     local handle = tmpfs.open("/time", "w")
@@ -30,11 +27,9 @@ local function getRealTimeHM()
     return os.date("%H:%M:%S", getRealTimestamp())
 end
 
--- ========== НАСТРОЙКИ ПОДКЛЮЧЕНИЯ ==========
 local serverAddress = "535305a9-37c9-4645-b7c4-46204187ee7b"
 local ACCESS_PASSWORD = "secret"
 
--- Цветовая схема
 local colors = {
     bg_main = 0x0A0A0F,
     bg_secondary = 0x14141F,
@@ -50,7 +45,6 @@ local colors = {
     black_fon = 0x000000
 }
 
--- ========== ФУНКЦИИ ЭКРАНА ==========
 local function clear()
     gpu.setBackground(colors.bg_main)
     gpu.fill(1, 1, 80, 25, " ")
@@ -62,7 +56,6 @@ local function drawCenteredText(y, text, color)
     gpu.set(x, y, text)
 end
 
--- ========== ФУНКЦИИ ДЛЯ КНОПОК ==========
 local function drawButton(btn)
     gpu.setBackground(btn.bg)
     gpu.fill(btn.x, btn.y, btn.xs, btn.ys, " ")
@@ -83,7 +76,6 @@ local function drawFlexButton(btn)
     gpu.setBackground(colors.bg_main)
 end
 
--- ========== БЕЗОПАСНАЯ ЗАГРУЗКА ФАЙЛОВ ==========
 local function safeDoFile(path)
     if not fs.exists(path) then
         print("Файл не найден, создаём: " .. path)
@@ -97,7 +89,6 @@ local function safeDoFile(path)
     return result
 end
 
--- ========== НОРМАЛИЗАЦИЯ СТРОКИ ДЛЯ СОРТИРОВКИ ==========
 local function sortableName(name)
     if not name then return "" end
     local lower = string.lower(name)
@@ -107,7 +98,6 @@ local function sortableName(name)
     return result
 end
 
--- ========== ПЕРЕМЕННЫЕ ДЛЯ ОТЗЫВОВ ==========
 local feedbacks = {}
 local feedbacksPage = 1
 local feedbacksTotalPages = 1
@@ -147,7 +137,6 @@ local function drawScreenBorder()
     gpu.set(right, bottom, "┘")
 end
 
--- Загружаем внешние файлы
 local shopData = safeDoFile("/home/shop_items.lua")
 local sellItems = shopData.sellItems
 local vanillaItems = shopData.vanillaItems or {}
@@ -188,7 +177,6 @@ local function namesMatch(name1, name2)
     return short1 == short2
 end
 
--- ==================== ПОИСК СЕЛЕКТОРА ====================
 local selector = nil
 for addr in component.list("openperipheral_selector") do
     selector = component.proxy(addr)
@@ -217,7 +205,6 @@ local accountRequestTime = 0
 local ACCOUNT_TIMEOUT = 3
 local alreadyAuthorized = false
 
--- Переменные магазина
 local shopItems = {}
 local shopSearch = ""
 local searchActive = false
@@ -259,11 +246,9 @@ local reportInput = ""
 local lastReportTime = nil
 local showShopDenied = false
 
--- ========== ВРЕМЕННЫЕ СООБЩЕНИЯ ВНИЗУ ЭКРАНА ==========
 local tempMessage = ""
 local tempMessageTimer = nil
 
--- ==================== ОБНОВЛЕНИЕ СЕЛЕКТОРА ====================
 local function updateSelectorDisplay(item)
     if not selector then return end
     if not item then
@@ -283,11 +268,9 @@ local function updateSelectorDisplay(item)
     pcall(selector.setSlot, 1, stack)
 end
 
--- ========== ЭКРАН ==========
 gpu.setResolution(80, 25)
 gpu.setBackground(colors.bg_main)
 
--- ========== КРУПНЫЙ ШРИФТ ==========
 local function drawBigTitle()
     gpu.setForeground(colors.accent_secondary)
     local darkonLines = {
@@ -317,7 +300,6 @@ local function drawBigTitle()
     end
 end
 
--- ========== ФУНКЦИИ ДЛЯ ВРЕМЕННЫХ СООБЩЕНИЙ ==========
 local function drawTempMessage()
     if tempMessage ~= "" then
         gpu.setBackground(colors.bg_main)
@@ -358,7 +340,6 @@ local function showTempMessage(msg, duration)
     drawTempMessage()
 end
 
--- ========== ФУНКЦИИ ДЛЯ ОТЗЫВОВ ==========
 local function loadFeedbacksFromServer()
     if not currentToken then return end
     modem.send(serverAddress, 0xffef, serialization.serialize({
@@ -371,7 +352,7 @@ end
 local function drawFeedbacksList()
     clear()
     drawScreenBorder()
-    
+
     local line = string.rep("═", 15)
     local title = " ОТЗЫВЫ "
     local line2 = string.rep("═", 15)
@@ -383,7 +364,7 @@ local function drawFeedbacksList()
     gpu.set(x + unicode.len(line), 2, title)
     gpu.setForeground(colors.accent_main)
     gpu.set(x + unicode.len(line) + unicode.len(title), 2, line2)
-    
+
     if #feedbacks == 0 then
         drawCenteredText(10, "Пока нет ни одного отзыва.", colors.text_main)
         drawCenteredText(11, "Будьте первым, кто оставит отзыв!", colors.accent_main)
@@ -394,7 +375,7 @@ local function drawFeedbacksList()
         local startIdx = (feedbacksPage - 1) * 3 + 1
         local endIdx = math.min(startIdx + 2, #feedbacks)
         local y = 5
-        
+
         for i = startIdx, endIdx do
             local fb = feedbacks[i]
             if fb then
@@ -402,21 +383,21 @@ local function drawFeedbacksList()
                 gpu.fill(5, y, 70, 3, " ")
                 gpu.setBackground(colors.bg_secondary)
                 gpu.fill(6, y+1, 68, 1, " ")
-                
+
                 gpu.setForeground(colors.accent_main)
                 gpu.set(7, y+1, fb.name)
                 gpu.setForeground(colors.inactive)
                 local timeStr = fb.time or ""
                 gpu.set(7 + unicode.len(fb.name) + 2, y+1, timeStr)
-                
+
                 gpu.setForeground(colors.text_bright)
                 local shortText = unicode.sub(fb.text, 1, 62)
                 gpu.set(7, y+2, shortText)
-                
+
                 y = y + 4
             end
         end
-        
+
         feedbacksTotalPages = math.max(1, math.ceil(#feedbacks / 3))
         local pageInfo = "Страница " .. feedbacksPage .. " из " .. feedbacksTotalPages
         local x = math.floor((80 - unicode.len(pageInfo)) / 2) + 1 + 1
@@ -424,12 +405,12 @@ local function drawFeedbacksList()
         gpu.setForeground(colors.text_main)
         gpu.set(x, 22, pageInfo)
     end
-    
+
     local backBtn = {x = 5, y = 24, xs = 11, ys = 1, text = "[ НАЗАД ]", bg = colors.bg_button, fg = colors.accent_secondary}
     local addBtn = {x = 36, y = 24, xs = 14, ys = 1, text = "[ ДОБАВИТЬ ]", bg = colors.bg_button, fg = colors.success}
     local prevBtn = {x = 59, y = 24, xs = 7, ys = 1, text = "[ < ]", bg = colors.bg_button, fg = colors.accent_main}
     local nextBtn = {x = 69, y = 24, xs = 7, ys = 1, text = "[ > ]", bg = colors.bg_button, fg = colors.accent_main}
-    
+
     if not playerHasFeedback then
         drawFlexButton(addBtn)
     end
@@ -438,7 +419,7 @@ local function drawFeedbacksList()
         drawFlexButton(prevBtn)
         drawFlexButton(nextBtn)
     end
-    
+
     drawTempMessage()
 end
 
@@ -452,12 +433,12 @@ local function drawFeedbackInputScreen()
     clear()
     drawScreenBorder()
     drawCenteredText(4, "ОСТАВИТЬ ОТЗЫВ", colors.accent_secondary)
-    
+
     gpu.setForeground(colors.text_main)
     drawCenteredText(7, "Ваше имя: " .. currentPlayer, colors.accent_main)
     drawCenteredText(9, "Оставьте свой отзыв о магазине:", colors.text_main)
     drawCenteredText(10, "Ваше мнение поможет нам стать лучше!", colors.inactive)
-    
+
     gpu.setBackground(colors.black_fon)
     gpu.fill(10, 12, 60, 3, " ")
     gpu.setForeground(colors.text_bright)
@@ -476,10 +457,10 @@ local function drawFeedbackInputScreen()
             gpu.set(11, 13, "Введите ваш отзыв...")
         end
     end
-    
+
     local cancelBtn = {x = 20, y = 24, xs = 12, ys = 1, text = "[ ОТМЕНА ]", bg = colors.bg_button, fg = colors.error}
     local sendBtn = {x = 46, y = 24, xs = 15, ys = 1, text = "[ ОТПРАВИТЬ ]", bg = colors.bg_button, fg = colors.success}
-    
+
     drawFlexButton(cancelBtn)
     drawFlexButton(sendBtn)
     drawTempMessage()
@@ -530,7 +511,6 @@ local function canSendReport()
     return false
 end
 
--- ========== ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ==========
 local function getActualItemQuantity(internalName, damage)
     if not component.isAvailable("me_interface") then return 0 end
     local me = component.me_interface
@@ -544,7 +524,6 @@ local function getActualItemQuantity(internalName, damage)
     return total
 end
 
--- ==================== ЗАГРУЗКА ПРЕДМЕТОВ ====================
 local function loadBuyItems()
     if not component.isAvailable("me_interface") then return end
     local me = component.me_interface
@@ -642,7 +621,6 @@ local function loadSellItems()
     end
 end
 
--- ==================== СКАНИРОВАНИЕ И ИЗЪЯТИЕ ====================
 local function scanPlayerInventory(targetName, targetDamage)
     local pimAddr = getPimAddr()
     if not pimAddr then return 0 end
@@ -703,7 +681,6 @@ local function extractToME(targetName, amount, targetDamage)
     return extracted
 end
 
--- ========== ФИЛЬТРАЦИЯ ==========
 local function getFilteredItems()
     local filtered = {}
     for _, item in ipairs(shopItems) do
@@ -725,11 +702,9 @@ local function getFilteredItems()
     return filtered
 end
 
--- ========== ОТРИСОВКА СПИСКА ==========
 local function drawBuyStatic()
     clear()
     drawScreenBorder()
-    -- Вывод двух балансов
     gpu.setForeground(colors.success)
     gpu.set(3, 1, "Баланс: ")
     gpu.setForeground(colors.accent_main)
@@ -774,9 +749,14 @@ local function drawBuyStatic()
     gpu.setForeground(colors.text_bright)
     gpu.set(3, 5, "Название")
     gpu.set(42, 5, "Кол-во")
-    gpu.set(65, 5, "Цена")
+    if currentShopMode == "buy" then
+        gpu.set(55, 5, "Coina")
+        gpu.set(67, 5, "ЭМЫ")
+    else
+        gpu.set(65, 5, "Цена")
+    end
     gpu.setBackground(colors.bg_main)
-    
+
     drawTempMessage()
 end
 
@@ -822,10 +802,8 @@ local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
         gpu.setForeground(colors.text_bright)
     end
     gpu.set(42, y, tostring(item.qty))
-    
-    -- Отображение цены
+
     if currentShopMode == "sell" then
-        -- Режим продажи: одна валюта
         if item.internalName == "customnpcs:npcMoney" then
             gpu.setForeground(colors.accent_secondary)
             local priceStr = string.format("%.2f", item.price) .. " ۞"
@@ -836,22 +814,21 @@ local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
             gpu.set(65, y, priceStr)
         end
     else
-        -- Режим покупки: две валюты с разными цветами
-        local curX = 65
         if item.priceCoin and item.priceCoin > 0 then
             gpu.setForeground(colors.text_bright)
-            local coinStr = string.format("%.2f", item.priceCoin) .. "₵"
-            gpu.set(curX, y, coinStr)
-            curX = curX + unicode.len(coinStr) + 1
+            local coinStr = string.format("%.2f", item.priceCoin)
+            gpu.set(55, y, coinStr)
+        else
+            gpu.setForeground(colors.inactive)
+            gpu.set(55, y, "0")
         end
         if item.priceEma and item.priceEma > 0 then
             gpu.setForeground(colors.accent_secondary)
-            local emaStr = string.format("%.2f", item.priceEma) .. "۞"
-            gpu.set(curX, y, emaStr)
-        end
-        if (not item.priceCoin or item.priceCoin == 0) and (not item.priceEma or item.priceEma == 0) then
+            local emaStr = string.format("%.2f", item.priceEma)
+            gpu.set(67, y, emaStr)
+        else
             gpu.setForeground(colors.inactive)
-            gpu.set(65, y, "0₵")
+            gpu.set(67, y, "0")
         end
     end
     gpu.setBackground(colors.bg_main)
@@ -961,7 +938,6 @@ local function drawBuyButtons()
     drawTempMessage()
 end
 
--- ========== ЭКРАН ПОКУПКИ ==========
 local function drawPurchaseScreen()
     currentScreen = "purchase"
     clear()
@@ -987,7 +963,7 @@ local function drawPurchaseScreen()
 
     local totalCoin = (purchaseItem.priceCoin or 0) * purchaseQuantity
     local totalEma = (purchaseItem.priceEma or 0) * purchaseQuantity
-    
+
     gpu.setForeground(colors.success)
     gpu.set(3, 5, "На сумму: ")
     local sumX = 14
@@ -1006,7 +982,6 @@ local function drawPurchaseScreen()
         gpu.set(sumX, 5, string.format("%.2f", totalEma) .. " ۞")
     end
 
-    -- Цена за штуку
     gpu.setForeground(colors.success)
     gpu.set(55, 5, "Цена: ")
     local priceX = 62
@@ -1087,7 +1062,6 @@ local function goToPurchase(item)
     drawPurchaseScreen()
 end
 
--- ========== ПРОДАЖА ==========
 local function drawSellPopup()
     local popupWidth = 40
     local popupHeight = 10
@@ -1134,10 +1108,9 @@ local function drawSellPopup()
     drawTempMessage()
 end
 
--- ========== ПОПАП "НЕДОСТАТОЧНО СРЕДСТВ" ==========
 local function drawInsufficientPopup()
     local popupWidth = 52
-    local popupHeight = 10
+    local popupHeight = 11
     local popupX = math.floor((80 - popupWidth) / 2)
     local popupY = 7
 
@@ -1175,7 +1148,7 @@ local function drawInsufficientPopup()
     local okBtnWidth = unicode.len(okBtnText) + 2
     local okBtn = {
         x = popupX + math.floor((popupWidth - okBtnWidth) / 2),
-        y = popupY+7,
+        y = popupY+8,
         xs = okBtnWidth,
         ys = 1,
         text = okBtnText,
@@ -1186,7 +1159,6 @@ local function drawInsufficientPopup()
     drawTempMessage()
 end
 
--- ========== ПОПАП "ЧАСТИЧНАЯ ВЫДАЧА" ==========
 local function drawPartialPopup()
     local popupWidth = 52
     local popupHeight = 9
@@ -1247,7 +1219,6 @@ local function drawPartialPopup()
     drawTempMessage()
 end
 
--- ========== ПОПАП "ИНВЕНТАРЬ ПОЛОН" ==========
 local function drawInventoryFullPopup()
     local popupWidth = 52
     local popupHeight = 9
@@ -1326,9 +1297,7 @@ local function drawSellScanScreen()
     local scanX = math.floor((80 - unicode.len(scanText)) / 2)
     gpu.set(scanX, 11, scanText)
 
-    local slotBtn = {x=30, y=13, xs=20, ys=1, text="1 слот", bg=colors.bg_button, fg=colors.inactive}
-    local allBtn  = {x=30, y=15, xs=20, ys=1, text="Весь инвентарь", bg=colors.bg_button, fg=colors.success}
-    drawFlexButton(slotBtn)
+    local allBtn  = {x=30, y=13, xs=20, ys=1, text="Весь инвентарь", bg=colors.bg_button, fg=colors.success}
     drawFlexButton(allBtn)
     drawFlexButton(backButton)
 
@@ -1404,7 +1373,6 @@ local function performSell()
     drawBuyButtons()
 end
 
--- ========== ИСПРАВЛЕННАЯ ПОКУПКА ==========
 local function performBuy()
     if not playerAgreed then
         drawCenteredText(20, "Сначала примите пользовательское соглашение", colors.error)
@@ -1595,7 +1563,6 @@ local function performBuy()
     drawBuyButtons()
 end
 
--- ========== ЭКРАН РЕПОРТА ==========
 local function drawReportScreen()
     currentScreen = "report"
     clear()
@@ -1633,7 +1600,6 @@ local function drawReportScreen()
     drawTempMessage()
 end
 
--- ========== НАВИГАЦИЯ ==========
 local function goToBuy()
     if not playerAgreed then
         drawCenteredText(12, "Вы не приняли пользовательское соглашение!", colors.error)
@@ -1740,7 +1706,6 @@ local function drawMainMenu()
         gpu.setForeground(colors.text_bright)
         gpu.set(x1 + unicode.len(hello1), 4, hello2)
 
-        -- Баланс в одну строку
         local balanceText = "Ваш баланс: " .. string.format("%.2f", coinBalance) .. " Coina ₵ | " .. string.format("%.2f", emaBalance) .. " ЭМЫ ۞"
         local balanceX = math.floor((80 - unicode.len(balanceText)) / 2) + 1
         gpu.setForeground(colors.success)
@@ -1816,7 +1781,6 @@ local function drawAccountLoading()
     drawTempMessage()
 end
 
--- ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ТОКЕНОВ ==========
 local function retryAccountAfterTokenRefresh()
     if not currentPlayer then return end
     modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
@@ -1927,7 +1891,6 @@ local function refreshAndAgree()
     end
 end
 
--- ========== ОСНОВНОЙ ЦИКЛ ==========
 local function main()
     drawWelcomeScreen()
     modem.send(serverAddress, 0xffef, serialization.serialize({op="register", password=ACCESS_PASSWORD}))
@@ -1971,14 +1934,14 @@ local function main()
                 goto continue
             elseif showInsufficientPopup then
                 local popupWidth = 52
-                local popupHeight = 10
+                local popupHeight = 11
                 local popupX = math.floor((80 - popupWidth) / 2)
                 local popupY = 7
                 local okBtnText = "[ ПОНЯТНО ]"
                 local okBtnWidth = unicode.len(okBtnText) + 2
                 local okBtn = {
                     x = popupX + math.floor((popupWidth - okBtnWidth) / 2),
-                    y = popupY+7,
+                    y = popupY+8,
                     xs = okBtnWidth,
                     ys = 1
                 }
@@ -2166,18 +2129,6 @@ local function main()
                     drawBuyButtons()
                 elseif y == 13 and x >= 30 and x <= 50 then
                     drawCenteredText(17, "Сканирование...", colors.accent_secondary)
-                    os.sleep(0.4)
-                    foundAmount = scanPlayerInventory(sellConfirmItem.internalName, sellConfirmItem.damage or 0)
-                    if foundAmount > 0 then
-                        showSellPopup = true
-                        drawSellScanScreen()
-                    else
-                        drawCenteredText(17, "Предмет не найден!", colors.error)
-                        os.sleep(0.8)
-                        drawSellScanScreen()
-                    end
-                elseif y == 15 and x >= 30 and x <= 50 then
-                    drawCenteredText(17, "Сканирование инвентаря...", colors.accent_secondary)
                     os.sleep(0.6)
                     foundAmount = scanPlayerInventory(sellConfirmItem.internalName, sellConfirmItem.damage or 0)
                     if foundAmount > 0 then
@@ -2635,7 +2586,6 @@ local function main()
     end
 end
 
--- ========== ПОПАП КРИТИЧЕСКОЙ ОШИБКИ ==========
 local function drawCrashPopup(errText)
     local popupWidth = 50
     local popupHeight = 8
@@ -2667,7 +2617,6 @@ local function drawCrashPopup(errText)
     end
 end
 
--- ========== БЕСКОНЕЧНЫЙ ПЕРЕЗАПУСК ПРИ ОШИБКАХ ==========
 while true do
     local ok, err = pcall(main)
     if not ok then
