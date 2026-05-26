@@ -965,40 +965,32 @@ local function drawPurchaseScreen()
     local totalCoin = (purchaseItem.priceCoin or 0) * purchaseQuantity
     local totalEma = (purchaseItem.priceEma or 0) * purchaseQuantity
 
+    -- На сумму (Coina и ЭМЫ на отдельных строках)
     gpu.setForeground(colors.success)
     gpu.set(3, 5, "На сумму: ")
-    local sumX = 14
+    local sumY = 5
     if totalCoin > 0 then
         gpu.setForeground(colors.error)
-        gpu.set(sumX, 5, string.format("%.2f", totalCoin) .. " ₵")
-        sumX = sumX + unicode.len(string.format("%.2f", totalCoin) .. " ₵ ") + 1
+        gpu.set(14, sumY, string.format("%.2f", totalCoin) .. " ₵")
+        sumY = sumY + 1
     end
     if totalEma > 0 then
-        if totalCoin > 0 then
-            gpu.setForeground(colors.success)
-            gpu.set(sumX, 5, "+")
-            sumX = sumX + unicode.len("+") + 1
-        end
         gpu.setForeground(colors.tomato)
-        gpu.set(sumX, 5, string.format("%.2f", totalEma) .. " ۞")
+        gpu.set(14, sumY, string.format("%.2f", totalEma) .. " ۞")
     end
 
+    -- Цена за штуку (Coina и ЭМЫ на отдельных строках)
     gpu.setForeground(colors.success)
     gpu.set(55, 5, "Цена: ")
-    local priceX = 62
+    local priceY = 5
     if purchaseItem.priceCoin and purchaseItem.priceCoin > 0 then
         gpu.setForeground(colors.accent_main)
-        gpu.set(priceX, 5, string.format("%.2f", purchaseItem.priceCoin) .. "₵")
-        priceX = priceX + unicode.len(string.format("%.2f", purchaseItem.priceCoin) .. "₵ ") + 1
+        gpu.set(62, priceY, string.format("%.2f", purchaseItem.priceCoin) .. " ₵")
+        priceY = priceY + 1
     end
     if purchaseItem.priceEma and purchaseItem.priceEma > 0 then
-        if purchaseItem.priceCoin and purchaseItem.priceCoin > 0 then
-            gpu.setForeground(colors.success)
-            gpu.set(priceX, 5, "+")
-            priceX = priceX + unicode.len("+") + 1
-        end
         gpu.setForeground(colors.tomato)
-        gpu.set(priceX, 5, string.format("%.2f", purchaseItem.priceEma) .. "۞")
+        gpu.set(62, priceY, string.format("%.2f", purchaseItem.priceEma) .. " ۞")
     end
 
     gpu.setForeground(colors.success)
@@ -1694,7 +1686,7 @@ local function drawMainMenu()
         local hello1 = "Добро пожаловать, "
         local hello2 = currentPlayer .. "!"
         local full1 = hello1 .. hello2
-        local x1 = math.floor((80 - unicode.len(full1))/2) + 1
+        local x1 = math.floor((80 - unicode.len(full1))/2) + 2
         gpu.setForeground(colors.success)
         gpu.set(x1, 4, hello1)
         gpu.setForeground(colors.text_bright)
