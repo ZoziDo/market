@@ -42,7 +42,8 @@ local colors = {
     error = 0xFF4D7A,
     inactive = 0x555566,
     star_glow = 0xC8C8FF,
-    black_fon = 0x000000
+    black_fon = 0x000000,
+    tomato = 0xFF6347
 }
 
 local function clear()
@@ -705,14 +706,15 @@ end
 local function drawBuyStatic()
     clear()
     drawScreenBorder()
-    gpu.setForeground(colors.success)
-    gpu.set(3, 1, "Баланс: ")
+
+    local balanceStr = "Баланс: " .. string.format("%.2f", coinBalance) .. " Coina ₵"
     gpu.setForeground(colors.accent_main)
-    gpu.set(3 + unicode.len("Баланс: "), 1, string.format("%.2f", coinBalance) .. " Coina ₵   |   ")
-    gpu.setForeground(colors.success)
-    gpu.set(3 + unicode.len("Баланс: ") + unicode.len(string.format("%.2f", coinBalance) .. " Coina ₵   |   "), 1, "ЭМЫ: ")
-    gpu.setForeground(colors.accent_secondary)
-    gpu.set(3 + unicode.len("Баланс: ") + unicode.len(string.format("%.2f", coinBalance) .. " Coina ₵   |   ЭМЫ: "), 1, string.format("%.2f", emaBalance) .. " ۞")
+    gpu.set(3, 1, balanceStr)
+    local emaStr = "ЭМЫ: " .. string.format("%.2f", emaBalance) .. " ۞"
+    gpu.setForeground(colors.tomato)
+    gpu.set(3 + unicode.len(balanceStr) + 1, 1, emaStr)
+    gpu.setForeground(colors.text_bright)
+    gpu.set(3 + unicode.len(balanceStr), 1, " | ")
 
     if currentShopMode == "buy" then
         gpu.setForeground(colors.accent_secondary)
@@ -815,7 +817,7 @@ local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
         end
     else
         if item.priceCoin and item.priceCoin > 0 then
-            gpu.setForeground(colors.text_bright)
+            gpu.setForeground(colors.accent_main)
             local coinStr = string.format("%.2f", item.priceCoin)
             gpu.set(55, y, coinStr)
         else
@@ -823,7 +825,7 @@ local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
             gpu.set(55, y, "0")
         end
         if item.priceEma and item.priceEma > 0 then
-            gpu.setForeground(colors.accent_secondary)
+            gpu.setForeground(colors.tomato)
             local emaStr = string.format("%.2f", item.priceEma)
             gpu.set(67, y, emaStr)
         else
@@ -942,14 +944,14 @@ local function drawPurchaseScreen()
     currentScreen = "purchase"
     clear()
     drawScreenBorder()
-    gpu.setForeground(colors.success)
-    gpu.set(3, 1, "Баланс: ")
+    local balanceStr = "Баланс: " .. string.format("%.2f", coinBalance) .. " Coina ₵"
     gpu.setForeground(colors.accent_main)
-    gpu.set(3 + unicode.len("Баланс: "), 1, string.format("%.2f", coinBalance) .. " Coina ₵   |   ")
-    gpu.setForeground(colors.success)
-    gpu.set(3 + unicode.len("Баланс: ") + unicode.len(string.format("%.2f", coinBalance) .. " Coina ₵   |   "), 1, "ЭМЫ: ")
-    gpu.setForeground(colors.accent_secondary)
-    gpu.set(3 + unicode.len("Баланс: ") + unicode.len(string.format("%.2f", coinBalance) .. " Coina ₵   |   ЭМЫ: "), 1, string.format("%.2f", emaBalance) .. " ۞")
+    gpu.set(3, 1, balanceStr)
+    local emaStr = "ЭМЫ: " .. string.format("%.2f", emaBalance) .. " ۞"
+    gpu.setForeground(colors.tomato)
+    gpu.set(3 + unicode.len(balanceStr) + 1, 1, emaStr)
+    gpu.setForeground(colors.text_bright)
+    gpu.set(3 + unicode.len(balanceStr), 1, " | ")
 
     gpu.setForeground(colors.success)
     gpu.set(3, 3, "Имя предмета: ")
@@ -978,7 +980,7 @@ local function drawPurchaseScreen()
             gpu.set(sumX, 5, "+")
             sumX = sumX + unicode.len("+") + 1
         end
-        gpu.setForeground(colors.accent_secondary)
+        gpu.setForeground(colors.tomato)
         gpu.set(sumX, 5, string.format("%.2f", totalEma) .. " ۞")
     end
 
@@ -986,7 +988,7 @@ local function drawPurchaseScreen()
     gpu.set(55, 5, "Цена: ")
     local priceX = 62
     if purchaseItem.priceCoin and purchaseItem.priceCoin > 0 then
-        gpu.setForeground(colors.text_bright)
+        gpu.setForeground(colors.accent_main)
         gpu.set(priceX, 5, string.format("%.2f", purchaseItem.priceCoin) .. "₵")
         priceX = priceX + unicode.len(string.format("%.2f", purchaseItem.priceCoin) .. "₵ ") + 1
     end
@@ -996,7 +998,7 @@ local function drawPurchaseScreen()
             gpu.set(priceX, 5, "+")
             priceX = priceX + unicode.len("+") + 1
         end
-        gpu.setForeground(colors.accent_secondary)
+        gpu.setForeground(colors.tomato)
         gpu.set(priceX, 5, string.format("%.2f", purchaseItem.priceEma) .. "۞")
     end
 
@@ -1094,10 +1096,10 @@ local function drawSellPopup()
     gpu.setForeground(colors.success)
     gpu.set(popupX+3, popupY+5, "Вы получите: ")
     if sellConfirmItem.internalName == "customnpcs:npcMoney" then
-        gpu.setForeground(colors.accent_secondary)
+        gpu.setForeground(colors.tomato)
         gpu.set(popupX+3 + unicode.len("Вы получите: "), popupY+5, string.format("%.2f", value) .. " ۞")
     else
-        gpu.setForeground(colors.text_bright)
+        gpu.setForeground(colors.accent_main)
         gpu.set(popupX+3 + unicode.len("Вы получите: "), popupY+5, string.format("%.2f", value) .. " ₵")
     end
 
@@ -1140,7 +1142,7 @@ local function drawInsufficientPopup()
     if insufficientBalanceEma > 0 then
         gpu.setForeground(colors.success)
         gpu.set(popupX+3, popupY+6, "Твой баланс ЭМЫ: ")
-        gpu.setForeground(colors.accent_secondary)
+        gpu.setForeground(colors.tomato)
         gpu.set(popupX+3 + unicode.len("Твой баланс ЭМЫ: "), popupY+6, string.format("%.2f", insufficientBalanceEma) .. " ۞")
     end
 
@@ -1190,7 +1192,7 @@ local function drawPartialPopup()
     local spentStartXCoin = popupX + math.floor((popupWidth - unicode.len(fullSpentTextCoin)) / 2)
     gpu.setForeground(colors.success)
     gpu.set(spentStartXCoin, popupY+4, spentLabelCoin)
-    gpu.setForeground(colors.text_bright)
+    gpu.setForeground(colors.accent_main)
     gpu.set(spentStartXCoin + unicode.len(spentLabelCoin), popupY+4, spentValueCoin)
 
     if partialRefundEma > 0 then
@@ -1200,7 +1202,7 @@ local function drawPartialPopup()
         local spentStartXEma = popupX + math.floor((popupWidth - unicode.len(fullSpentTextEma)) / 2)
         gpu.setForeground(colors.success)
         gpu.set(spentStartXEma, popupY+5, spentLabelEma)
-        gpu.setForeground(colors.accent_secondary)
+        gpu.setForeground(colors.tomato)
         gpu.set(spentStartXEma + unicode.len(spentLabelEma), popupY+5, spentValueEma)
     end
 
@@ -1263,14 +1265,15 @@ local function drawSellScanScreen()
     currentScreen = "sell_scan"
     clear()
     drawScreenBorder()
-    gpu.setForeground(colors.success)
-    gpu.set(3, 1, "Баланс: ")
+
+    local balanceStr = "Баланс: " .. string.format("%.2f", coinBalance) .. " Coina ₵"
     gpu.setForeground(colors.accent_main)
-    gpu.set(3 + unicode.len("Баланс: "), 1, string.format("%.2f", coinBalance) .. " Coina ₵   |   ")
-    gpu.setForeground(colors.success)
-    gpu.set(3 + unicode.len("Баланс: ") + unicode.len(string.format("%.2f", coinBalance) .. " Coina ₵   |   "), 1, "ЭМЫ: ")
-    gpu.setForeground(colors.accent_secondary)
-    gpu.set(3 + unicode.len("Баланс: ") + unicode.len(string.format("%.2f", coinBalance) .. " Coina ₵   |   ЭМЫ: "), 1, string.format("%.2f", emaBalance) .. " ۞")
+    gpu.set(3, 1, balanceStr)
+    local emaStr = "ЭМЫ: " .. string.format("%.2f", emaBalance) .. " ۞"
+    gpu.setForeground(colors.tomato)
+    gpu.set(3 + unicode.len(balanceStr) + 1, 1, emaStr)
+    gpu.setForeground(colors.text_bright)
+    gpu.set(3 + unicode.len(balanceStr), 1, " | ")
 
     gpu.setForeground(colors.success)
     gpu.set(3, 3, "Имя предмета: ")
@@ -1280,10 +1283,10 @@ local function drawSellScanScreen()
     gpu.setForeground(colors.success)
     gpu.set(55, 3, "Цена: ")
     if sellConfirmItem.internalName == "customnpcs:npcMoney" then
-        gpu.setForeground(colors.accent_secondary)
+        gpu.setForeground(colors.tomato)
         gpu.set(62, 3, string.format("%.2f", sellConfirmItem.price) .. " ۞")
     else
-        gpu.setForeground(colors.text_bright)
+        gpu.setForeground(colors.accent_main)
         gpu.set(62, 3, string.format("%.2f", sellConfirmItem.price) .. " ₵")
     end
 
@@ -1706,10 +1709,14 @@ local function drawMainMenu()
         gpu.setForeground(colors.text_bright)
         gpu.set(x1 + unicode.len(hello1), 4, hello2)
 
-        local balanceText = "Ваш баланс: " .. string.format("%.2f", coinBalance) .. " Coina ₵ | " .. string.format("%.2f", emaBalance) .. " ЭМЫ ۞"
-        local balanceX = math.floor((80 - unicode.len(balanceText)) / 2) + 1
-        gpu.setForeground(colors.success)
+        local balanceText = "Баланс: " .. string.format("%.2f", coinBalance) .. " Coina ₵"
+        gpu.setForeground(colors.accent_main)
+        local balanceX = math.floor((80 - unicode.len(balanceText .. " | ЭМЫ: " .. string.format("%.2f", emaBalance) .. " ۞")) / 2) + 1
         gpu.set(balanceX, 5, balanceText)
+        gpu.setForeground(colors.text_bright)
+        gpu.set(balanceX + unicode.len(balanceText), 5, " | ")
+        gpu.setForeground(colors.tomato)
+        gpu.set(balanceX + unicode.len(balanceText) + unicode.len(" | "), 5, "ЭМЫ: " .. string.format("%.2f", emaBalance) .. " ۞")
 
         if not playerAgreed then
             gpu.setForeground(colors.accent_secondary)
@@ -1736,10 +1743,14 @@ local function drawAccount(data)
     drawCenteredText(10, currentPlayer .. ":", colors.text_bright)
     local coin = data.balance or coinBalance
     local ema = data.emaBalance or emaBalance
-    local balanceText = "Баланс: " .. string.format("%.2f", coin) .. " Coina ₵ | " .. string.format("%.2f", ema) .. " ЭМЫ ۞"
-    local balanceX = math.floor((80 - unicode.len(balanceText)) / 2) + 1
-    gpu.setForeground(colors.success)
+    local balanceText = "Баланс: " .. string.format("%.2f", coin) .. " Coina ₵"
+    gpu.setForeground(colors.accent_main)
+    local balanceX = math.floor((80 - unicode.len(balanceText .. " | ЭМЫ: " .. string.format("%.2f", ema) .. " ۞")) / 2) + 1
     gpu.set(balanceX, 12, balanceText)
+    gpu.setForeground(colors.text_bright)
+    gpu.set(balanceX + unicode.len(balanceText), 12, " | ")
+    gpu.setForeground(colors.tomato)
+    gpu.set(balanceX + unicode.len(balanceText) + unicode.len(" | "), 12, "ЭМЫ: " .. string.format("%.2f", ema) .. " ۞")
 
     local transLabel = "Совершенно транзакций: "
     local transCount = tostring(data.transactions or 0)
