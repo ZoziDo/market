@@ -7,7 +7,7 @@ local keyboard = require("keyboard")
 local computer = require("computer")
 local fs = require("filesystem")
 local TIMEZONE_OFFSET = 3 * 3600
-local name = item.displayName or item.internalName or "???"
+
 
 event.ignore("interrupted", function() end)
 event.ignore("terminate", function() end)
@@ -1156,7 +1156,7 @@ local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
     gpu.setBackground(bg)
     gpu.fill(2, y, 76, 1, " ")
     gpu.setForeground(fg)
-    local name = item.displayName or item.internalName
+    local name = item.displayName or item.internalName or "Неизвестно"
     if unicode.len(name) > 37 then
         name = unicode.sub(name, horizontalScroll, horizontalScroll + 36)
     end
