@@ -7,7 +7,7 @@ local keyboard = require("keyboard")
 local computer = require("computer")
 local fs = require("filesystem")
 local TIMEZONE_OFFSET = 3 * 3600
-
+local questVisibleRows = 15
 
 event.ignore("interrupted", function() end)
 event.ignore("terminate", function() end)
@@ -49,18 +49,19 @@ local colors = {
 }
 
 local function drawBalanceLine(x, y)
+    if not x or not y then return end
     local coin = coinBalance or 0
     local ema = emaBalance or 0
     gpu.setForeground(colors.white)
     gpu.set(x, y, "Баланс: ")
     local coinStr = string.format("%.2f", coin) .. " Coina ₵"
     gpu.setForeground(colors.accent_main)
-    gpu.set(x + unicode.len("Баланс: "), y, coinStr)
+    gpu.set(x + 8, y, coinStr)   -- вместо unicode.len используем фиксированное смещение
     gpu.setForeground(colors.white)
-    gpu.set(x + unicode.len("Баланс: ") + unicode.len(coinStr), y, " | ")
+    gpu.set(x + 8 + string.len(coinStr) + 1, y, "|")
     local emaStr = "ЭМЫ: " .. string.format("%.2f", ema) .. " ۞"
     gpu.setForeground(colors.tomato)
-    gpu.set(x + unicode.len("Баланс: ") + unicode.len(coinStr) + unicode.len(" | "), y, emaStr)
+    gpu.set(x + 8 + string.len(coinStr) + 3, y, emaStr)
 end
 
 local function drawTempMessage()
@@ -365,6 +366,7 @@ local function drawQuestsList()
     gpu.setForeground(colors.accent_secondary)
     gpu.set(3, 3, "Наборы/Квесты")
 
+    -- Шапка таблицы (как в покупке)
     gpu.setBackground(colors.bg_button)
     gpu.fill(2, 5, 76, 1, " ")
     gpu.setForeground(colors.text_bright)
@@ -374,67 +376,82 @@ local function drawQuestsList()
     gpu.set(72, 5, "Статус")
     gpu.setBackground(colors.bg_main)
 
-    local visibleRows = 15
-    local startIdx = questScroll
-    local endIdx = math.min(#questList, questScroll + visibleRows - 1)
-    for i = startIdx, endIdx do
-        local q = questList[i]
-        local y = 6 + (i - startIdx)
-        local bg
-        if i == selectedQuestIndex then
-            bg = 0x225577
-        elseif i == hoveredQuestIndex then
-            bg = 0x446688
-        elseif (i - startIdx) % 2 == 1 then
-            bg = colors.bg_secondary
+    -- Отрисовка строк
+    local total = #questList
+    local maxScroll = math.max(1, total - questVisibleRows + 1)
+    questScroll = math.max(1, math.min(questScroll, maxScroll))
+
+    for i = 1, questVisibleRows do
+        local itemIndex = questScroll + i - 1
+        local q = questList[itemIndex]
+        local y = 6 + i
+        if q then
+            -- Фон строки (как в покупке)
+            local bg
+            if itemIndex == selectedQuestIndex then
+                bg = 0x225577
+            elseif itemIndex == hoveredQuestIndex then
+                bg = 0x446688
+            elseif i % 2 == 1 then
+                bg = colors.bg_secondary
+            else
+                bg = 0x1a1a1a
+            end
+            gpu.setBackground(bg)
+            gpu.fill(2, y, 76, 1, " ")
+
+            -- Название
+            gpu.setForeground(colors.text_bright)
+            local name = q.name or "Без названия"
+            if unicode.len(name) > 32 then name = unicode.sub(name, 1, 32) end
+            gpu.set(3, y, name)
+
+            -- Количество предметов
+            local totalItems = getQuestTotalItems(q) or 0
+            gpu.set(42, y, tostring(totalItems))
+
+            -- Цена в ЭМАХ (цвет tomato)
+            if q.priceEma and q.priceEma > 0 then
+                gpu.setForeground(colors.tomato)
+                gpu.set(62, y, string.format("%.2f", q.priceEma))
+            else
+                gpu.setForeground(colors.inactive)
+                gpu.set(62, y, "0")
+            end
+
+            -- Статус (галочка / крестик)
+            if q.available then
+                gpu.setForeground(colors.success)
+                gpu.set(72, y, "√")
+            else
+                gpu.setForeground(colors.error)
+                gpu.set(72, y, "×")
+            end
         else
-            bg = 0x1a1a1a
-        end
-        gpu.setBackground(bg)
-        gpu.fill(2, y, 76, 1, " ")
-
-        gpu.setForeground(colors.text_bright)
-        local name = q.name or "Без названия"
-        if unicode.len(name) > 32 then name = unicode.sub(name, 1, 32) end
-        gpu.set(3, y, name)
-
-        local totalItems = getQuestTotalItems(q) or 0
-        gpu.set(42, y, tostring(totalItems))
-
-        if q.priceEma and q.priceEma > 0 then
-            gpu.setForeground(colors.tomato)
-            gpu.set(62, y, string.format("%.2f", q.priceEma))
-        else
-            gpu.setForeground(colors.inactive)
-            gpu.set(62, y, "0")
-        end
-
-        if q.available then
-            gpu.setForeground(colors.success)
-            gpu.set(72, y, "√")
-        else
-            gpu.setForeground(colors.error)
-            gpu.set(72, y, "×")
+            -- Пустая строка (фон как у чётных)
+            gpu.setBackground(0x1a1a1a)
+            gpu.fill(2, y, 76, 1, " ")
         end
     end
     gpu.setBackground(colors.bg_main)
 
-    local total = #questList
-    local barX = 78
-    local barY = 7
-    local barHeight = 15
-    if total > visibleRows then
+    -- Скроллбар (как в покупке)
+    if total > questVisibleRows then
+        local barX = 78
+        local barY = 7
+        local barHeight = 15
         gpu.setBackground(colors.bg_secondary)
         gpu.fill(barX, barY, 2, barHeight, " ")
-        local thumbHeight = math.max(2, math.floor(barHeight * visibleRows / total))
+        local thumbHeight = math.max(2, math.floor(barHeight * questVisibleRows / total))
         local maxPos = barHeight - thumbHeight
-        local thumbPos = math.floor((questScroll - 1) * maxPos / (total - visibleRows)) + 1
+        local thumbPos = math.floor((questScroll - 1) * maxPos / (total - questVisibleRows)) + 1
         thumbPos = math.min(thumbPos, maxPos + 1)
         gpu.setBackground(colors.accent_main)
         gpu.fill(barX, barY + thumbPos - 1, 2, thumbHeight, " ")
         gpu.setBackground(colors.bg_main)
     end
 
+    -- Кнопки
     local backBtn = {x = 20, y = 24, xs = 11, ys = 1, text = "[ НАЗАД ]", bg = colors.bg_button, fg = colors.accent_secondary}
     local nextBtn = {x = 50, y = 24, xs = 12, ys = 1, text = "[ ДАЛЕЕ ]", bg = colors.bg_button, fg = colors.inactive}
     if selectedQuestIndex > 0 and selectedQuestIndex <= #questList then
@@ -442,6 +459,7 @@ local function drawQuestsList()
     end
     drawFlexButton(backBtn)
     drawFlexButton(nextBtn)
+
     drawTempMessage()
 end
 
@@ -673,12 +691,13 @@ local function drawBigTitle()
 end
 
 local function drawTempMessage()
-    if tempMessage ~= "" then
+    local msg = tempMessage or ""
+    if msg ~= "" then
         gpu.setBackground(colors.bg_main)
         gpu.fill(1, 25, 80, 1, " ")
         gpu.setForeground(colors.success)
-        local x = math.floor((80 - unicode.len(tempMessage)) / 2) + 1
-        gpu.set(x, 25, tempMessage)
+        local x = math.floor((80 - unicode.len(msg)) / 2) + 1
+        gpu.set(x, 25, msg)
     else
         gpu.setBackground(colors.bg_main)
         gpu.fill(1, 25, 80, 1, " ")
@@ -2723,13 +2742,12 @@ local function main()
                 local y = ev[4]
                 if x >= 2 and x <= 78 and y >= 7 and y <= 21 then
                     local total = #questList
-                    local visible = 15
-                    if total > visible then
+                    if total > questVisibleRows then
                         if direction == -1 then
                             questScroll = math.max(1, questScroll - 1)
                             drawQuestsList()
                         elseif direction == 1 then
-                            questScroll = math.min(total - visible + 1, questScroll + 1)
+                            questScroll = math.min(total - questVisibleRows + 1, questScroll + 1)
                             drawQuestsList()
                         end
                     end
@@ -3072,7 +3090,8 @@ end
 while true do
     local ok, err = pcall(main)
     if not ok then
-        print(debug.traceback(err))
+        print("Ошибка: " .. tostring(err))
+        print(debug.traceback(err, 2))
         os.sleep(5)
     end
 end
