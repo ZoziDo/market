@@ -7,7 +7,6 @@ local keyboard = require("keyboard")
 local computer = require("computer")
 local fs = require("filesystem")
 local TIMEZONE_OFFSET = 3 * 3600
-local questVisibleRows = 15
 
 event.ignore("interrupted", function() end)
 event.ignore("terminate", function() end)
@@ -47,35 +46,6 @@ local colors = {
     tomato = 0xFF6347,
     white = 0xFFFFFF
 }
-
-local function drawBalanceLine(x, y)
-    if not x or not y then return end
-    local coin = coinBalance or 0
-    local ema = emaBalance or 0
-    gpu.setForeground(colors.white)
-    gpu.set(x, y, "Баланс: ")
-    local coinStr = string.format("%.2f", coin) .. " Coina ₵"
-    gpu.setForeground(colors.accent_main)
-    gpu.set(x + 8, y, coinStr)   -- вместо unicode.len используем фиксированное смещение
-    gpu.setForeground(colors.white)
-    gpu.set(x + 8 + string.len(coinStr) + 1, y, "|")
-    local emaStr = "ЭМЫ: " .. string.format("%.2f", ema) .. " ۞"
-    gpu.setForeground(colors.tomato)
-    gpu.set(x + 8 + string.len(coinStr) + 3, y, emaStr)
-end
-
-local function drawTempMessage()
-    if tempMessage ~= "" then
-        gpu.setBackground(colors.bg_main)
-        gpu.fill(1, 25, 80, 1, " ")
-        gpu.setForeground(colors.success)
-        local x = math.floor((80 - unicode.len(tempMessage)) / 2) + 1
-        gpu.set(x, 25, tempMessage)
-    else
-        gpu.setBackground(colors.bg_main)
-        gpu.fill(1, 25, 80, 1, " ")
-    end
-end
 
 local function clear()
     gpu.setBackground(colors.bg_main)
@@ -281,368 +251,6 @@ local showShopDenied = false
 local tempMessage = ""
 local tempMessageTimer = nil
 
--- ========== ПЕРЕМЕННЫЕ ДЛЯ КВЕСТОВ ==========
-local quests = {}
-local questList = {}
-local questScroll = 1
-local selectedQuestIndex = 0
-local hoveredQuestIndex = 0
-local currentQuest = nil
-local questDetailPage = 1
-local questDetailMaxPage = 1
-local questDetailItemsPerPage = 9
-
--- ========== ФУНКЦИИ ДЛЯ КВЕСТОВ ==========
-local function getActualItemQuantity(internalName, damage)
-    if not component.isAvailable("me_interface") then return 0 end
-    local me = component.me_interface
-    local items = me.getItemsInNetwork()
-    local total = 0
-    for _, meItem in ipairs(items) do
-        if meItem.name == internalName and (meItem.damage or 0) == (damage or 0) then
-            total = total + (meItem.size or 0)
-        end
-    end
-    return total
-end
-
-local function isQuestAvailable(quest)
-    if not quest or not quest.requiredItems then return false end
-    for _, req in ipairs(quest.requiredItems) do
-        local qty = getActualItemQuantity(req.internalName, req.damage or 0)
-        if qty < req.requiredCount then
-            return false
-        end
-    end
-    return true
-end
-
-local function updateQuestsAvailability()
-    for _, q in ipairs(quests) do
-        if q then
-            q.available = isQuestAvailable(q)
-        end
-    end
-end
-
-local function loadQuests()
-    local data = safeDoFile("/home/quests.lua")
-    if type(data) == "table" then
-        quests = data
-        for _, q in ipairs(quests) do
-            if not q.name then q.name = "Без имени" end
-            if not q.requiredItems then q.requiredItems = {} end
-            q.available = isQuestAvailable(q)
-            q.totalItems = 0
-            for _, req in ipairs(q.requiredItems) do
-                if not req.displayName then req.displayName = "Неизвестно" end
-                q.totalItems = q.totalItems + (req.requiredCount or 0)
-            end
-        end
-        questList = {}
-        for _, q in ipairs(quests) do
-            table.insert(questList, q)
-        end
-    else
-        quests = {}
-        questList = {}
-    end
-end
-
-local function getQuestTotalItems(quest)
-    if quest.totalItems then return quest.totalItems end
-    local total = 0
-    if quest.requiredItems and type(quest.requiredItems) == "table" then
-        for _, req in ipairs(quest.requiredItems) do
-            total = total + (req.requiredCount or 0)
-        end
-    end
-    quest.totalItems = total
-    return total
-end
-
-local function drawQuestsList()
-    clear()
-    drawScreenBorder()
-    drawBalanceLine(3, 1)
-
-    gpu.setForeground(colors.accent_secondary)
-    gpu.set(3, 3, "Наборы/Квесты")
-
-    -- Шапка таблицы (как в покупке)
-    gpu.setBackground(colors.bg_button)
-    gpu.fill(2, 5, 76, 1, " ")
-    gpu.setForeground(colors.text_bright)
-    gpu.set(3, 5, "Название")
-    gpu.set(42, 5, "Предмет")
-    gpu.set(62, 5, "ЭМЫ")
-    gpu.set(72, 5, "Статус")
-    gpu.setBackground(colors.bg_main)
-
-    -- Отрисовка строк
-    local total = #questList
-    local maxScroll = math.max(1, total - questVisibleRows + 1)
-    questScroll = math.max(1, math.min(questScroll, maxScroll))
-
-    for i = 1, questVisibleRows do
-        local itemIndex = questScroll + i - 1
-        local q = questList[itemIndex]
-        local y = 6 + i
-        if q then
-            -- Фон строки (как в покупке)
-            local bg
-            if itemIndex == selectedQuestIndex then
-                bg = 0x225577
-            elseif itemIndex == hoveredQuestIndex then
-                bg = 0x446688
-            elseif i % 2 == 1 then
-                bg = colors.bg_secondary
-            else
-                bg = 0x1a1a1a
-            end
-            gpu.setBackground(bg)
-            gpu.fill(2, y, 76, 1, " ")
-
-            -- Название
-            gpu.setForeground(colors.text_bright)
-            local name = q.name
-            if not name then name = "Без названия" end
-            local nameLen = unicode.len(name)
-            if nameLen > 32 then name = unicode.sub(name, 1, 32) end
-            gpu.set(3, y, name)
-
-            -- Количество предметов
-            local totalItems = getQuestTotalItems(q) or 0
-            gpu.set(42, y, tostring(totalItems))
-
-            -- Цена в ЭМАХ (цвет tomato)
-            if q.priceEma and q.priceEma > 0 then
-                gpu.setForeground(colors.tomato)
-                gpu.set(62, y, string.format("%.2f", q.priceEma))
-            else
-                gpu.setForeground(colors.inactive)
-                gpu.set(62, y, "0")
-            end
-
-            -- Статус (галочка / крестик)
-            if q.available then
-                gpu.setForeground(colors.success)
-                gpu.set(72, y, "√")
-            else
-                gpu.setForeground(colors.error)
-                gpu.set(72, y, "×")
-            end
-        else
-            -- Пустая строка (фон как у чётных)
-            gpu.setBackground(0x1a1a1a)
-            gpu.fill(2, y, 76, 1, " ")
-        end
-    end
-    gpu.setBackground(colors.bg_main)
-
-    -- Скроллбар (как в покупке)
-    if total > questVisibleRows then
-        local barX = 78
-        local barY = 7
-        local barHeight = 15
-        gpu.setBackground(colors.bg_secondary)
-        gpu.fill(barX, barY, 2, barHeight, " ")
-        local thumbHeight = math.max(2, math.floor(barHeight * questVisibleRows / total))
-        local maxPos = barHeight - thumbHeight
-        local thumbPos = math.floor((questScroll - 1) * maxPos / (total - questVisibleRows)) + 1
-        thumbPos = math.min(thumbPos, maxPos + 1)
-        gpu.setBackground(colors.accent_main)
-        gpu.fill(barX, barY + thumbPos - 1, 2, thumbHeight, " ")
-        gpu.setBackground(colors.bg_main)
-    end
-
-    -- Кнопки
-    local backBtn = {x = 20, y = 24, xs = 11, ys = 1, text = "[ НАЗАД ]", bg = colors.bg_button, fg = colors.accent_secondary}
-    local nextBtn = {x = 50, y = 24, xs = 12, ys = 1, text = "[ ДАЛЕЕ ]", bg = colors.bg_button, fg = colors.inactive}
-    if selectedQuestIndex > 0 and selectedQuestIndex <= #questList then
-        nextBtn.fg = colors.accent_main
-    end
-    drawFlexButton(backBtn)
-    drawFlexButton(nextBtn)
-
-    drawTempMessage()
-end
-
-local function drawQuestDetail()
-    if not currentQuest then
-        currentScreen = "quest_list"
-        drawQuestsList()
-        return
-    end
-
-    clear()
-    drawScreenBorder()
-    drawBalanceLine(3, 1)
-
-    -- Безопасное получение имени
-    local questName = currentQuest.name or "Без названия"
-    local questPrice = currentQuest.priceEma or 0
-
-    gpu.setForeground(colors.success)
-    gpu.set(3, 3, "Набор: ")
-    gpu.setForeground(colors.text_bright)
-    gpu.set(12, 3, questName)
-
-    gpu.setForeground(colors.success)
-    gpu.set(55, 3, "Цена: ")
-    gpu.setForeground(colors.tomato)
-    gpu.set(62, 3, string.format("%.2f", questPrice) .. " ۞")
-
-    local items = currentQuest.requiredItems
-    if not items or type(items) ~= "table" then
-        drawCenteredText(10, "Ошибка: список предметов не найден", colors.error)
-        drawFlexButton({x = 37, y = 24, xs = 11, ys = 1, text = "[ НАЗАД ]", bg = colors.bg_button, fg = colors.accent_secondary})
-        drawTempMessage()
-        return
-    end
-
-    local totalPages = math.max(1, math.ceil(#items / questDetailItemsPerPage))
-    questDetailMaxPage = totalPages
-    if questDetailPage < 1 then questDetailPage = 1 end
-    if questDetailPage > totalPages then questDetailPage = totalPages end
-
-    local startIdx = (questDetailPage - 1) * questDetailItemsPerPage + 1
-    local endIdx = math.min(#items, startIdx + questDetailItemsPerPage - 1)
-
-    gpu.setForeground(colors.success)
-    gpu.set(3, 5, "Содержимое набора (стр. " .. tostring(questDetailPage) .. "/" .. tostring(totalPages) .. "):")
-
-    local y = 7
-    for i = startIdx, endIdx do
-        local req = items[i]
-        if y > 20 then break end
-        local displayName = req.displayName or "Неизвестный предмет"
-        local requiredCount = req.requiredCount or 0
-        local displayName = req.displayName or "Неизвестный предмет"
-        local line = displayName .. " x" .. tostring(req.requiredCount)
-        if unicode.len(line) > 70 then line = unicode.sub(line, 1, 70) end
-        gpu.setForeground(colors.text_bright)
-        gpu.set(5, y, line)
-        y = y + 1
-    end
-
-    gpu.setForeground(colors.text_main)
-    drawCenteredText(22, "Предметы будут выдаваться автоматически", colors.inactive)
-
-    local backBtn = {x = 5, y = 24, xs = 11, ys = 1, text = "[ НАЗАД ]", bg = colors.bg_button, fg = colors.accent_secondary}
-    local prevPageBtn = {x = 30, y = 24, xs = 7, ys = 1, text = "[ << ]", bg = colors.bg_button, fg = colors.accent_main}
-    local nextPageBtn = {x = 40, y = 24, xs = 7, ys = 1, text = "[ >> ]", bg = colors.bg_button, fg = colors.accent_main}
-    local buyBtn = {x = 62, y = 24, xs = 15, ys = 1, text = "[ КУПИТЬ ]", bg = colors.bg_button, fg = colors.inactive}
-
-    if currentQuest.available then
-        buyBtn.fg = colors.success
-    end
-
-    drawFlexButton(backBtn)
-    if totalPages > 1 then
-        drawFlexButton(prevPageBtn)
-        drawFlexButton(nextPageBtn)
-    end
-    drawFlexButton(buyBtn)
-    drawTempMessage()
-end
-
-local function exportQuestItems(quest)
-    if not component.isAvailable("me_interface") then
-        return false, "ME интерфейс не найден"
-    end
-    local me = component.me_interface
-    for _, req in ipairs(quest.requiredItems) do
-        local needed = req.requiredCount
-        local remaining = needed
-        local maxStack = 64
-        local id = req.internalName
-        if not id:find(":") then
-            id = "minecraft:" .. id
-        end
-        local fingerprint = { id = id, dmg = req.damage or 0 }
-        while remaining > 0 do
-            local toTake = math.min(remaining, maxStack)
-            local success, result = pcall(function()
-                return me.exportItem(fingerprint, PULL_DIRECTION, toTake)
-            end)
-            local got = 0
-            if success then
-                if type(result) == "number" then
-                    got = result
-                elseif type(result) == "boolean" and result == true then
-                    got = toTake
-                elseif type(result) == "table" then
-                    got = result.count or result.amount or result.size or 0
-                end
-            end
-            if got <= 0 then
-                return false, "Не удалось выдать " .. req.displayName .. " x" .. needed
-            end
-            remaining = remaining - got
-        end
-    end
-    return true, nil
-end
-
-local function performQuestBuy()
-    if not playerAgreed then
-        showTempMessage("Сначала примите пользовательское соглашение", 2)
-        return
-    end
-    if not currentQuest then return end
-    if not currentQuest.available then
-        showTempMessage("Не все предметы доступны для этого набора", 2)
-        drawQuestDetail()
-        return
-    end
-    local price = currentQuest.priceEma or 0
-    if emaBalance < price then
-        showInsufficientPopup = true
-        insufficientBalanceCoin = coinBalance
-        insufficientBalanceEma = emaBalance
-        drawQuestDetail()
-        drawInsufficientPopup()
-        return
-    end
-    -- повторная проверка доступности
-    if not isQuestAvailable(currentQuest) then
-        showTempMessage("Состав набора изменился, обновите страницу", 2)
-        loadQuests()
-        drawQuestDetail()
-        return
-    end
-    drawCenteredText(20, "Выдача предметов...", colors.accent_main)
-    os.sleep(0.2)
-    local success, err = exportQuestItems(currentQuest)
-    if not success then
-        drawCenteredText(20, "Ошибка: " .. err, colors.error)
-        os.sleep(2)
-        drawQuestDetail()
-        return
-    end
-    emaBalance = emaBalance - price
-    playerTransactions = playerTransactions + 1
-    if currentToken then
-        modem.send(serverAddress, 0xffef, serialization.serialize({
-            op = "buy",
-            name = currentPlayer,
-            token = currentToken,
-            item = currentQuest.name,
-            internalName = "quest_" .. currentQuest.name,
-            qty = 1,
-            value_coin = 0,
-            value_ema = price,
-            isQuest = true
-        }))
-    end
-    showTempMessage("Набор успешно приобретён!", 2)
-    loadQuests()
-    currentScreen = "quest_list"
-    drawQuestsList()
-end
-
--- ========== ОСТАЛЬНЫЕ ФУНКЦИИ ==========
 local function updateSelectorDisplay(item)
     if not selector then return end
     if not item then
@@ -695,13 +303,12 @@ local function drawBigTitle()
 end
 
 local function drawTempMessage()
-    local msg = tempMessage or ""
-    if msg ~= "" then
+    if tempMessage ~= "" then
         gpu.setBackground(colors.bg_main)
         gpu.fill(1, 25, 80, 1, " ")
         gpu.setForeground(colors.success)
-        local x = math.floor((80 - unicode.len(msg)) / 2) + 1
-        gpu.set(x, 25, msg)
+        local x = math.floor((80 - unicode.len(tempMessage)) / 2) + 1
+        gpu.set(x, 25, tempMessage)
     else
         gpu.setBackground(colors.bg_main)
         gpu.fill(1, 25, 80, 1, " ")
@@ -728,10 +335,6 @@ local function showTempMessage(msg, duration)
             drawAccount({balance=coinBalance, emaBalance=emaBalance, transactions=playerTransactions, regDate=playerRegDate, agreed=playerAgreed})
         elseif currentScreen == "feedbacks" then
             drawFeedbacksList()
-        elseif currentScreen == "quest_list" then
-            drawQuestsList()
-        elseif currentScreen == "quest_detail" then
-            drawQuestDetail()
         else
             drawTempMessage()
         end
@@ -1101,6 +704,19 @@ local function getFilteredItems()
     return filtered
 end
 
+local function drawBalanceLine(x, y)
+    gpu.setForeground(colors.white)
+    gpu.set(x, y, "Баланс: ")
+    local coinStr = string.format("%.2f", coinBalance) .. " Coina ₵"
+    gpu.setForeground(colors.accent_main)
+    gpu.set(x + unicode.len("Баланс: "), y, coinStr)
+    gpu.setForeground(colors.white)
+    gpu.set(x + unicode.len("Баланс: ") + unicode.len(coinStr), y, " | ")
+    local emaStr = "ЭМЫ: " .. string.format("%.2f", emaBalance) .. " ۞"
+    gpu.setForeground(colors.tomato)
+    gpu.set(x + unicode.len("Баланс: ") + unicode.len(coinStr) + unicode.len(" | "), y, emaStr)
+end
+
 local function drawBuyStatic()
     clear()
     drawScreenBorder()
@@ -1179,7 +795,7 @@ local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
     gpu.setBackground(bg)
     gpu.fill(2, y, 76, 1, " ")
     gpu.setForeground(fg)
-    local name = item.displayName or item.internalName or "Неизвестно"
+    local name = item.displayName or item.internalName
     if unicode.len(name) > 37 then
         name = unicode.sub(name, horizontalScroll, horizontalScroll + 36)
     end
@@ -1349,6 +965,7 @@ local function drawPurchaseScreen()
     local totalCoin = (purchaseItem.priceCoin or 0) * purchaseQuantity
     local totalEma = (purchaseItem.priceEma or 0) * purchaseQuantity
 
+    -- На сумму (Coina и ЭМЫ на отдельных строках)
     gpu.setForeground(colors.success)
     gpu.set(3, 5, "На сумму: ")
     local sumY = 5
@@ -1362,6 +979,7 @@ local function drawPurchaseScreen()
         gpu.set(14, sumY, string.format("%.2f", totalEma) .. " ۞")
     end
 
+    -- Цена за штуку (Coina и ЭМЫ на отдельных строках)
     gpu.setForeground(colors.success)
     gpu.set(55, 5, "Цена: ")
     local priceY = 5
@@ -2271,7 +1889,6 @@ local function refreshAndAgree()
     end
 end
 
--- ========== ОСНОВНОЙ ЦИКЛ ==========
 local function main()
     drawWelcomeScreen()
     modem.send(serverAddress, 0xffef, serialization.serialize({op="register", password=ACCESS_PASSWORD}))
@@ -2377,7 +1994,6 @@ local function main()
                 end
                 goto continue
             elseif currentScreen == "shop_buy" or currentScreen == "shop_sell" then
-                -- существующая обработка
                 if y >= 7 and y <= 21 and x >= 2 and x <= 77 then
                     local relativeRow = y - 6
                     local clickedIndex = listScroll + relativeRow - 1
@@ -2522,67 +2138,6 @@ local function main()
                         drawSellScanScreen()
                     end
                 end
-            elseif currentScreen == "quest_list" then
-                -- обработка списка квестов
-                if y >= 7 and y <= 21 and x >= 2 and x <= 77 then
-                    local relativeRow = y - 6
-                    local clickedIndex = questScroll + relativeRow - 1
-                    if clickedIndex >= 1 and clickedIndex <= #questList then
-                        selectedQuestIndex = clickedIndex
-                        hoveredQuestIndex = 0
-                        drawQuestsList()
-                    end
-                    goto continue
-                end
-                if x >= 78 and y >= 7 and y <= 21 then
-                    local total = #questList
-                    if total > visibleRows then
-                        local clickPos = y - 6
-                        questScroll = math.floor((clickPos - 1) * (total - visibleRows) / visibleRows) + 1
-                        drawQuestsList()
-                    end
-                    goto continue
-                end
-                if isButtonClicked({x = 20, y = 24, xs = 11, ys = 1}, x, y) then
-                    currentScreen = "shop"
-                    drawShopMenu()
-                    goto continue
-                end
-                if isButtonClicked({x = 50, y = 24, xs = 12, ys = 1}, x, y) then
-                    if selectedQuestIndex > 0 and selectedQuestIndex <= #questList then
-                        currentQuest = questList[selectedQuestIndex]
-                        questDetailPage = 1
-                        currentScreen = "quest_detail"
-                        drawQuestDetail()
-                    end
-                    goto continue
-                end
-            elseif currentScreen == "quest_detail" then
-                if isButtonClicked({x = 5, y = 24, xs = 11, ys = 1}, x, y) then
-                    currentScreen = "quest_list"
-                    drawQuestsList()
-                    goto continue
-                end
-                if isButtonClicked({x = 30, y = 24, xs = 7, ys = 1}, x, y) then
-                    if questDetailPage > 1 then
-                        questDetailPage = questDetailPage - 1
-                        drawQuestDetail()
-                    end
-                    goto continue
-                end
-                if isButtonClicked({x = 40, y = 24, xs = 7, ys = 1}, x, y) then
-                    if questDetailPage < questDetailMaxPage then
-                        questDetailPage = questDetailPage + 1
-                        drawQuestDetail()
-                    end
-                    goto continue
-                end
-                if isButtonClicked({x = 62, y = 24, xs = 15, ys = 1}, x, y) then
-                    if currentQuest and currentQuest.available then
-                        performQuestBuy()
-                    end
-                    goto continue
-                end
             elseif currentScreen == "menu" then
                 for name, btn in pairs(menuButtons) do
                     if x >= btn.x and x < btn.x + btn.xs and y >= btn.y and y < btn.y + btn.ys then
@@ -2638,7 +2193,11 @@ local function main()
                         elseif name == "sell" then
                             goToSell()
                         elseif name == "bundle" then
-                            goToQuests()
+                            currentScreen = "shop_bundle"
+                            clear()
+                            drawCenteredText(10, "Наборы/Квесты (в разработке)", colors.text_bright)
+                            drawFlexButton(backButton)
+                            drawTempMessage()
                         end
                         break
                     end
@@ -2728,65 +2287,30 @@ local function main()
                     goto continue
                 end
             end
-        elseif e == "scroll" then
-            if (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
-                local direction = ev[5]
-                local x = ev[3]
-                local y = ev[4]
-                if x >= 2 and x <= 78 and y >= 7 and y <= 21 then
-                    if direction == -1 then
-                        smoothScroll(1)
-                    elseif direction == 1 then
-                        smoothScroll(-1)
-                    end
-                end
-            elseif currentScreen == "quest_list" then
-                local direction = ev[5]
-                local x = ev[3]
-                local y = ev[4]
-                if x >= 2 and x <= 78 and y >= 7 and y <= 21 then
-                    local total = #questList
-                    if total > questVisibleRows then
-                        if direction == -1 then
-                            questScroll = math.max(1, questScroll - 1)
-                            drawQuestsList()
-                        elseif direction == 1 then
-                            questScroll = math.min(total - questVisibleRows + 1, questScroll + 1)
-                            drawQuestsList()
-                        end
-                    end
+        elseif e == "scroll" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
+            local direction = ev[5]
+            local x = ev[3]
+            local y = ev[4]
+            if x >= 2 and x <= 78 and y >= 7 and y <= 21 then
+                if direction == -1 then
+                    smoothScroll(1)
+                elseif direction == 1 then
+                    smoothScroll(-1)
                 end
             end
-        elseif e == "mouse_move" then
-            if (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
-                local x, y = ev[3], ev[4]
-                if y >= 7 and y <= 21 and x >= 2 and x <= 77 then
-                    local rel = y - 6
-                    local newHover = listScroll + rel - 1
-                    if newHover <= #filteredItems and newHover ~= hoveredIndex then
-                        hoveredIndex = newHover
-                        drawBuyItemsList()
-                    end
-                else
-                    if hoveredIndex ~= 0 then
-                        hoveredIndex = 0
-                        drawBuyItemsList()
-                    end
+        elseif e == "mouse_move" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
+            local x, y = ev[3], ev[4]
+            if y >= 7 and y <= 21 and x >= 2 and x <= 77 then
+                local rel = y - 6
+                local newHover = listScroll + rel - 1
+                if newHover <= #filteredItems and newHover ~= hoveredIndex then
+                    hoveredIndex = newHover
+                    drawBuyItemsList()
                 end
-            elseif currentScreen == "quest_list" then
-                local x, y = ev[3], ev[4]
-                if y >= 7 and y <= 21 and x >= 2 and x <= 77 then
-                    local rel = y - 6
-                    local newHover = questScroll + rel - 1
-                    if newHover <= #questList and newHover ~= hoveredQuestIndex then
-                        hoveredQuestIndex = newHover
-                        drawQuestsList()
-                    end
-                else
-                    if hoveredQuestIndex ~= 0 then
-                        hoveredQuestIndex = 0
-                        drawQuestsList()
-                    end
+            else
+                if hoveredIndex ~= 0 then
+                    hoveredIndex = 0
+                    drawBuyItemsList()
                 end
             end
         elseif e == "key_down" and currentScreen == "report" and canSendReport() then
@@ -3094,8 +2618,6 @@ end
 while true do
     local ok, err = pcall(main)
     if not ok then
-        print("ОШИБКА: " .. tostring(err))
-        print(debug.traceback(err, 2))
-        os.sleep(5)
+        pcall(drawCrashPopup, tostring(err))
     end
 end
