@@ -87,7 +87,7 @@ return {
   { internalName = "ae2wct:infinityBoosterCard", displayName = "Бесконечная карта усиления", price = 1489.37, currency = "res" },
   { internalName = "ectracells:terminal.fluid.wireless", displayName = "Беспроводной МЭ жидкостный терминал", price = 21.36, currency = "res" },
   { internalName = "extracells:terminal.universal.wireless", displayName = "Беспроводной МЭ универсальный терминал", price = 22.51, currency = "res" },
-  { internalName = "appliedenergistics2:item.ItemMultiMaterial", displayName = "Беспроводной приёмник", price = 3.32, currency = "res" },
+  { internalName = "appliedenergistics2:item.ItemMultiMaterial", displayName = "Беспроводной приёмник", price = 3.32, currency = "res", damage = 41 },
   { internalName = "appliedenergistics2:item.ToolWirelessTeminal", displayName = "Беспроводной терминал", price = 21.25, currency = "res" },
   { internalName = "ae2wct:wirelessCraftingTerminal", displayName = "Беспроводной терминал создания", price = 483.92, currency = "res" },
   { internalName = "appliedenergistics2:item.ToolBiometricCard", displayName = "Биометрическая карта", price = 0.99, currency = "res" },
