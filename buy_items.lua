@@ -24,7 +24,7 @@ return {
   { internalName = "luxinfineitems:CompressedCPU", displayName = "Контроллер автокрафта", price = 375.21, currency = "res" },
   { internalName = "EnderIO:itemPowerConduit", displayName = "Энергопровод из вибрирующего сплава ", price = 5.00, currency = "res", damage = 2 },
   { internalName = "EnderIO:itemLiquidConduit", displayName = "Жидкостная труба из мелодичного сплава", price = 5.00, currency = "res", damage = 5 },
-  { internalName = "dwcity:Dragon_seal2", displayName = "Тусклая печать силы", price_coin = 1000.00, price_ema = 2611.00 },
+  { internalName = "dwcity:Power_seal2", displayName = "Тусклая печать силы", price_coin = 1000.00, price_ema = 2611.00 },
   { internalName = "dwcity:Nano_seal2", displayName = "Тусклая нано-печать", price_coin = 1468.20, price_ema = 146.00 },
   { internalName = "dwcity:High_technology_seal_seal2", displayName = "Тусклая высокотехнологическая печать", price_coin = 500.00, price_ema = 72.00 },
   { internalName = "dwcity:Dragon_seal2", displayName = "Тусклая печать дракона", price_coin = 5000.00, price_ema = 200.00 },
