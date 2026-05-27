@@ -3056,6 +3056,7 @@ end
 while true do
     local ok, err = pcall(main)
     if not ok then
-        pcall(drawCrashPopup, tostring(err))
+        print(debug.traceback(err))
+        os.sleep(5)
     end
 end
