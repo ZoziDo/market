@@ -53,7 +53,7 @@ return {
   { internalName = "dwcity:Dnk_seal2", displayName = "Тусклая печать ДНК", price_coin = 1125.00, price_ema = 12.00 },
   { internalName = "dwcity:Dnk_seal", displayName = "Печать ДНК", price_coin = 1125.00, price_ema = 12.00 },
   { internalName = "dwcity:Sword_seal2", displayName = "Тусклая печать обороны", price_coin = 180.00, price_ema = 2.00 },
-  { internalName = "dwcity:Sword_seal", displayName = "Печать обороны", price_coin = 180.00, price_ema = 2.00 }
+  { internalName = "dwcity:Sword_seal", displayName = "Печать обороны", price_coin = 180.00, price_ema = 2.00 },
   { internalName = "dwcity:Flower_seal2", displayName = "Тусклая печать розы",  price_coin = 175.00, price_ema = 2.00 },
   { internalName = "dwcity:Flower_seal", displayName = "Печать розы",  price_coin = 175.00, price_ema = 2.00 },
   { internalName = "dwcity:Death_seal2", displayName = "Тусклая печать смерти", price_coin = 438.90, price_ema = 18.00 },
