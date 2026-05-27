@@ -195,7 +195,7 @@ return {
   { internalName = "metadrive:module_fortune_luck_changer_tier_3", displayName = "Модуль удачи IV", price = 1265.0, currency = "res" },
   { internalName = "dwcity:Module_seal", displayName = "Модульная печать", price = 16.8, currency = "res" },
   { internalName = "metadrive:block_molecular_transfirmer", displayName = "Молекулярный преобразователь", price = 42.67, currency = "res" },
-  { internalName = "luxinfineitems:AEAdvMolecularAssembler", displayName = "Квантовый молекулярный сборщик", , price_coin = 168.76, price_ema = 0.34, damage = 2 },
+  { internalName = "luxinfineitems:AEAdvMolecularAssembler", displayName = "Квантовый молекулярный сборщик", price_coin = 168.76, price_ema = 0.34, damage = 2 },
   { internalName = "appliedenergistics2:tile.BlockMolecularAssembler", displayName = "Молекулярный сборщик", price = 12.80, currency = "res" },
   { internalName = "appliedenergistics2:tile.BlockCraftingMonitor", displayName = "Монитор создания", price = 1.73, currency = "res" },
   { internalName = "minecraft:carrot", displayName = "Морковь", price = 0.02, currency = "res" },
