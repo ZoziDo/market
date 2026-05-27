@@ -319,7 +319,9 @@ end
 
 local function updateQuestsAvailability()
     for _, q in ipairs(quests) do
-        q.available = isQuestAvailable(q)
+        if q then
+            q.available = isQuestAvailable(q)
+        end
     end
 end
 
@@ -328,12 +330,13 @@ local function loadQuests()
     if type(data) == "table" then
         quests = data
         for _, q in ipairs(quests) do
+            if not q.name then q.name = "Без имени" end
+            if not q.requiredItems then q.requiredItems = {} end
             q.available = isQuestAvailable(q)
             q.totalItems = 0
-            if q.requiredItems then
-                for _, req in ipairs(q.requiredItems) do
-                    q.totalItems = q.totalItems + (req.requiredCount or 0)
-                end
+            for _, req in ipairs(q.requiredItems) do
+                if not req.displayName then req.displayName = "Неизвестно" end
+                q.totalItems = q.totalItems + (req.requiredCount or 0)
             end
         end
         questList = {}
@@ -402,8 +405,10 @@ local function drawQuestsList()
 
             -- Название
             gpu.setForeground(colors.text_bright)
-            local name = q.name or "Без названия"
-            if unicode.len(name) > 32 then name = unicode.sub(name, 1, 32) end
+            local name = q.name
+            if not name then name = "Без названия" end
+            local nameLen = unicode.len(name)
+            if nameLen > 32 then name = unicode.sub(name, 1, 32) end
             gpu.set(3, y, name)
 
             -- Количество предметов
@@ -474,17 +479,28 @@ local function drawQuestDetail()
     drawScreenBorder()
     drawBalanceLine(3, 1)
 
+    -- Безопасное получение имени
+    local questName = currentQuest.name or "Без названия"
+    local questPrice = currentQuest.priceEma or 0
+
     gpu.setForeground(colors.success)
     gpu.set(3, 3, "Набор: ")
     gpu.setForeground(colors.text_bright)
-    gpu.set(12, 3, currentQuest.name)
+    gpu.set(12, 3, questName)
 
     gpu.setForeground(colors.success)
     gpu.set(55, 3, "Цена: ")
     gpu.setForeground(colors.tomato)
-    gpu.set(62, 3, string.format("%.2f", currentQuest.priceEma) .. " ۞")
+    gpu.set(62, 3, string.format("%.2f", questPrice) .. " ۞")
 
     local items = currentQuest.requiredItems
+    if not items or type(items) ~= "table" then
+        drawCenteredText(10, "Ошибка: список предметов не найден", colors.error)
+        drawFlexButton({x = 37, y = 24, xs = 11, ys = 1, text = "[ НАЗАД ]", bg = colors.bg_button, fg = colors.accent_secondary})
+        drawTempMessage()
+        return
+    end
+
     local totalPages = math.max(1, math.ceil(#items / questDetailItemsPerPage))
     questDetailMaxPage = totalPages
     if questDetailPage < 1 then questDetailPage = 1 end
@@ -494,13 +510,16 @@ local function drawQuestDetail()
     local endIdx = math.min(#items, startIdx + questDetailItemsPerPage - 1)
 
     gpu.setForeground(colors.success)
-    gpu.set(3, 5, "Содержимое набора (стр. " .. questDetailPage .. "/" .. totalPages .. "):")
+    gpu.set(3, 5, "Содержимое набора (стр. " .. tostring(questDetailPage) .. "/" .. tostring(totalPages) .. "):")
 
     local y = 7
     for i = startIdx, endIdx do
         local req = items[i]
         if y > 20 then break end
-        local line = req.displayName .. " x" .. tostring(req.requiredCount)
+        local displayName = req.displayName or "Неизвестный предмет"
+        local requiredCount = req.requiredCount or 0
+        local displayName = req.displayName or "Неизвестный предмет"
+        local line = displayName .. " x" .. tostring(req.requiredCount)
         if unicode.len(line) > 70 then line = unicode.sub(line, 1, 70) end
         gpu.setForeground(colors.text_bright)
         gpu.set(5, y, line)
@@ -526,21 +545,6 @@ local function drawQuestDetail()
     end
     drawFlexButton(buyBtn)
     drawTempMessage()
-end
-
-local function goToQuests()
-    if not playerAgreed then
-        drawCenteredText(12, "Вы не приняли пользовательское соглашение!", colors.error)
-        os.sleep(2)
-        drawMainMenu()
-        return
-    end
-    currentScreen = "quest_list"
-    loadQuests()
-    questScroll = 1
-    selectedQuestIndex = 0
-    hoveredQuestIndex = 0
-    drawQuestsList()
 end
 
 local function exportQuestItems(quest)
@@ -3090,7 +3094,7 @@ end
 while true do
     local ok, err = pcall(main)
     if not ok then
-        print("Ошибка: " .. tostring(err))
+        print("ОШИБКА: " .. tostring(err))
         print(debug.traceback(err, 2))
         os.sleep(5)
     end
