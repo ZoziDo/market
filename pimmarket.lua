@@ -7,6 +7,7 @@ local keyboard = require("keyboard")
 local computer = require("computer")
 local fs = require("filesystem")
 local TIMEZONE_OFFSET = 3 * 3600
+local name = item.displayName or item.internalName or "???"
 
 event.ignore("interrupted", function() end)
 event.ignore("terminate", function() end)
@@ -48,16 +49,31 @@ local colors = {
 }
 
 local function drawBalanceLine(x, y)
+    local coin = coinBalance or 0
+    local ema = emaBalance or 0
     gpu.setForeground(colors.white)
     gpu.set(x, y, "Баланс: ")
-    local coinStr = string.format("%.2f", coinBalance) .. " Coina ₵"
+    local coinStr = string.format("%.2f", coin) .. " Coina ₵"
     gpu.setForeground(colors.accent_main)
     gpu.set(x + unicode.len("Баланс: "), y, coinStr)
     gpu.setForeground(colors.white)
     gpu.set(x + unicode.len("Баланс: ") + unicode.len(coinStr), y, " | ")
-    local emaStr = "ЭМЫ: " .. string.format("%.2f", emaBalance) .. " ۞"
+    local emaStr = "ЭМЫ: " .. string.format("%.2f", ema) .. " ۞"
     gpu.setForeground(colors.tomato)
     gpu.set(x + unicode.len("Баланс: ") + unicode.len(coinStr) + unicode.len(" | "), y, emaStr)
+end
+
+local function drawTempMessage()
+    if tempMessage ~= "" then
+        gpu.setBackground(colors.bg_main)
+        gpu.fill(1, 25, 80, 1, " ")
+        gpu.setForeground(colors.success)
+        local x = math.floor((80 - unicode.len(tempMessage)) / 2) + 1
+        gpu.set(x, 25, tempMessage)
+    else
+        gpu.setBackground(colors.bg_main)
+        gpu.fill(1, 25, 80, 1, " ")
+    end
 end
 
 local function clear()
@@ -332,7 +348,7 @@ end
 local function getQuestTotalItems(quest)
     if quest.totalItems then return quest.totalItems end
     local total = 0
-    if quest.requiredItems then
+    if quest.requiredItems and type(quest.requiredItems) == "table" then
         for _, req in ipairs(quest.requiredItems) do
             total = total + (req.requiredCount or 0)
         end
@@ -378,11 +394,11 @@ local function drawQuestsList()
         gpu.fill(2, y, 76, 1, " ")
 
         gpu.setForeground(colors.text_bright)
-        local name = q.name
+        local name = q.name or "Без названия"
         if unicode.len(name) > 32 then name = unicode.sub(name, 1, 32) end
         gpu.set(3, y, name)
 
-        local totalItems = getQuestTotalItems(q)
+        local totalItems = getQuestTotalItems(q) or 0
         gpu.set(42, y, tostring(totalItems))
 
         if q.priceEma and q.priceEma > 0 then
