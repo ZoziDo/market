@@ -67,7 +67,7 @@ return {
   { internalName = "appliedenergistics2:item.tile.BlockCraftingStorage", displayName = "64K хранилище создания", price = 36.487, currency = "res", damage = 3 },
   { internalName = "extracells:storage.component", displayName = "64K МЭ жидкостный компонент хранилища", price_coin = 261.00, price_ema = 0.00, damage = 7 },
   { internalName = "extracells:storage.fluid", displayName = "МЭ 64Кб жидкостное хранилище", price_coin = 460.00, price_ema = 0.00, damage = 3 },
-  { internalName = "extracells:storage.casing", displayName = "Жидкостный корпус хранилища", price_coin = 40.00, price_ema = 0.00, damage = 1 }
+  { internalName = "extracells:storage.casing", displayName = "Жидкостный корпус хранилища", price_coin = 40.00, price_ema = 0.00, damage = 1 },
   { internalName = "luxinfineitems:advancedCraftingStorage", displayName = "Хранилище создания МК1", price_coin = 854.56, price_ema = 1.74 },
   { internalName = "luxinfineitems:advancedCraftingStorage", displayName = "Хранилище создания МК2", price_coin = 1554.56, price_ema = 2.74 },
   { internalName = "luxinfineitems:advancedCraftingAccelerator", displayName = "Блок обработки создания МК1", price = 7.54, currency = "res" },
