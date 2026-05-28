@@ -1,10 +1,10 @@
 
 return {
-  { internalName = "metadrive:block_reactor_coolant_injector", displayName = "Впрыскиватель хладагента", price_coin = 480.00, price_ema = 0.00, },
-  { internalName = "BuildCraft|Silicon:laserTableBlock", displayName = "Сборочный стол", price_coin = 0.00, price_ema = 2.81, },
-  { internalName = "minecraft:apple", displayName = "Яблоко", price_coin = 0.00, price_ema = 0.02, },
+  { internalName = "metadrive:block_reactor_coolant_injector", displayName = "Впрыскиватель хладагента", price_coin = 480.00, price_ema = 0.00 },
+  { internalName = "BuildCraft|Silicon:laserTableBlock", displayName = "Сборочный стол", price_coin = 0.00, price_ema = 2.81 },
+  { internalName = "minecraft:apple", displayName = "Яблоко", price_coin = 0.00, price_ema = 0.02 },
   { internalName = "EnderIO:itemAlloy", displayName = "Призрачный сплав", price_coin = 1.00, price_ema = 0.00, damage = 7 },
-  { internalName = "EnderIO:blockSagMill", displayName = "Дробитель", price_coin = 13.00, price_ema = 0.00, },
+  { internalName = "EnderIO:blockSagMill", displayName = "Дробитель", price_coin = 13.00, price_ema = 0.00 },
   { internalName = "EnderIO:blockAlloySmelter", displayName = "Завод сплавов", price_coin = 19.00, price_ema = 0.00, damage = 4 },
   { internalName = "EnderIO:itemBasicCapacitor", displayName = "Мелодичный конденсатор", price_coin = 0.00, price_ema = 310.58, damage = 4 },
   { internalName = "EnderIO:itemBasicCapacitor", displayName = "Кристаллический конденсатор", price_coin = 340.00, price_ema = 0.00,  damage = 3 },
