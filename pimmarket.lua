@@ -685,8 +685,27 @@ end
 
 local function getFilteredItems()
     local filtered = {}
+    local searchLower = string.lower(shopSearch)
+    local searchWords = {}
+    if searchLower ~= "" then
+        for word in searchLower:gmatch("%S+") do
+            table.insert(searchWords, word)
+        end
+    end
+
     for _, item in ipairs(shopItems) do
-        local matchesSearch = (shopSearch == "" or string.find(string.lower(item.displayName or item.internalName), string.lower(shopSearch), 1, true))
+        local nameLower = string.lower(item.displayName or item.internalName)
+        local matchesSearch = false
+        if #searchWords == 0 then
+            matchesSearch = true
+        else
+            for _, word in ipairs(searchWords) do
+                if string.find(nameLower, word, 1, true) then
+                    matchesSearch = true
+                    break
+                end
+            end
+        end
         if matchesSearch then
             table.insert(filtered, item)
         end
