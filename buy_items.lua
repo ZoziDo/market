@@ -65,7 +65,7 @@ return {
   { internalName = "appliedenergistics2:tile.BlockQuartzGlass", displayName = "Кварцевое стекло", price_coin = 0.00, price_ema = 0.01 },
   { internalName = "appliedenergistics2:item.ItemMultiMaterial", displayName = "Карта ёмкости", price_coin = 5.50, price_ema = 0.00, damage = 27 },
   { internalName = "IC2:itemCellEmpty", displayName = "Капсула хладогента", price_coin = 5.00, price_ema = 0.00, damage = 9 },
-  { internalName = "appliedenergistics2:tile.BlockIOPort", displayName = "МЭ порт ввода\вывода", price_coin = 36.00, price_ema = 0.05 },
+  { internalName = "appliedenergistics2:tile.BlockIOPort", displayName = "МЭ порт ввода вывода", price_coin = 36.00, price_ema = 0.05 },
   { internalName = "ThermalExpansion:Glass", displayName = "Закалённое стекло", price_coin = 0.00, price_ema = 0.05 },
   { internalName = "IC2:reactorPlatingHeat", displayName = "Теплоёмкая реакторная пластина", price_coin = 10.00, price_ema = 0.00 },
   { internalName = "IC2:reactorCoolantSix", displayName = "Охлаждающий стержень 60к", price_coin = 73.00, price_ema = 0.00 },
