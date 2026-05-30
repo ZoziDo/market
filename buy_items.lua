@@ -321,7 +321,7 @@ return {
   { internalName = "EnderIO:itemConduit", displayName = "Предметная труба", price = 0.66, currency = "res" },
   { internalName = "appliedenergistics2:tile.BlockEnergyAcceptor", displayName = "Приёмщик энергии", price = 1.26, currency = "res" },
   { internalName = "DraconicEvolution:awakenedCore", displayName = "Пробуждённое ядро", price_coin = 8537.27, price_ema = 44.93 },
-  { internalName = "DraconicEvolution:draconiumIngot", displayName = "Пробуждённый дракониевый слиток", price_coin = 239.59, price_ema = 1.26 },
+  { internalName = "DraconicEvolution:draconiumIngot", displayName = "Пробуждённый дракониевый слиток", price_coin = 239.59, price_ema = 1.26, damage = 6525 },
   { internalName = "appliedenergistics2:item.ItemMultiMaterial", displayName = "Продвинутая карта", price = 15.71, currency = "res", damage = 28 },
   { internalName = "Forestry:chipsets", displayName = "Продвинутая печатная плата", price = 10.66, currency = "res", damage = 1 },
   { internalName = "IC2:itemPartCircuiAdv", displayName = "Продвинутая электросхема", price = 10.96, currency = "res" },
