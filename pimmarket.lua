@@ -47,6 +47,9 @@ local colors = {
     white = 0xFFFFFF
 }
 
+local coinBalance = 0.0
+local emaBalance = 0.0
+
 local function clear()
     gpu.setBackground(colors.bg_main)
     gpu.fill(1, 1, 80, 25, " ")
@@ -208,8 +211,6 @@ modem.open(0xffef)
 modem.open(0xfffe)
 
 local currentPlayer, currentToken = nil, nil
-local coinBalance = 0.0
-local emaBalance = 0.0
 local playerTransactions = 0
 local playerRegDate = ""
 local playerAgreed = false
