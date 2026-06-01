@@ -314,6 +314,46 @@ local function showTempMessage(msg, duration)
     drawTempMessage()
 end
 
+-- ========== ЭКРАН ДЕТАЛЕЙ КВЕСТА (СПИСОК ПРЕДМЕТОВ) ==========
+local function drawQuestDetailsScreen(quest)
+    currentQuestForDetails = quest
+    currentScreen = "quest_details"
+    clear()
+    drawScreenBorder()
+    drawBalanceLine(3, 1)
+
+    gpu.setForeground(colors.accent_secondary)
+    gpu.set(3, 3, "КВЕСТ: " .. quest.name)
+
+    gpu.setForeground(colors.success)
+    gpu.set(3, 4, "Цена: ")
+    gpu.setForeground(colors.tomato)
+    gpu.set(3 + unicode.len("Цена: "), 4, string.format("%.2f", quest.priceEma) .. " ۞")
+
+    gpu.setForeground(colors.text_bright)
+    gpu.set(3, 5, "Список выдаваемых предметов:")
+
+    local y = 7
+    for i, req in ipairs(quest.requiredItems) do
+        if y > 21 then
+            gpu.setForeground(colors.error)
+            gpu.set(3, 22, "... и ещё " .. (#quest.requiredItems - i + 1) .. " предметов")
+            break
+        end
+        gpu.setForeground(colors.text_main)
+        gpu.set(5, y, req.displayName)
+        gpu.setForeground(colors.accent_main)
+        gpu.set(55, y, "x" .. req.requiredCount)
+        y = y + 1
+    end
+
+    local backBtn = {x = 20, y = 24, xs = 12, ys = 1, text = "[ НАЗАД ]", bg = colors.bg_button, fg = colors.accent_secondary}
+    local buyBtn = {x = 50, y = 24, xs = 15, ys = 1, text = "[ ПРИОБРЕСТИ ]", bg = colors.bg_button, fg = colors.success}
+    drawFlexButton(backBtn)
+    drawFlexButton(buyBtn)
+    drawTempMessage()
+end
+
 -- ========== НОВАЯ СИСТЕМА КВЕСТОВ ==========
 local questsList = {}
 local selectedQuest = nil
@@ -693,46 +733,6 @@ local function drawQuestListScreen()
     drawQuestStatic()
     drawQuestList()
     drawQuestButtons()
-end
-
--- ========== ЭКРАН ДЕТАЛЕЙ КВЕСТА (СПИСОК ПРЕДМЕТОВ) ==========
-local function drawQuestDetailsScreen(quest)
-    currentQuestForDetails = quest
-    currentScreen = "quest_details"
-    clear()
-    drawScreenBorder()
-    drawBalanceLine(3, 1)
-
-    gpu.setForeground(colors.accent_secondary)
-    gpu.set(3, 3, "КВЕСТ: " .. quest.name)
-
-    gpu.setForeground(colors.success)
-    gpu.set(3, 4, "Цена: ")
-    gpu.setForeground(colors.tomato)
-    gpu.set(3 + unicode.len("Цена: "), 4, string.format("%.2f", quest.priceEma) .. " ۞")
-
-    gpu.setForeground(colors.text_bright)
-    gpu.set(3, 5, "Список выдаваемых предметов:")
-
-    local y = 7
-    for i, req in ipairs(quest.requiredItems) do
-        if y > 21 then
-            gpu.setForeground(colors.error)
-            gpu.set(3, 22, "... и ещё " .. (#quest.requiredItems - i + 1) .. " предметов")
-            break
-        end
-        gpu.setForeground(colors.text_main)
-        gpu.set(5, y, req.displayName)
-        gpu.setForeground(colors.accent_main)
-        gpu.set(55, y, "x" .. req.requiredCount)
-        y = y + 1
-    end
-
-    local backBtn = {x = 20, y = 24, xs = 12, ys = 1, text = "[ НАЗАД ]", bg = colors.bg_button, fg = colors.accent_secondary}
-    local buyBtn = {x = 50, y = 24, xs = 15, ys = 1, text = "[ ПРИОБРЕСТИ ]", bg = colors.bg_button, fg = colors.success}
-    drawFlexButton(backBtn)
-    drawFlexButton(buyBtn)
-    drawTempMessage()
 end
 
 -- ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (НЕ ИЗМЕНЕНЫ) ==========
