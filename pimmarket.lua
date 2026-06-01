@@ -1,6 +1,6 @@
 -- ============================================================================
 -- МАГАЗИН + БАРТЕР (обмен предметами)
--- Исправленная версия: убран баланс в бартере, фикс ошибок.
+-- Финальная исправленная версия
 -- ============================================================================
 
 local component = require("component")
@@ -134,6 +134,20 @@ local function sortableName(name)
         return string.format("%08d", tonumber(d))
     end)
     return result
+end
+
+-- Создание файлов-примеров, если их нет
+if not fs.exists("/home/buy_items.lua") then
+    local f = io.open("/home/buy_items.lua", "w")
+    f:write("return {\n    { internalName = \"minecraft:diamond\", displayName = \"Алмаз\", price_coin = 100.0 },\n    { internalName = \"minecraft:iron_ingot\", displayName = \"Железный слиток\", price_coin = 10.0 }\n}\n")
+    f:close()
+    print("Создан пример /home/buy_items.lua")
+end
+if not fs.exists("/home/shop_items.lua") then
+    local f = io.open("/home/shop_items.lua", "w")
+    f:write("return { sellItems = {\n    { internalName = \"minecraft:coal\", displayName = \"Уголь\", price = 5.0 },\n    { internalName = \"customnpcs:npcMoney\", displayName = \"ЭМЫ\", price = 1.0 }\n} }\n")
+    f:close()
+    print("Создан пример /home/shop_items.lua")
 end
 
 local feedbacks = {}
@@ -287,7 +301,7 @@ local showShopDenied = false
 local tempMessage = ""
 local tempMessageTimer = nil
 
--- ========================= БАРТЕР (НОВЫЙ МОДУЛЬ) ===========================
+-- ========================= БАРТЕР ===========================
 local BARTER_OFFERS_FILE = "/home/barter_offers.dat"
 local barterOffers = {}
 local barterScreenMode = "list"
@@ -317,9 +331,16 @@ end
 
 local function getPlayerInventoryList()
     local pimAddr = getPimAddr()
-    if not pimAddr then return {} end
+    if not pimAddr then
+        print("PIM не найден")
+        return {}
+    end
     local items = {}
-    for slot = 1, 36 do
+    local size = 36
+    if component.invoke(pimAddr, "getSizeInventory") then
+        size = component.invoke(pimAddr, "getSizeInventory")
+    end
+    for slot = 1, size do
         local stack = component.invoke(pimAddr, "getStackInSlot", slot)
         if stack and stack.size and stack.size > 0 then
             local rawName = stack.name or stack.label or ""
@@ -404,11 +425,10 @@ local function drawTempMessage()
     end
 end
 
--- Отрисовка экрана бартера (баланс убран)
 local function drawBarterScreen()
     clear()
     drawScreenBorder()
-    -- drawBalanceLine(3, 1)  -- УБРАНО
+    -- Баланс не показываем в бартере
     gpu.setForeground(colors.accent_secondary)
     drawCenteredText(3, "=== БАРТЕР (обмен предметами) ===")
 
@@ -456,11 +476,12 @@ local function drawBarterScreen()
                         y = y + 1
                     end
                 end
-                drawCenteredText(22, "Нажми номер предмета", colors.inactive)
+                drawCenteredText(23, "Нажми номер предмета (1,2,3...)", colors.accent_main)
             end
         elseif barterCreateStep == 2 then
             drawCenteredText(10, "Введи КОЛИЧЕСТВО (цифры, затем Enter)", colors.accent_main)
             drawCenteredText(12, "Текущее значение: " .. barterCreateData.offerQty, colors.text_bright)
+            drawCenteredText(23, "Введи количество цифрами и нажми Enter", colors.accent_main)
         elseif barterCreateStep == 3 then
             drawCenteredText(10, "Введи ID желаемого предмета", colors.accent_main)
             drawCenteredText(12, "Пример: minecraft:iron_ingot", colors.inactive)
@@ -468,10 +489,11 @@ local function drawBarterScreen()
             gpu.fill(10, 14, 60, 1, " ")
             gpu.setForeground(colors.text_bright)
             gpu.set(11, 14, barterTempInput .. "_")
-            drawCenteredText(22, "Нажми Enter для подтверждения", colors.inactive)
+            drawCenteredText(23, "Введи ID предмета (например: minecraft:iron_ingot)", colors.accent_main)
         elseif barterCreateStep == 4 then
             drawCenteredText(10, "Введи ЖЕЛАЕМОЕ КОЛИЧЕСТВО", colors.accent_main)
             drawCenteredText(12, "Текущее: " .. barterCreateData.wantQty, colors.text_bright)
+            drawCenteredText(23, "Введи желаемое количество и Enter", colors.accent_main)
         end
         local cancelBtn = {x=5, y=24, xs=14, ys=1, text="[ ОТМЕНА ]", bg=colors.bg_button, fg=colors.error}
         drawFlexButton(cancelBtn)
@@ -508,6 +530,7 @@ local function finishBarterCreation()
     barterTempInput = ""
     drawBarterScreen()
 end
+
 -- ================= КОНЕЦ МОДУЛЯ БАРТЕРА =====================================
 
 local function updateSelectorDisplay(item)
@@ -602,6 +625,7 @@ end
 local function drawFeedbacksList()
     clear()
     drawScreenBorder()
+
     local line = string.rep("═", 15)
     local title = " ОТЗЫВЫ "
     local line2 = string.rep("═", 15)
@@ -705,6 +729,7 @@ local function drawFeedbackInputScreen()
     drawTempMessage()
 end
 
+-- КНОПКИ МЕНЮ (убрана "Полезности")
 local menuButtons = {
     shop    = {x=32, xs=20, y=9,  ys=3, text="🛒 Магазин",     tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main},
     barter  = {x=32, xs=20, y=13, ys=3, text="🔄 Бартер",      tx=5, ty=1, bg=colors.bg_button, fg=colors.accent_main},
@@ -2002,6 +2027,7 @@ local function goToBarter()
 end
 
 local function goToUtility()
+    -- больше не используется, но оставлено для совместимости
     currentScreen = "utility"
     clear()
     drawCenteredText(8, "Полезности (в разработке)", colors.success)
@@ -2309,9 +2335,6 @@ local function main()
                             end
                         elseif name == "barter" then
                             goToBarter()
-                        elseif name == "util" then
-                            showShopDenied = false
-                            goToUtility()
                         elseif name == "account" then
                             showShopDenied = false
                             goToAccount()
@@ -2370,10 +2393,6 @@ local function main()
                 if isButtonClicked(backButton, x, y) then
                     currentScreen = "shop"
                     drawShopMenu()
-                end
-            elseif currentScreen == "utility" then
-                if isButtonClicked(backButton, x, y) then
-                    goBackToMenu()
                 end
             elseif currentScreen == "report" then
                 if isButtonClicked(backButton, x, y) then
