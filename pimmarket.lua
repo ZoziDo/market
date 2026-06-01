@@ -912,6 +912,20 @@ local function drawBalanceLine(x, y)
     gpu.set(x + unicode.len("Баланс: ") + unicode.len(coinStr) + unicode.len(" | "), y, emaStr)
 end
 
+local function getFilteredItems()
+    local filtered = {}
+    local searchLower = string.lower(shopSearch)
+    for _, item in ipairs(shopItems) do
+        if string.find(string.lower(item.displayName or item.internalName), searchLower, 1, true) then
+            table.insert(filtered, item)
+        end
+    end
+    table.sort(filtered, function(a, b)
+        return sortableName(a.displayName) < sortableName(b.displayName)
+    end)
+    return filtered
+end
+
 local function drawBuyStatic()
     clear()
     drawScreenBorder()
