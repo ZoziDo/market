@@ -70,14 +70,15 @@ end
 
 local function getFilteredItems()
     local filtered = {}
-    local searchLower = string.lower(shopSearch)
+    local searchLower = string.lower(shopSearch or "")
     for _, item in ipairs(shopItems) do
-        if string.find(string.lower(item.displayName or item.internalName), searchLower, 1, true) then
+        local itemName = item.displayName or item.internalName or ""
+        if type(itemName) == "string" and string.find(string.lower(itemName), searchLower, 1, true) then
             table.insert(filtered, item)
         end
     end
     table.sort(filtered, function(a, b)
-        return sortableName(a.displayName) < sortableName(b.displayName)
+        return sortableName(a.displayName or "") < sortableName(b.displayName or "")
     end)
     return filtered
 end
@@ -127,7 +128,7 @@ local function safeDoFile(path)
 end
 
 local function sortableName(name)
-    if not name then return "" end
+    if not name or type(name) ~= "string" then return "" end
     local lower = string.lower(name)
     local result = lower:gsub("(%d+)", function(d)
         return string.format("%08d", tonumber(d))
@@ -393,6 +394,19 @@ local function extractToME(targetName, amount, targetDamage)
     return extracted
 end
 
+local function drawTempMessage()
+    if tempMessage ~= "" then
+        gpu.setBackground(colors.bg_main)
+        gpu.fill(1, 25, 80, 1, " ")
+        gpu.setForeground(colors.success)
+        local x = math.floor((80 - unicode.len(tempMessage)) / 2) + 1
+        gpu.set(x, 25, tempMessage)
+    else
+        gpu.setBackground(colors.bg_main)
+        gpu.fill(1, 25, 80, 1, " ")
+    end
+end
+
 -- Отрисовка экрана бартера
 local function drawBarterScreen()
     clear()
@@ -552,19 +566,6 @@ local function drawBigTitle()
     local shopX = math.floor((80 - #shopLines[1]) / 2) + shopOffset
     for i, line in ipairs(shopLines) do
         gpu.set(shopX, 10 + i, line)
-    end
-end
-
-local function drawTempMessage()
-    if tempMessage ~= "" then
-        gpu.setBackground(colors.bg_main)
-        gpu.fill(1, 25, 80, 1, " ")
-        gpu.setForeground(colors.success)
-        local x = math.floor((80 - unicode.len(tempMessage)) / 2) + 1
-        gpu.set(x, 25, tempMessage)
-    else
-        gpu.setBackground(colors.bg_main)
-        gpu.fill(1, 25, 80, 1, " ")
     end
 end
 
