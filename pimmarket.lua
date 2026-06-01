@@ -3186,4 +3186,9 @@ local function drawCrashPopup(errText)
     end
 end
 
-main()
+while true do
+    local ok, err = pcall(main)
+    if not ok then
+        pcall(drawCrashPopup, tostring(err))
+    end
+end
