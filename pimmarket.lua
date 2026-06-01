@@ -56,12 +56,14 @@ local colors = {
 local function drawBalanceLine(x, y)
     gpu.setForeground(colors.white)
     gpu.set(x, y, "Баланс: ")
-    local coinStr = string.format("%.2f", coinBalance) .. " Coina ₵"
+    local coin = coinBalance or 0.0
+    local ema = emaBalance or 0.0
+    local coinStr = string.format("%.2f", coin) .. " Coina ₵"
     gpu.setForeground(colors.accent_main)
     gpu.set(x + unicode.len("Баланс: "), y, coinStr)
     gpu.setForeground(colors.white)
     gpu.set(x + unicode.len("Баланс: ") + unicode.len(coinStr), y, " | ")
-    local emaStr = "ЭМЫ: " .. string.format("%.2f", emaBalance) .. " ۞"
+    local emaStr = "ЭМЫ: " .. string.format("%.2f", ema) .. " ۞"
     gpu.setForeground(colors.tomato)
     gpu.set(x + unicode.len("Баланс: ") + unicode.len(coinStr) + unicode.len(" | "), y, emaStr)
 end
