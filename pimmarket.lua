@@ -62,6 +62,11 @@ local function drawCenteredText(y, text, color)
 end
 
 local function drawBalanceLine(x, y)
+    if coinBalance == nil or emaBalance == nil then
+        gpu.setForeground(colors.white)
+        gpu.set(x, y, "Баланс: загрузка...")
+        return
+    end
     gpu.setForeground(colors.white)
     gpu.set(x, y, "Баланс: ")
     local coinStr = string.format("%.2f", coinBalance) .. " Coina ₵"
