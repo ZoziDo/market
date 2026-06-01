@@ -53,6 +53,33 @@ local colors = {
     white = 0xFFFFFF
 }
 
+local function drawBalanceLine(x, y)
+    gpu.setForeground(colors.white)
+    gpu.set(x, y, "Баланс: ")
+    local coinStr = string.format("%.2f", coinBalance) .. " Coina ₵"
+    gpu.setForeground(colors.accent_main)
+    gpu.set(x + unicode.len("Баланс: "), y, coinStr)
+    gpu.setForeground(colors.white)
+    gpu.set(x + unicode.len("Баланс: ") + unicode.len(coinStr), y, " | ")
+    local emaStr = "ЭМЫ: " .. string.format("%.2f", emaBalance) .. " ۞"
+    gpu.setForeground(colors.tomato)
+    gpu.set(x + unicode.len("Баланс: ") + unicode.len(coinStr) + unicode.len(" | "), y, emaStr)
+end
+
+local function getFilteredItems()
+    local filtered = {}
+    local searchLower = string.lower(shopSearch)
+    for _, item in ipairs(shopItems) do
+        if string.find(string.lower(item.displayName or item.internalName), searchLower, 1, true) then
+            table.insert(filtered, item)
+        end
+    end
+    table.sort(filtered, function(a, b)
+        return sortableName(a.displayName) < sortableName(b.displayName)
+    end)
+    return filtered
+end
+
 local function clear()
     gpu.setBackground(colors.bg_main)
     gpu.fill(1, 1, 80, 25, " ")
@@ -898,33 +925,6 @@ end
 -- ВНИМАНИЕ: в оригинале дальше идёт функция extractToME, удаляем её (уже есть выше). Также есть функция drawBalanceLine и т.д. Оставляем как есть.
 
 -- ============ ПРОДОЛЖЕНИЕ ОРИГИНАЛЬНОГО КОДА (без дублирования) ============
-
-local function drawBalanceLine(x, y)
-    gpu.setForeground(colors.white)
-    gpu.set(x, y, "Баланс: ")
-    local coinStr = string.format("%.2f", coinBalance) .. " Coina ₵"
-    gpu.setForeground(colors.accent_main)
-    gpu.set(x + unicode.len("Баланс: "), y, coinStr)
-    gpu.setForeground(colors.white)
-    gpu.set(x + unicode.len("Баланс: ") + unicode.len(coinStr), y, " | ")
-    local emaStr = "ЭМЫ: " .. string.format("%.2f", emaBalance) .. " ۞"
-    gpu.setForeground(colors.tomato)
-    gpu.set(x + unicode.len("Баланс: ") + unicode.len(coinStr) + unicode.len(" | "), y, emaStr)
-end
-
-local function getFilteredItems()
-    local filtered = {}
-    local searchLower = string.lower(shopSearch)
-    for _, item in ipairs(shopItems) do
-        if string.find(string.lower(item.displayName or item.internalName), searchLower, 1, true) then
-            table.insert(filtered, item)
-        end
-    end
-    table.sort(filtered, function(a, b)
-        return sortableName(a.displayName) < sortableName(b.displayName)
-    end)
-    return filtered
-end
 
 local function drawBuyStatic()
     clear()
