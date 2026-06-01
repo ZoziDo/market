@@ -270,6 +270,50 @@ local showShopDenied = false
 local tempMessage = ""
 local tempMessageTimer = nil
 
+local function drawTempMessage()
+    if tempMessage ~= "" then
+        gpu.setBackground(colors.bg_main)
+        gpu.fill(1, 25, 80, 1, " ")
+        gpu.setForeground(colors.success)
+        local x = math.floor((80 - unicode.len(tempMessage)) / 2) + 1
+        gpu.set(x, 25, tempMessage)
+    else
+        gpu.setBackground(colors.bg_main)
+        gpu.fill(1, 25, 80, 1, " ")
+    end
+end
+
+local function showTempMessage(msg, duration)
+    tempMessage = msg
+    if tempMessageTimer then
+        event.cancel(tempMessageTimer)
+    end
+    tempMessageTimer = event.timer(duration, function()
+        tempMessage = ""
+        tempMessageTimer = nil
+        if currentScreen == "shop_buy" or currentScreen == "shop_sell" then
+            drawBuyStatic()
+            drawBuyItemsList()
+            drawBuyButtons()
+        elseif currentScreen == "menu" then
+            drawMainMenu()
+        elseif currentScreen == "shop" then
+            drawShopMenu()
+        elseif currentScreen == "account" then
+            drawAccount({balance=coinBalance, emaBalance=emaBalance, transactions=playerTransactions, regDate=playerRegDate, agreed=playerAgreed})
+        elseif currentScreen == "feedbacks" then
+            drawFeedbacksList()
+        elseif currentScreen == "quest_details" and currentQuestForDetails then
+            drawQuestDetailsScreen(currentQuestForDetails)
+        elseif currentScreen == "shop_bundle" then
+            drawQuestListScreen()
+        else
+            drawTempMessage()
+        end
+    end)
+    drawTempMessage()
+end
+
 -- ========== НОВАЯ СИСТЕМА КВЕСТОВ ==========
 local questsList = {}
 local selectedQuest = nil
@@ -523,19 +567,6 @@ local function performBuyQuest(quest)
     drawQuestListScreen()
 end
 
-local function drawTempMessage()
-    if tempMessage ~= "" then
-        gpu.setBackground(colors.bg_main)
-        gpu.fill(1, 25, 80, 1, " ")
-        gpu.setForeground(colors.success)
-        local x = math.floor((80 - unicode.len(tempMessage)) / 2) + 1
-        gpu.set(x, 25, tempMessage)
-    else
-        gpu.setBackground(colors.bg_main)
-        gpu.fill(1, 25, 80, 1, " ")
-    end
-end
-
 -- ========== ОТРИСОВКА ЭКРАНА КВЕСТОВ (СПИСОК) ==========
 local function drawQuestStatic()
     clear()
@@ -754,37 +785,6 @@ local function drawBigTitle()
     for i, line in ipairs(shopLines) do
         gpu.set(shopX, 10 + i, line)
     end
-end
-
-local function showTempMessage(msg, duration)
-    tempMessage = msg
-    if tempMessageTimer then
-        event.cancel(tempMessageTimer)
-    end
-    tempMessageTimer = event.timer(duration, function()
-        tempMessage = ""
-        tempMessageTimer = nil
-        if currentScreen == "shop_buy" or currentScreen == "shop_sell" then
-            drawBuyStatic()
-            drawBuyItemsList()
-            drawBuyButtons()
-        elseif currentScreen == "menu" then
-            drawMainMenu()
-        elseif currentScreen == "shop" then
-            drawShopMenu()
-        elseif currentScreen == "account" then
-            drawAccount({balance=coinBalance, emaBalance=emaBalance, transactions=playerTransactions, regDate=playerRegDate, agreed=playerAgreed})
-        elseif currentScreen == "feedbacks" then
-            drawFeedbacksList()
-        elseif currentScreen == "quest_details" and currentQuestForDetails then
-            drawQuestDetailsScreen(currentQuestForDetails)
-        elseif currentScreen == "shop_bundle" then
-            drawQuestListScreen()
-        else
-            drawTempMessage()
-        end
-    end)
-    drawTempMessage()
 end
 
 local function loadFeedbacksFromServer()
