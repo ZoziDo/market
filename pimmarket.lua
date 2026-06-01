@@ -1,8 +1,3 @@
--- ============================================================================
--- МАГАЗИН + БАРТЕР (обмен предметами)
--- Финальная исправленная версия
--- ============================================================================
-
 local component = require("component")
 local event = require("event")
 local gpu = component.gpu
@@ -52,37 +47,6 @@ local colors = {
     white = 0xFFFFFF
 }
 
-local function drawBalanceLine(x, y)
-    gpu.setForeground(colors.white)
-    gpu.set(x, y, "Баланс: ")
-    local coin = coinBalance or 0.0
-    local ema = emaBalance or 0.0
-    local coinStr = string.format("%.2f", coin) .. " Coina ₵"
-    gpu.setForeground(colors.accent_main)
-    gpu.set(x + unicode.len("Баланс: "), y, coinStr)
-    gpu.setForeground(colors.white)
-    gpu.set(x + unicode.len("Баланс: ") + unicode.len(coinStr), y, " | ")
-    local emaStr = "ЭМЫ: " .. string.format("%.2f", ema) .. " ۞"
-    gpu.setForeground(colors.tomato)
-    gpu.set(x + unicode.len("Баланс: ") + unicode.len(coinStr) + unicode.len(" | "), y, emaStr)
-end
-
-local function getFilteredItems()
-    local filtered = {}
-    local searchLower = string.lower(shopSearch or "")
-    if not shopItems then return filtered end
-    for _, item in ipairs(shopItems) do
-        local itemName = (item.displayName or item.internalName or "")
-        if type(itemName) == "string" and string.find(string.lower(itemName), searchLower, 1, true) then
-            table.insert(filtered, item)
-        end
-    end
-    table.sort(filtered, function(a, b)
-        return sortableName(a.displayName or "") < sortableName(b.displayName or "")
-    end)
-    return filtered
-end
-
 local function clear()
     gpu.setBackground(colors.bg_main)
     gpu.fill(1, 1, 80, 25, " ")
@@ -128,26 +92,12 @@ local function safeDoFile(path)
 end
 
 local function sortableName(name)
-    if not name or type(name) ~= "string" then return "" end
+    if not name then return "" end
     local lower = string.lower(name)
     local result = lower:gsub("(%d+)", function(d)
         return string.format("%08d", tonumber(d))
     end)
     return result
-end
-
--- Создание файлов-примеров, если их нет
-if not fs.exists("/home/buy_items.lua") then
-    local f = io.open("/home/buy_items.lua", "w")
-    f:write("return {\n    { internalName = \"minecraft:diamond\", displayName = \"Алмаз\", price_coin = 100.0 },\n    { internalName = \"minecraft:iron_ingot\", displayName = \"Железный слиток\", price_coin = 10.0 }\n}\n")
-    f:close()
-    print("Создан пример /home/buy_items.lua")
-end
-if not fs.exists("/home/shop_items.lua") then
-    local f = io.open("/home/shop_items.lua", "w")
-    f:write("return { sellItems = {\n    { internalName = \"minecraft:coal\", displayName = \"Уголь\", price = 5.0 },\n    { internalName = \"customnpcs:npcMoney\", displayName = \"ЭМЫ\", price = 1.0 }\n} }\n")
-    f:close()
-    print("Создан пример /home/shop_items.lua")
 end
 
 local feedbacks = {}
@@ -190,7 +140,7 @@ local function drawScreenBorder()
 end
 
 local shopData = safeDoFile("/home/shop_items.lua")
-local sellItems = shopData.sellItems or {}
+local sellItems = shopData.sellItems
 local vanillaItems = shopData.vanillaItems or {}
 
 local buyItemsData = safeDoFile("/home/buy_items.lua")
@@ -301,238 +251,6 @@ local showShopDenied = false
 local tempMessage = ""
 local tempMessageTimer = nil
 
--- ========================= БАРТЕР ===========================
-local BARTER_OFFERS_FILE = "/home/barter_offers.dat"
-local barterOffers = {}
-local barterScreenMode = "list"
-local barterSelectedOffer = nil
-local barterCreateStep = 1
-local barterCreateData = { offerItem = nil, offerDamage = 0, offerQty = 0, wantItem = nil, wantDamage = 0, wantQty = 0 }
-local barterTempInput = ""
-
-local function loadBarterOffers()
-    if not fs.exists(BARTER_OFFERS_FILE) then return {} end
-    local f = io.open(BARTER_OFFERS_FILE, "r")
-    if not f then return {} end
-    local content = f:read("*a")
-    f:close()
-    local ok, data = pcall(load, "return " .. content)
-    if not ok then return {} end
-    return data()
-end
-
-local function saveBarterOffers(offers)
-    local f = io.open(BARTER_OFFERS_FILE, "w")
-    if f then
-        f:write(serialization.serialize(offers))
-        f:close()
-    end
-end
-
-local function getPlayerInventoryList()
-    local pimAddr = getPimAddr()
-    if not pimAddr then
-        print("PIM не найден")
-        return {}
-    end
-    local items = {}
-    local size = 36
-    if component.invoke(pimAddr, "getSizeInventory") then
-        size = component.invoke(pimAddr, "getSizeInventory")
-    end
-    for slot = 1, size do
-        local stack = component.invoke(pimAddr, "getStackInSlot", slot)
-        if stack and stack.size and stack.size > 0 then
-            local rawName = stack.name or stack.label or ""
-            local cleanName = rawName:gsub("§.", "")
-            local damage = stack.damage or 0
-            local key = cleanName .. ":" .. damage
-            if not items[key] then
-                items[key] = {
-                    name = cleanName,
-                    displayName = stack.label or cleanName,
-                    damage = damage,
-                    qty = 0,
-                    slot = slot
-                }
-            end
-            items[key].qty = items[key].qty + stack.size
-        end
-    end
-    local result = {}
-    for _, v in pairs(items) do
-        table.insert(result, v)
-    end
-    return result
-end
-
-local function giveToPlayer(itemName, amount, damage)
-    local pimAddr = getPimAddr()
-    if not pimAddr then return false end
-    damage = damage or 0
-    local id = itemName
-    if not id:find(":") then id = "minecraft:" .. id end
-    local stack = { id = id, dmg = damage, size = amount }
-    for slot = 1, 36 do
-        local existing = component.invoke(pimAddr, "getStackInSlot", slot)
-        if not existing or existing.size == 0 then
-            local ok, res = pcall(component.invoke, pimAddr, "pushItem", "down", slot, stack)
-            return ok and res
-        end
-    end
-    return false
-end
-
-local function extractToME(targetName, amount, targetDamage)
-    local pimAddr = getPimAddr()
-    if not pimAddr or amount <= 0 then return 0 end
-    targetDamage = targetDamage or 0
-    local extracted = 0
-    for slot = 1, 36 do
-        if extracted >= amount then break end
-        local stack = component.invoke(pimAddr, "getStackInSlot", slot)
-        if stack then
-            local qty = stack.size or stack.qty or 0
-            if qty > 0 then
-                local rawName = stack.name or stack.label or ""
-                local cleanName = rawName:gsub("§.", "")
-                local damage = stack.damage or 0
-                if namesMatch(cleanName, targetName) and damage == targetDamage then
-                    local toTake = math.min(qty, amount - extracted)
-                    if toTake > 0 then
-                        local moved = component.invoke(pimAddr, "pushItem", PUSH_DIRECTION, slot, toTake)
-                        if type(moved) == "number" and moved > 0 then
-                            extracted = extracted + moved
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return extracted
-end
-
-local function drawTempMessage()
-    if tempMessage ~= "" then
-        gpu.setBackground(colors.bg_main)
-        gpu.fill(1, 25, 80, 1, " ")
-        gpu.setForeground(colors.success)
-        local x = math.floor((80 - unicode.len(tempMessage)) / 2) + 1
-        gpu.set(x, 25, tempMessage)
-    else
-        gpu.setBackground(colors.bg_main)
-        gpu.fill(1, 25, 80, 1, " ")
-    end
-end
-
-local function drawBarterScreen()
-    clear()
-    drawScreenBorder()
-    -- Баланс не показываем в бартере
-    gpu.setForeground(colors.accent_secondary)
-    drawCenteredText(3, "=== БАРТЕР (обмен предметами) ===")
-
-    if barterScreenMode == "list" then
-        gpu.setForeground(colors.text_main)
-        if #barterOffers == 0 then
-            drawCenteredText(8, "Нет активных предложений.", colors.inactive)
-            drawCenteredText(9, "Нажми [СОЗДАТЬ], чтобы выставить лот.", colors.accent_main)
-        else
-            local y = 6
-            for i, offer in ipairs(barterOffers) do
-                if y > 20 then break end
-                local line = string.format("%d. %s x%d → %s x%d (от %s)",
-                    i, offer.offerItem, offer.offerQty, offer.wantItem, offer.wantQty, offer.seller)
-                gpu.setForeground((offer.seller == currentPlayer) and colors.accent_secondary or colors.text_bright)
-                gpu.set(5, y, line)
-                y = y + 1
-            end
-        end
-
-        local createBtn = {x=5, y=24, xs=14, ys=1, text="[ СОЗДАТЬ ]", bg=colors.bg_button, fg=colors.success}
-        local backBtn   = {x=60, y=24, xs=12, ys=1, text="[ НАЗАД ]", bg=colors.bg_button, fg=colors.accent_secondary}
-        drawFlexButton(createBtn)
-        drawFlexButton(backBtn)
-
-        if barterSelectedOffer then
-            local tradeBtn = {x=30, y=24, xs=16, ys=1, text="[ ОБМЕНЯТЬ ]", bg=colors.bg_button, fg=colors.accent_main}
-            drawFlexButton(tradeBtn)
-        end
-    else
-        drawCenteredText(6, "СОЗДАНИЕ ПРЕДЛОЖЕНИЯ", colors.accent_secondary)
-        if barterCreateStep == 1 then
-            local inv = getPlayerInventoryList()
-            if #inv == 0 then
-                drawCenteredText(10, "В твоём инвентаре нет предметов!", colors.error)
-                drawCenteredText(11, "Положи что-нибудь в инвентарь и встань на PIM.", colors.text_main)
-            else
-                local y = 8
-                gpu.setForeground(colors.text_main)
-                gpu.set(5, y, "Ты предлагаешь:")
-                y = y + 1
-                for idx, item in ipairs(inv) do
-                    if y < 20 then
-                        gpu.set(7, y, string.format("%d. %s (x%d)", idx, item.displayName, item.qty))
-                        y = y + 1
-                    end
-                end
-                drawCenteredText(23, "Нажми номер предмета (1,2,3...)", colors.accent_main)
-            end
-        elseif barterCreateStep == 2 then
-            drawCenteredText(10, "Введи КОЛИЧЕСТВО (цифры, затем Enter)", colors.accent_main)
-            drawCenteredText(12, "Текущее значение: " .. barterCreateData.offerQty, colors.text_bright)
-            drawCenteredText(23, "Введи количество цифрами и нажми Enter", colors.accent_main)
-        elseif barterCreateStep == 3 then
-            drawCenteredText(10, "Введи ID желаемого предмета", colors.accent_main)
-            drawCenteredText(12, "Пример: minecraft:iron_ingot", colors.inactive)
-            gpu.setBackground(colors.black_fon)
-            gpu.fill(10, 14, 60, 1, " ")
-            gpu.setForeground(colors.text_bright)
-            gpu.set(11, 14, barterTempInput .. "_")
-            drawCenteredText(23, "Введи ID предмета (например: minecraft:iron_ingot)", colors.accent_main)
-        elseif barterCreateStep == 4 then
-            drawCenteredText(10, "Введи ЖЕЛАЕМОЕ КОЛИЧЕСТВО", colors.accent_main)
-            drawCenteredText(12, "Текущее: " .. barterCreateData.wantQty, colors.text_bright)
-            drawCenteredText(23, "Введи желаемое количество и Enter", colors.accent_main)
-        end
-        local cancelBtn = {x=5, y=24, xs=14, ys=1, text="[ ОТМЕНА ]", bg=colors.bg_button, fg=colors.error}
-        drawFlexButton(cancelBtn)
-    end
-    drawTempMessage()
-end
-
-local function finishBarterCreation()
-    if barterCreateData.offerItem and barterCreateData.offerQty > 0 and barterCreateData.wantItem and barterCreateData.wantQty > 0 then
-        local extracted = extractToME(barterCreateData.offerItem, barterCreateData.offerQty, barterCreateData.offerDamage)
-        if extracted < barterCreateData.offerQty then
-            showTempMessage("Не удалось изъять предмет из инвентаря", 2)
-            barterScreenMode = "list"
-            barterCreateStep = 1
-            return
-        end
-        table.insert(barterOffers, {
-            seller = currentPlayer,
-            offerItem = barterCreateData.offerItem,
-            offerDamage = barterCreateData.offerDamage,
-            offerQty = barterCreateData.offerQty,
-            wantItem = barterCreateData.wantItem,
-            wantDamage = barterCreateData.wantDamage,
-            wantQty = barterCreateData.wantQty
-        })
-        saveBarterOffers(barterOffers)
-        showTempMessage("Лот выставлен!", 2)
-    else
-        showTempMessage("Не все данные заполнены", 2)
-    end
-    barterScreenMode = "list"
-    barterCreateStep = 1
-    barterCreateData = { offerItem = nil, offerDamage = 0, offerQty = 0, wantItem = nil, wantDamage = 0, wantQty = 0 }
-    barterTempInput = ""
-    drawBarterScreen()
-end
-
--- ================= КОНЕЦ МОДУЛЯ БАРТЕРА =====================================
-
 local function updateSelectorDisplay(item)
     if not selector then return end
     if not item then
@@ -584,6 +302,19 @@ local function drawBigTitle()
     end
 end
 
+local function drawTempMessage()
+    if tempMessage ~= "" then
+        gpu.setBackground(colors.bg_main)
+        gpu.fill(1, 25, 80, 1, " ")
+        gpu.setForeground(colors.success)
+        local x = math.floor((80 - unicode.len(tempMessage)) / 2) + 1
+        gpu.set(x, 25, tempMessage)
+    else
+        gpu.setBackground(colors.bg_main)
+        gpu.fill(1, 25, 80, 1, " ")
+    end
+end
+
 local function showTempMessage(msg, duration)
     tempMessage = msg
     if tempMessageTimer then
@@ -604,8 +335,6 @@ local function showTempMessage(msg, duration)
             drawAccount({balance=coinBalance, emaBalance=emaBalance, transactions=playerTransactions, regDate=playerRegDate, agreed=playerAgreed})
         elseif currentScreen == "feedbacks" then
             drawFeedbacksList()
-        elseif currentScreen == "barter" then
-            drawBarterScreen()
         else
             drawTempMessage()
         end
@@ -648,6 +377,7 @@ local function drawFeedbacksList()
         local startIdx = (feedbacksPage - 1) * 3 + 1
         local endIdx = math.min(startIdx + 2, #feedbacks)
         local y = 5
+
         for i = startIdx, endIdx do
             local fb = feedbacks[i]
             if fb then
@@ -655,17 +385,21 @@ local function drawFeedbacksList()
                 gpu.fill(5, y, 70, 3, " ")
                 gpu.setBackground(colors.bg_secondary)
                 gpu.fill(6, y+1, 68, 1, " ")
+
                 gpu.setForeground(colors.accent_main)
                 gpu.set(7, y+1, fb.name)
                 gpu.setForeground(colors.inactive)
                 local timeStr = fb.time or ""
                 gpu.set(7 + unicode.len(fb.name) + 2, y+1, timeStr)
+
                 gpu.setForeground(colors.text_bright)
                 local shortText = unicode.sub(fb.text, 1, 62)
                 gpu.set(7, y+2, shortText)
+
                 y = y + 4
             end
         end
+
         feedbacksTotalPages = math.max(1, math.ceil(#feedbacks / 3))
         local pageInfo = "Страница " .. feedbacksPage .. " из " .. feedbacksTotalPages
         local x = math.floor((80 - unicode.len(pageInfo)) / 2) + 1 + 1
@@ -687,6 +421,7 @@ local function drawFeedbacksList()
         drawFlexButton(prevBtn)
         drawFlexButton(nextBtn)
     end
+
     drawTempMessage()
 end
 
@@ -700,10 +435,12 @@ local function drawFeedbackInputScreen()
     clear()
     drawScreenBorder()
     drawCenteredText(4, "ОСТАВИТЬ ОТЗЫВ", colors.accent_secondary)
+
     gpu.setForeground(colors.text_main)
     drawCenteredText(7, "Ваше имя: " .. currentPlayer, colors.accent_main)
     drawCenteredText(9, "Оставьте свой отзыв о магазине:", colors.text_main)
     drawCenteredText(10, "Ваше мнение поможет нам стать лучше!", colors.inactive)
+
     gpu.setBackground(colors.black_fon)
     gpu.fill(10, 12, 60, 3, " ")
     gpu.setForeground(colors.text_bright)
@@ -722,17 +459,18 @@ local function drawFeedbackInputScreen()
             gpu.set(11, 13, "Введите ваш отзыв...")
         end
     end
+
     local cancelBtn = {x = 20, y = 24, xs = 12, ys = 1, text = "[ ОТМЕНА ]", bg = colors.bg_button, fg = colors.error}
     local sendBtn = {x = 46, y = 24, xs = 15, ys = 1, text = "[ ОТПРАВИТЬ ]", bg = colors.bg_button, fg = colors.success}
+
     drawFlexButton(cancelBtn)
     drawFlexButton(sendBtn)
     drawTempMessage()
 end
 
--- КНОПКИ МЕНЮ (убрана "Полезности")
 local menuButtons = {
     shop    = {x=32, xs=20, y=9,  ys=3, text="🛒 Магазин",     tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main},
-    barter  = {x=32, xs=20, y=13, ys=3, text="🔄 Бартер",      tx=5, ty=1, bg=colors.bg_button, fg=colors.accent_main},
+    util    = {x=32, xs=20, y=13, ys=3, text="🛠 Полезности",   tx=5, ty=1, bg=colors.bg_button, fg=colors.accent_main},
     account = {x=32, xs=20, y=17, ys=3, text="👤 Аккаунт",      tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main}
 }
 
@@ -805,14 +543,17 @@ local function loadBuyItems()
         if blacklist[name] then goto continue end
         local qty = meItem.size or 0
         if qty == 0 then goto continue end
+
         local damage = meItem.damage or 0
         local mapKey = name .. ":" .. damage
         local mapping = buyItemMap[mapKey]
         if not mapping then goto continue end
+
         local displayName = mapping.displayName
         local priceCoin = mapping.price_coin or mapping.price or 0
         local priceEma = mapping.price_ema or 0
         if priceCoin <= 0 and priceEma <= 0 then goto continue end
+
         local key = name .. ":" .. damage
         if tempShopItems[key] then
             tempShopItems[key].qty = tempShopItems[key].qty + qty
@@ -913,6 +654,88 @@ local function scanPlayerInventory(targetName, targetDamage)
     return total
 end
 
+local function extractToME(targetName, amount, targetDamage)
+    local pimAddr = getPimAddr()
+    if not pimAddr or amount <= 0 then return 0 end
+    targetDamage = targetDamage or 0
+    local extracted = 0
+    for slot = 1, 36 do
+        if extracted >= amount then break end
+        local stack = component.invoke(pimAddr, "getStackInSlot", slot)
+        if stack then
+            local qty = stack.size or stack.qty or 0
+            if qty > 0 then
+                local rawName = stack.name or stack.label or ""
+                local cleanName = rawName:gsub("§.", "")
+                local damage = stack.damage or 0
+                if namesMatch(cleanName, targetName) and damage == targetDamage then
+                    local toTake = math.min(qty, amount - extracted)
+                    if toTake > 0 then
+                        local moved = component.invoke(pimAddr, "pushItem", PUSH_DIRECTION, slot, toTake)
+                        if type(moved) == "number" and moved > 0 then
+                            extracted = extracted + moved
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return extracted
+end
+
+local function getFilteredItems()
+    local filtered = {}
+    local searchLower = string.lower(shopSearch)
+    local searchWords = {}
+    if searchLower ~= "" then
+        for word in searchLower:gmatch("%S+") do
+            table.insert(searchWords, word)
+        end
+    end
+
+    for _, item in ipairs(shopItems) do
+        local nameLower = string.lower(item.displayName or item.internalName)
+        local matchesSearch = false
+        if #searchWords == 0 then
+            matchesSearch = true
+        else
+            for _, word in ipairs(searchWords) do
+                if string.find(nameLower, word, 1, true) then
+                    matchesSearch = true
+                    break
+                end
+            end
+        end
+        if matchesSearch then
+            table.insert(filtered, item)
+        end
+    end
+
+    table.sort(filtered, function(a, b)
+        return sortableName(a.displayName) < sortableName(b.displayName)
+    end)
+
+    maxItemWidth = 0
+    for _, item in ipairs(filtered) do
+        local len = unicode.len(item.displayName or item.internalName or "")
+        if len > maxItemWidth then maxItemWidth = len end
+    end
+    return filtered
+end
+
+local function drawBalanceLine(x, y)
+    gpu.setForeground(colors.white)
+    gpu.set(x, y, "Баланс: ")
+    local coinStr = string.format("%.2f", coinBalance) .. " Coina ₵"
+    gpu.setForeground(colors.accent_main)
+    gpu.set(x + unicode.len("Баланс: "), y, coinStr)
+    gpu.setForeground(colors.white)
+    gpu.set(x + unicode.len("Баланс: ") + unicode.len(coinStr), y, " | ")
+    local emaStr = "ЭМЫ: " .. string.format("%.2f", emaBalance) .. " ۞"
+    gpu.setForeground(colors.tomato)
+    gpu.set(x + unicode.len("Баланс: ") + unicode.len(coinStr) + unicode.len(" | "), y, emaStr)
+end
+
 local function drawBuyStatic()
     clear()
     drawScreenBorder()
@@ -960,6 +783,7 @@ local function drawBuyStatic()
         gpu.set(65, 5, "Цена")
     end
     gpu.setBackground(colors.bg_main)
+
     drawTempMessage()
 end
 
@@ -1057,7 +881,7 @@ local function drawScrollBar()
 end
 
 local function drawBuyItemsList()
-    filteredItems = getFilteredItems() or {}
+    filteredItems = getFilteredItems()
     local maxScroll = math.max(1, #filteredItems - visibleRows + 1)
     listScroll = math.max(1, math.min(listScroll, maxScroll))
 
@@ -1160,6 +984,7 @@ local function drawPurchaseScreen()
     local totalCoin = (purchaseItem.priceCoin or 0) * purchaseQuantity
     local totalEma = (purchaseItem.priceEma or 0) * purchaseQuantity
 
+    -- На сумму (Coina и ЭМЫ на отдельных строках)
     gpu.setForeground(colors.success)
     gpu.set(3, 5, "На сумму: ")
     local sumY = 5
@@ -1173,6 +998,7 @@ local function drawPurchaseScreen()
         gpu.set(14, sumY, string.format("%.2f", totalEma) .. " ۞")
     end
 
+    -- Цена за штуку (Coina и ЭМЫ на отдельных строках)
     gpu.setForeground(colors.success)
     gpu.set(55, 5, "Цена: ")
     local priceY = 5
@@ -1253,23 +1079,30 @@ local function drawSellPopup()
     local popupHeight = 10
     local popupX = math.floor((80 - popupWidth) / 2)
     local popupY = 10
+
     gpu.setBackground(colors.black_fon)
     gpu.fill(popupX, popupY+2, popupWidth, popupHeight-4, " ")
     gpu.fill(popupX+1, popupY+1, popupWidth-2, popupHeight-2, " ")
+
     drawPopupBorder(popupX, popupY, popupWidth, popupHeight, colors.accent_secondary)
+
     local name = sellConfirmItem.displayName
     local totalFound = foundAmount
     local value = totalFound * sellConfirmItem.price
+
     gpu.setForeground(colors.text_bright)
     gpu.set(popupX+14, popupY, "Подтверждение")
+
     gpu.setForeground(colors.success)
     gpu.set(popupX+3, popupY+3, "Магазин заберёт: ")
     gpu.setForeground(colors.text_bright)
     gpu.set(popupX+3 + unicode.len("Магазин заберёт: "), popupY+3, tostring(totalFound))
+
     gpu.setForeground(colors.success)
     gpu.set(popupX+3, popupY+4, name .. " x")
     gpu.setForeground(colors.text_bright)
     gpu.set(popupX+3 + unicode.len(name .. " x"), popupY+4, tostring(totalFound))
+
     gpu.setForeground(colors.success)
     gpu.set(popupX+3, popupY+5, "Вы получите: ")
     if sellConfirmItem.internalName == "customnpcs:npcMoney" then
@@ -1279,6 +1112,7 @@ local function drawSellPopup()
         gpu.setForeground(colors.accent_main)
         gpu.set(popupX+3 + unicode.len("Вы получите: "), popupY+5, string.format("%.2f", value) .. " ₵")
     end
+
     local yesBtn = {x=popupX+5, y=popupY+7, xs=13, ys=1, text="[ Принять ]", bg=colors.bg_button, fg=colors.success}
     local noBtn  = {x=popupX+popupWidth-16, y=popupY+7, xs=12, ys=1, text="[ Отмена ]", bg=colors.bg_button, fg=colors.error}
     drawFlexButton(yesBtn)
@@ -1291,21 +1125,26 @@ local function drawInsufficientPopup()
     local popupHeight = 11
     local popupX = math.floor((80 - popupWidth) / 2)
     local popupY = 7
+
     gpu.setBackground(colors.black_fon)
     gpu.fill(popupX, popupY, popupWidth, popupHeight, " ")
     gpu.fill(popupX+1, popupY+1, popupWidth-2, popupHeight-2, " ")
     drawPopupBorder(popupX, popupY, popupWidth, popupHeight, colors.error)
+
     gpu.setForeground(colors.error)
     local title = "НЕДОСТАТОЧНО СРЕДСТВ"
     local titleX = popupX + math.floor((popupWidth - unicode.len(title)) / 2)
     gpu.set(titleX, popupY, title)
+
     gpu.setForeground(colors.text_main)
     local line1a = "Пополни баланс, не можешь купить"
     local line1aX = popupX + math.floor((popupWidth - unicode.len(line1a)) / 2)
     gpu.set(line1aX, popupY+2, line1a)
+
     local line1b = "хотя бы 1 штуку предмета."
     local line1bX = popupX + math.floor((popupWidth - unicode.len(line1b)) / 2)
     gpu.set(line1bX, popupY+3, line1b)
+
     gpu.setForeground(colors.success)
     gpu.set(popupX+3, popupY+5, "Твой баланс Coin: ")
     gpu.setForeground(colors.accent_main)
@@ -1316,6 +1155,7 @@ local function drawInsufficientPopup()
         gpu.setForeground(colors.tomato)
         gpu.set(popupX+3 + unicode.len("Твой баланс ЭМЫ: "), popupY+6, string.format("%.2f", insufficientBalanceEma) .. " ۞")
     end
+
     local okBtnText = "[ ПОНЯТНО ]"
     local okBtnWidth = unicode.len(okBtnText) + 2
     local okBtn = {
@@ -1336,21 +1176,26 @@ local function drawPartialPopup()
     local popupHeight = 9
     local popupX = math.floor((80 - popupWidth) / 2)
     local popupY = 9
+
     gpu.setBackground(colors.black_fon)
     gpu.fill(popupX, popupY, popupWidth, popupHeight, " ")
     gpu.fill(popupX+1, popupY+1, popupWidth-2, popupHeight-2, " ")
     drawPopupBorder(popupX, popupY, popupWidth, popupHeight, colors.error)
+
     gpu.setForeground(colors.error)
     local title = "НЕ ПОЛНАЯ ВЫДАЧА"
     local titleX = popupX + math.floor((popupWidth - unicode.len(title)) / 2)
     gpu.set(titleX, popupY, title)
+
     gpu.setForeground(colors.text_main)
     local line1 = "Не хватило места в инвентаре!"
     local line1X = popupX + math.floor((popupWidth - unicode.len(line1)) / 2)
     gpu.set(line1X, popupY+2, line1)
+
     local line2 = "Выдано " .. partialExtracted .. " из " .. partialRequested
     local line2X = popupX + math.floor((popupWidth - unicode.len(line2)) / 2)
     gpu.set(line2X, popupY+3, line2)
+
     local spentLabelCoin = "Списано Coin: "
     local spentValueCoin = string.format("%.2f", partialRefundCoin) .. " ₵"
     local fullSpentTextCoin = spentLabelCoin .. spentValueCoin
@@ -1359,6 +1204,7 @@ local function drawPartialPopup()
     gpu.set(spentStartXCoin, popupY+4, spentLabelCoin)
     gpu.setForeground(colors.accent_main)
     gpu.set(spentStartXCoin + unicode.len(spentLabelCoin), popupY+4, spentValueCoin)
+
     if partialRefundEma > 0 then
         local spentLabelEma = "Списано ЭМЫ: "
         local spentValueEma = string.format("%.2f", partialRefundEma) .. " ۞"
@@ -1369,6 +1215,7 @@ local function drawPartialPopup()
         gpu.setForeground(colors.tomato)
         gpu.set(spentStartXEma + unicode.len(spentLabelEma), popupY+5, spentValueEma)
     end
+
     local okBtnText = "[ ПРИНЯТЬ ]"
     local okBtnWidth = unicode.len(okBtnText) + 2
     local okBtn = {
@@ -1389,21 +1236,26 @@ local function drawInventoryFullPopup()
     local popupHeight = 9
     local popupX = math.floor((80 - popupWidth) / 2)
     local popupY = 9
+
     gpu.setBackground(colors.black_fon)
     gpu.fill(popupX, popupY, popupWidth, popupHeight, " ")
     gpu.fill(popupX+1, popupY+1, popupWidth-2, popupHeight-2, " ")
     drawPopupBorder(popupX, popupY, popupWidth, popupHeight, colors.error)
+
     gpu.setForeground(colors.error)
     local title = "ПРЕДУПРЕЖДЕНИЕ"
     local titleX = popupX + math.floor((popupWidth - unicode.len(title)) / 2)
     gpu.set(titleX, popupY, title)
+
     gpu.setForeground(colors.text_main)
     local line1 = "Ваш инвентарь полон!"
     local line1X = popupX + math.floor((popupWidth - unicode.len(line1)) / 2)
     gpu.set(line1X, popupY+2, line1)
+
     local line2 = "Освободите его и повторите попытку."
     local line2X = popupX + math.floor((popupWidth - unicode.len(line2)) / 2)
     gpu.set(line2X, popupY+3, line2)
+
     local okBtnText = "[ ПОНЯТНО ]"
     local okBtnWidth = unicode.len(okBtnText) + 2
     local okBtn = {
@@ -2009,25 +1861,7 @@ local function goToShop()
     drawShopMenu()
 end
 
-local function goToBarter()
-    if not playerAgreed then
-        drawCenteredText(12, "Сначала примите пользовательское соглашение!", colors.error)
-        os.sleep(2)
-        drawMainMenu()
-        return
-    end
-    currentScreen = "barter"
-    barterScreenMode = "list"
-    barterSelectedOffer = nil
-    barterCreateStep = 1
-    barterCreateData = { offerItem = nil, offerDamage = 0, offerQty = 0, wantItem = nil, wantDamage = 0, wantQty = 0 }
-    barterTempInput = ""
-    barterOffers = loadBarterOffers()
-    drawBarterScreen()
-end
-
 local function goToUtility()
-    -- больше не используется, но оставлено для совместимости
     currentScreen = "utility"
     clear()
     drawCenteredText(8, "Полезности (в разработке)", colors.success)
@@ -2333,8 +2167,9 @@ local function main()
                                 showShopDenied = true
                                 drawMainMenu()
                             end
-                        elseif name == "barter" then
-                            goToBarter()
+                        elseif name == "util" then
+                            showShopDenied = false
+                            goToUtility()
                         elseif name == "account" then
                             showShopDenied = false
                             goToAccount()
@@ -2393,6 +2228,10 @@ local function main()
                 if isButtonClicked(backButton, x, y) then
                     currentScreen = "shop"
                     drawShopMenu()
+                end
+            elseif currentScreen == "utility" then
+                if isButtonClicked(backButton, x, y) then
+                    goBackToMenu()
                 end
             elseif currentScreen == "report" then
                 if isButtonClicked(backButton, x, y) then
@@ -2465,93 +2304,6 @@ local function main()
                     currentScreen = "feedbacks"
                     drawFeedbacksList()
                     goto continue
-                end
-            elseif currentScreen == "barter" then
-                if barterScreenMode == "list" then
-                    if y >= 6 and y <= 20 and x >= 5 and x <= 75 then
-                        local idx = y - 5
-                        if idx >= 1 and idx <= #barterOffers then
-                            barterSelectedOffer = barterOffers[idx]
-                            drawBarterScreen()
-                        end
-                    end
-                    if isButtonClicked({x=5, y=24, xs=14, ys=1}, x, y) then
-                        barterScreenMode = "create"
-                        barterCreateStep = 1
-                        barterCreateData = { offerItem = nil, offerDamage = 0, offerQty = 0, wantItem = nil, wantDamage = 0, wantQty = 0 }
-                        barterTempInput = ""
-                        drawBarterScreen()
-                    end
-                    if isButtonClicked({x=60, y=24, xs=12, ys=1}, x, y) then
-                        barterScreenMode = "list"
-                        barterSelectedOffer = nil
-                        currentScreen = "menu"
-                        drawMainMenu()
-                    end
-                    if barterSelectedOffer and isButtonClicked({x=30, y=24, xs=16, ys=1}, x, y) then
-                        local offer = barterSelectedOffer
-                        if offer.seller == currentPlayer then
-                            showTempMessage("Нельзя обменяться с самим собой", 2)
-                        else
-                            local inv = getPlayerInventoryList()
-                            local hasItem = nil
-                            for _, it in ipairs(inv) do
-                                if it.name == offer.wantItem and it.damage == (offer.wantDamage or 0) and it.qty >= offer.wantQty then
-                                    hasItem = it
-                                    break
-                                end
-                            end
-                            if not hasItem then
-                                showTempMessage("У тебя нет нужного предмета для обмена", 2)
-                            else
-                                local extracted = extractToME(offer.wantItem, offer.wantQty, offer.wantDamage or 0)
-                                if extracted < offer.wantQty then
-                                    showTempMessage("Не удалось изъять предмет", 2)
-                                else
-                                    local me = component.me_interface
-                                    local id = offer.offerItem
-                                    if not id:find(":") then id = "minecraft:" .. id end
-                                    local fingerprint = { id = id, dmg = offer.offerDamage or 0 }
-                                    local success, err = pcall(me.exportItem, me, fingerprint, "up", offer.offerQty)
-                                    if not success then
-                                        giveToPlayer(offer.wantItem, offer.wantQty, offer.wantDamage)
-                                        showTempMessage("Ошибка выдачи товара, сделка отменена", 2)
-                                    else
-                                        for i, o in ipairs(barterOffers) do
-                                            if o == offer then
-                                                table.remove(barterOffers, i)
-                                                break
-                                            end
-                                        end
-                                        saveBarterOffers(barterOffers)
-                                        showTempMessage("Обмен успешен!", 2)
-                                        barterSelectedOffer = nil
-                                        drawBarterScreen()
-                                    end
-                                end
-                            end
-                        end
-                    end
-                else
-                    if isButtonClicked({x=5, y=24, xs=14, ys=1}, x, y) then
-                        barterScreenMode = "list"
-                        drawBarterScreen()
-                    else
-                        if barterCreateStep == 1 then
-                            local inv = getPlayerInventoryList()
-                            for idx, item in ipairs(inv) do
-                                local yStart = 8 + (idx-1) + 1
-                                if y == yStart and x >= 7 and x <= 70 then
-                                    barterCreateData.offerItem = item.name
-                                    barterCreateData.offerDamage = item.damage
-                                    barterCreateData.offerItemDisplay = item.displayName
-                                    barterCreateStep = 2
-                                    drawBarterScreen()
-                                    break
-                                end
-                            end
-                        end
-                    end
                 end
             end
         elseif e == "scroll" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
@@ -2644,55 +2396,6 @@ local function main()
                 end
             end
             goto continue
-        elseif e == "key_down" and currentScreen == "barter" and barterScreenMode == "create" then
-            local ch = ev[3]
-            if barterCreateStep == 2 then
-                if ch >= 48 and ch <= 57 then
-                    local digit = ch - 48
-                    barterCreateData.offerQty = barterCreateData.offerQty * 10 + digit
-                    drawBarterScreen()
-                elseif ch == 13 then
-                    if barterCreateData.offerQty > 0 then
-                        barterCreateStep = 3
-                        drawBarterScreen()
-                    else
-                        showTempMessage("Количество должно быть больше 0", 2)
-                    end
-                elseif ch == 8 then
-                    barterCreateData.offerQty = math.floor(barterCreateData.offerQty / 10)
-                    drawBarterScreen()
-                end
-            elseif barterCreateStep == 3 then
-                if ch == 13 then
-                    if barterTempInput ~= "" then
-                        barterCreateData.wantItem = barterTempInput
-                        barterCreateData.wantDamage = 0
-                        barterCreateStep = 4
-                        drawBarterScreen()
-                    end
-                elseif ch == 8 then
-                    barterTempInput = unicode.sub(barterTempInput, 1, -2)
-                    drawBarterScreen()
-                elseif ch >= 32 and ch <= 126 then
-                    barterTempInput = barterTempInput .. unicode.char(ch)
-                    drawBarterScreen()
-                end
-            elseif barterCreateStep == 4 then
-                if ch >= 48 and ch <= 57 then
-                    local digit = ch - 48
-                    barterCreateData.wantQty = barterCreateData.wantQty * 10 + digit
-                    drawBarterScreen()
-                elseif ch == 13 then
-                    if barterCreateData.wantQty > 0 then
-                        finishBarterCreation()
-                    else
-                        showTempMessage("Количество должно быть больше 0", 2)
-                    end
-                elseif ch == 8 then
-                    barterCreateData.wantQty = math.floor(barterCreateData.wantQty / 10)
-                    drawBarterScreen()
-                end
-            end
         elseif e == "player_on" or e == "pim" or e == "pim_player_enter" then
             local playerName = ev[2] or "Игрок"
             currentPlayer = playerName:match("^%s*(.-)%s*$") or playerName
@@ -2905,18 +2608,23 @@ local function drawCrashPopup(errText)
     local popupHeight = 8
     local popupX = math.floor((80 - popupWidth) / 2)
     local popupY = 9
+
     gpu.setBackground(colors.bg_main)
     gpu.fill(1, 1, 80, 25, " ")
     gpu.setBackground(colors.bg_main)
+
     drawPopupBorder(popupX, popupY, popupWidth, popupHeight, colors.error)
+
     gpu.setForeground(colors.error)
     local title = "ОШИБКА"
     local titleX = popupX + math.floor((popupWidth - unicode.len(title)) / 2)
     gpu.set(titleX, popupY, title)
+
     gpu.setForeground(colors.text_main)
     local shortErr = errText:sub(1, popupWidth - 4)
     local errX = popupX + 2
     gpu.set(errX, popupY + 2, shortErr)
+
     for i = 3, 1, -1 do
         gpu.setForeground(colors.success)
         local msg = "Перезагрузка через " .. i .. " сек..."
@@ -2926,4 +2634,9 @@ local function drawCrashPopup(errText)
     end
 end
 
-main()
+while true do
+    local ok, err = pcall(main)
+    if not ok then
+        pcall(drawCrashPopup, tostring(err))
+    end
+end
