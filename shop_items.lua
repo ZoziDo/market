@@ -13,9 +13,7 @@ items.sellItems = {
     {displayName = "Наковальня",              internalName = "minecraft:anvil",      qty = 1310720, price = 3.2},
     {displayName = "Свинцовый слиток",        internalName = "IC2:itemIngot",      qty = 1310720, price = 0.1, damage = 5},
     {displayName = "Свинцовый блок",          internalName = "IC2:blockMetal",     qty = 1310709, price = 0.9, damage = 4},
-    {displayName = "Палладий-106",            internalName = "dwcity:X32",     qty = 1310709, price = 157.9},
-    {displayName = "Сапфир",                  internalName = "ProjRed|Core:projectred.core.part",     qty = 1310709, price = 1.9, damage = 0, label = "Sapphire"},
-    {displayName = "Рубин",                   internalName = "Core:projectred.core.part",     qty = 1310709, price = 1.9, damage = 0, label = "Ruby"}
+    {displayName = "Палладий-106",            internalName = "dwcity:X32",     qty = 1310709, price = 157.9}
 
 }
 items.vanillaItems = {
