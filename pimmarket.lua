@@ -48,110 +48,16 @@ local colors = {
 }
 
 -- --------------------------------------------------------------
--- Анимированные кнопки (из Reactor Control)
+-- Простая кнопка (без обводки, текст по центру)
 -- --------------------------------------------------------------
-local function brailleChar(dots)
-    return unicode.char(
-        10240 +
-        (dots[8] or 0) * 128 +
-        (dots[7] or 0) * 64 +
-        (dots[6] or 0) * 32 +
-        (dots[4] or 0) * 16 +
-        (dots[2] or 0) * 8 +
-        (dots[5] or 0) * 4 +
-        (dots[3] or 0) * 2 +
-        (dots[1] or 0)
-    )
-end
-
-local button1 = {
-    {0,0,0,0,1,1,1,1},
-    {0,0,0,0,1,0,1,1},
-    {1,1,1,1,1,1,1,1},
-    {0,0,0,0,0,1,1,1},
-    {1,1,0,1,0,0,0,0},
-    {1,1,1,0,0,0,0,0},
-    {1,1,1,1,0,0,0,0},
-    {1,1,1,1,1,1,1,0},
-    {1,1,1,1,1,1,0,1},
-}
-
-local button1_push = {
-    {0,0,0,0,0,0,1,1},
-    {0,0,0,0,0,0,1,0},
-    {1,1,1,1,1,1,1,1},
-    {0,0,0,0,0,0,0,1},
-    {0,1,0,0,0,0,0,0},
-    {1,0,0,0,0,0,0,0},
-    {1,1,0,0,0,0,0,0},
-}
-
-local function centerText(text, totalWidth)
-    local textLen = unicode.len(text)
-    local pad = math.floor((totalWidth - textLen) / 2)
-    if pad < 0 then pad = 0 end
-    return string.rep(" ", pad) .. text
-end
-
-local function shortenNameCentered(name, maxLength)
-    maxLength = maxLength or 12
-    if unicode.len(name) > maxLength then
-        name = unicode.sub(name, 1, maxLength - 3) .. "..."
-    end
-    return centerText(name, maxLength)
-end
-
-local function animatedButton(push, x, y, text, length, color, textcolor, time)
-    -- push: 0 = обычная, 1 = нажатая (для анимации)
-    -- x, y – верхняя левая координата (кнопка занимает 3 строки: y, y+1, y+2)
-    -- length – ширина (обычно = длина текста + 2)
-    time = time or 0.2
-    local btn = (push == 1) and button1_push or button1
-    local bgColor = color or colors.accent_main
-    local tColor = textcolor or colors.text_bright
-    local ftext = text or "Кнопка"
-    local textLen = unicode.len(ftext)
-    local effLength = length or (textLen + 2)
-    
-    if push == 1 then
-        -- Нажатая: заливаем центральную строку
-        gpu.setBackground(bgColor)
-        gpu.fill(x, y+1, effLength, 1, " ")
-        gpu.setForeground(tColor)
-        local textX = x + math.floor((effLength - textLen) / 2)
-        gpu.set(textX, y+1, shortenNameCentered(ftext, effLength))
-    end
-
-    -- Левая граница
+local function drawSimpleButton(x, y, text, width, bgColor, textColor)
     gpu.setBackground(bgColor)
-    gpu.set(x-1, y,   brailleChar(btn[4]))
-    gpu.set(x-1, y+1, brailleChar(btn[3]))
-    gpu.set(x-1, y+2, brailleChar(btn[5]))
-
-    -- Правая граница
-    gpu.set(x+effLength, y,   brailleChar(btn[2]))
-    gpu.set(x+effLength, y+1, brailleChar(btn[3]))
-    gpu.set(x+effLength, y+2, brailleChar(btn[6]))
-
-    -- Центральная линия (верх и низ)
-    for i = 0, effLength-1 do
-        gpu.set(x+i, y,   brailleChar(btn[1]))
-        gpu.set(x+i, y+2, brailleChar(btn[7]))
-    end
-
-    if push == 0 then
-        -- Обычная: заливаем центральную строку заново
-        gpu.setBackground(bgColor)
-        gpu.fill(x, y+1, effLength, 1, " ")
-        gpu.setForeground(tColor)
-        local textX = x + math.floor((effLength - textLen) / 2)
-        gpu.set(textX, y+1, shortenNameCentered(ftext, effLength))
-    end
-
+    gpu.fill(x, y, width, 1, " ")
+    gpu.setForeground(textColor)
+    local textLen = unicode.len(text)
+    local textX = x + math.floor((width - textLen) / 2)
+    gpu.set(textX, y, text)
     gpu.setBackground(colors.bg_main)
-    if push == 1 then
-        os.sleep(time)
-    end
 end
 
 -- --------------------------------------------------------------
@@ -167,7 +73,6 @@ local function drawCenteredText(y, text, color)
     gpu.set(x, y, text)
 end
 
--- старые drawButton и drawFlexButton оставляем для вспомогательных кнопок
 local function drawButton(btn)
     gpu.setBackground(btn.bg)
     gpu.fill(btn.x, btn.y, btn.xs, btn.ys, " ")
@@ -578,12 +483,19 @@ local function drawFeedbackInputScreen()
     drawTempMessage()
 end
 
--- Кнопки главного меню (без drawButton, используем animatedButton)
+-- Кнопки главного меню (только координаты и текст)
 local menuButtons = {
-    shop    = {x=32, xs=20, y=9,  ys=3, text="🛒 Магазин",     bg=colors.bg_button, fg=colors.accent_main},
-    util    = {x=32, xs=20, y=13, ys=3, text="🛠 Полезности",   bg=colors.bg_button, fg=colors.accent_main},
-    account = {x=32, xs=20, y=17, ys=3, text="👤 Аккаунт",      bg=colors.bg_button, fg=colors.accent_main}
+    shop    = {x=32, xs=20, y=9,  text="🛒 Магазин",     bg=colors.bg_button, fg=colors.accent_main},
+    util    = {x=32, xs=20, y=13, text="🛠 Полезности",   bg=colors.bg_button, fg=colors.accent_main},
+    account = {x=32, xs=20, y=17, text="👤 Аккаунт",      bg=colors.bg_button, fg=colors.accent_main}
 }
+
+local function drawBottomPanel()
+    gpu.setForeground(colors.error)
+    gpu.set(4, 24, "[ ПОДДЕРЖКА ]")
+    gpu.set(35, 24, "[ СОГЛАШЕНИЕ ]")
+    gpu.set(68, 24, "[ ОТЗЫВЫ ]")
+end
 
 local backButton = {
     text = "[ НАЗАД ]",
@@ -601,9 +513,9 @@ end
 local nextButton    = {text = "[ КУПИТЬ ]",  x=59, y=24, xs=11, ys=1, bg=colors.bg_button, fg=colors.inactive}
 
 local shopMenuButtons = {
-    buy    = {x=32, xs=20, y=9,  ys=3, text="🛍 Покупка",     bg=colors.bg_button, fg=colors.accent_main},
-    sell   = {x=32, xs=20, y=13, ys=3, text="💰 Пополнение",  bg=colors.bg_button, fg=colors.accent_main},
-    bundle = {x=32, xs=20, y=17, ys=3, text="🎁 Наборы/Квесты", bg=colors.bg_button, fg=colors.accent_main}
+    buy    = {x=32, xs=20, y=9,  text="🛍 Покупка",     bg=colors.bg_button, fg=colors.accent_main},
+    sell   = {x=32, xs=20, y=13, text="💰 Пополнение",  bg=colors.bg_button, fg=colors.accent_main},
+    bundle = {x=32, xs=20, y=17, text="🎁 Наборы/Квесты", bg=colors.bg_button, fg=colors.accent_main}
 }
 
 local function canSendReport()
@@ -1088,7 +1000,6 @@ local function drawPurchaseScreen()
     local totalCoin = (purchaseItem.priceCoin or 0) * purchaseQuantity
     local totalEma = (purchaseItem.priceEma or 0) * purchaseQuantity
 
-    -- На сумму (Coina и ЭМЫ на отдельных строках)
     gpu.setForeground(colors.success)
     gpu.set(3, 5, "На сумму: ")
     local sumY = 5
@@ -1102,7 +1013,6 @@ local function drawPurchaseScreen()
         gpu.set(14, sumY, string.format("%.2f", totalEma) .. " ۞")
     end
 
-    -- Цена за штуку (Coina и ЭМЫ на отдельных строках)
     gpu.setForeground(colors.success)
     gpu.set(55, 5, "Цена: ")
     local priceY = 5
@@ -1770,10 +1680,9 @@ local function drawShopMenu()
         drawTempMessage()
         return
     end
-    -- Отрисовка кнопок магазина с анимацией
-    animatedButton(0, shopMenuButtons.buy.x, shopMenuButtons.buy.y, shopMenuButtons.buy.text, shopMenuButtons.buy.xs, shopMenuButtons.buy.bg, shopMenuButtons.buy.fg, 0)
-    animatedButton(0, shopMenuButtons.sell.x, shopMenuButtons.sell.y, shopMenuButtons.sell.text, shopMenuButtons.sell.xs, shopMenuButtons.sell.bg, shopMenuButtons.sell.fg, 0)
-    animatedButton(0, shopMenuButtons.bundle.x, shopMenuButtons.bundle.y, shopMenuButtons.bundle.text, shopMenuButtons.bundle.xs, shopMenuButtons.bundle.bg, shopMenuButtons.bundle.fg, 0)
+    drawSimpleButton(shopMenuButtons.buy.x, shopMenuButtons.buy.y, shopMenuButtons.buy.text, shopMenuButtons.buy.xs, colors.accent_main, colors.text_bright)
+    drawSimpleButton(shopMenuButtons.sell.x, shopMenuButtons.sell.y, shopMenuButtons.sell.text, shopMenuButtons.sell.xs, colors.accent_main, colors.text_bright)
+    drawSimpleButton(shopMenuButtons.bundle.x, shopMenuButtons.bundle.y, shopMenuButtons.bundle.text, shopMenuButtons.bundle.xs, colors.accent_main, colors.text_bright)
     drawFlexButton(backButton)
     drawTempMessage()
 end
@@ -1836,15 +1745,12 @@ local function drawMainMenu()
             end
         end
 
-        -- Анимированные кнопки главного меню (высота 3 строки)
-        animatedButton(0, menuButtons.shop.x, menuButtons.shop.y, menuButtons.shop.text, menuButtons.shop.xs, menuButtons.shop.bg, menuButtons.shop.fg, 0)
-        animatedButton(0, menuButtons.util.x, menuButtons.util.y, menuButtons.util.text, menuButtons.util.xs, menuButtons.util.bg, menuButtons.util.fg, 0)
-        animatedButton(0, menuButtons.account.x, menuButtons.account.y, menuButtons.account.text, menuButtons.account.xs, menuButtons.account.bg, menuButtons.account.fg, 0)
+        -- Кнопки главного меню (простые, без обводки)
+        drawSimpleButton(menuButtons.shop.x, menuButtons.shop.y, menuButtons.shop.text, menuButtons.shop.xs, colors.accent_main, colors.text_bright)
+        drawSimpleButton(menuButtons.util.x, menuButtons.util.y, menuButtons.util.text, menuButtons.util.xs, colors.accent_main, colors.text_bright)
+        drawSimpleButton(menuButtons.account.x, menuButtons.account.y, menuButtons.account.text, menuButtons.account.xs, colors.accent_main, colors.text_bright)
 
-        -- Нижние кнопки (подняты на y=22, высота 3 строки)
-        animatedButton(0, 4,  22, "[ ПОДДЕРЖКА ]", 15, colors.bg_button, colors.accent_main, 0)
-        animatedButton(0, 35, 22, "[ СОГЛАШЕНИЕ ]", 15, colors.bg_button, colors.accent_main, 0)
-        animatedButton(0, 68, 22, "[ ОТЗЫВЫ ]",    12, colors.bg_button, colors.accent_main, 0)
+        drawBottomPanel()   -- нижние кнопки как были
     else
         drawWelcomeScreen()
     end
@@ -2268,44 +2174,33 @@ local function main()
                     end
                 end
             elseif currentScreen == "menu" then
-                -- Обработка кнопок главного меню
-                for name, btn in pairs(menuButtons) do
-                    if x >= btn.x and x < btn.x + btn.xs and y >= btn.y and y < btn.y + btn.ys then
-                        -- Анимация нажатия
-                        animatedButton(1, btn.x, btn.y, btn.text, btn.xs, btn.bg, btn.fg)
-                        animatedButton(0, btn.x, btn.y, btn.text, btn.xs, btn.bg, btn.fg, 0)
-                        if name == "shop" then
-                            if playerAgreed then
-                                goToShop()
-                            else
-                                showShopDenied = true
-                                drawMainMenu()
-                            end
-                        elseif name == "util" then
-                            showShopDenied = false
-                            goToUtility()
-                        elseif name == "account" then
-                            showShopDenied = false
-                            goToAccount()
-                        end
-                        break
-                    end
+                -- Обработка кнопок главного меню (анимация нажатия)
+                if y == 9 and x >= 32 and x < 52 then
+                    drawSimpleButton(32, 9, "🛒 Магазин", 20, 0x6c3bff, colors.text_bright)
+                    os.sleep(0.1)
+                    drawSimpleButton(32, 9, "🛒 Магазин", 20, colors.accent_main, colors.text_bright)
+                    if playerAgreed then goToShop() else showShopDenied = true drawMainMenu() end
+                elseif y == 13 and x >= 32 and x < 52 then
+                    drawSimpleButton(32, 13, "🛠 Полезности", 20, 0x6c3bff, colors.text_bright)
+                    os.sleep(0.1)
+                    drawSimpleButton(32, 13, "🛠 Полезности", 20, colors.accent_main, colors.text_bright)
+                    goToUtility()
+                elseif y == 17 and x >= 32 and x < 52 then
+                    drawSimpleButton(32, 17, "👤 Аккаунт", 20, 0x6c3bff, colors.text_bright)
+                    os.sleep(0.1)
+                    drawSimpleButton(32, 17, "👤 Аккаунт", 20, colors.accent_main, colors.text_bright)
+                    goToAccount()
                 end
-                -- Обработка нижних кнопок (y=22..24)
-                if y >= 22 and y <= 24 then
-                    if x >= 4 and x <= 19 then
-                        animatedButton(1, 4, 22, "[ ПОДДЕРЖКА ]", 15, colors.bg_button, colors.accent_main)
-                        animatedButton(0, 4, 22, "[ ПОДДЕРЖКА ]", 15, colors.bg_button, colors.accent_main, 0)
+
+                -- нижние кнопки (без анимации, как были)
+                if y == 24 then
+                    if x >= 4 and x <= 25 then
                         showShopDenied = false
                         goToReport()
-                    elseif x >= 35 and x <= 50 then
-                        animatedButton(1, 35, 22, "[ СОГЛАШЕНИЕ ]", 15, colors.bg_button, colors.accent_main)
-                        animatedButton(0, 35, 22, "[ СОГЛАШЕНИЕ ]", 15, colors.bg_button, colors.accent_main, 0)
+                    elseif x >= 35 and x <= 47 then
                         showShopDenied = false
                         goToHelp()
-                    elseif x >= 68 and x <= 80 then
-                        animatedButton(1, 68, 22, "[ ОТЗЫВЫ ]", 12, colors.bg_button, colors.accent_main)
-                        animatedButton(0, 68, 22, "[ ОТЗЫВЫ ]", 12, colors.bg_button, colors.accent_main, 0)
+                    elseif x >= 68 and x <= 78 then
                         currentScreen = "feedbacks"
                         loadFeedbacksFromServer()
                         drawFeedbacksList()
@@ -2326,24 +2221,28 @@ local function main()
                     goBackToMenu()
                 end
             elseif currentScreen == "shop" then
-                for name, btn in pairs(shopMenuButtons) do
-                    if x >= btn.x and x < btn.x + btn.xs and y >= btn.y and y < btn.y + btn.ys then
-                        animatedButton(1, btn.x, btn.y, btn.text, btn.xs, btn.bg, btn.fg)
-                        animatedButton(0, btn.x, btn.y, btn.text, btn.xs, btn.bg, btn.fg, 0)
-                        if name == "buy" then
-                            goToBuy()
-                        elseif name == "sell" then
-                            goToSell()
-                        elseif name == "bundle" then
-                            currentScreen = "shop_bundle"
-                            clear()
-                            drawCenteredText(10, "Наборы/Квесты (в разработке)", colors.text_bright)
-                            drawFlexButton(backButton)
-                            drawTempMessage()
-                        end
-                        break
-                    end
+                -- Обработка кнопок магазина с анимацией
+                if y == 9 and x >= 32 and x < 52 then
+                    drawSimpleButton(32, 9, "🛍 Покупка", 20, 0x6c3bff, colors.text_bright)
+                    os.sleep(0.1)
+                    drawSimpleButton(32, 9, "🛍 Покупка", 20, colors.accent_main, colors.text_bright)
+                    goToBuy()
+                elseif y == 13 and x >= 32 and x < 52 then
+                    drawSimpleButton(32, 13, "💰 Пополнение", 20, 0x6c3bff, colors.text_bright)
+                    os.sleep(0.1)
+                    drawSimpleButton(32, 13, "💰 Пополнение", 20, colors.accent_main, colors.text_bright)
+                    goToSell()
+                elseif y == 17 and x >= 32 and x < 52 then
+                    drawSimpleButton(32, 17, "🎁 Наборы/Квесты", 20, 0x6c3bff, colors.text_bright)
+                    os.sleep(0.1)
+                    drawSimpleButton(32, 17, "🎁 Наборы/Квесты", 20, colors.accent_main, colors.text_bright)
+                    currentScreen = "shop_bundle"
+                    clear()
+                    drawCenteredText(10, "Наборы/Квесты (в разработке)", colors.text_bright)
+                    drawFlexButton(backButton)
+                    drawTempMessage()
                 end
+
                 if isButtonClicked(backButton, x, y) then
                     goBackToMenu()
                 end
