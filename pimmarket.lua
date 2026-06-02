@@ -101,7 +101,6 @@ local function shortenNameCentered(name, maxLength)
     return centerText(name, maxLength)
 end
 
--- Параметры: push, x, y, text, tx, ty, length, time, clearWidth, color, textcolor
 local function animatedButton(push, x, y, text, tx, ty, length, time, clearWidth, color, textcolor)
     local btn = push == 1 and button1 or button1_push
     local bgColor = color or 0x059bff
@@ -138,7 +137,6 @@ local function animatedButton(push, x, y, text, tx, ty, length, time, clearWidth
     end
 
     if push == 0 and clearWidth and clearWidth > length then
-        -- Очистка "лишних" пикселей
         gpu.setBackground(colors.bg_main)
         gpu.set(x - 2, y + 1, " ")
         gpu.set(x - 2, y,     " ")
@@ -1767,7 +1765,7 @@ local function drawShopMenu()
         drawTempMessage()
         return
     end
-    -- Кнопки магазина (сдвинуты вправо)
+    -- Кнопки магазина
     animatedButton(1, shopMenuButtons.buy.x, shopMenuButtons.buy.y, shopMenuButtons.buy.text, nil, nil, shopMenuButtons.buy.xs, 0, nil, shopMenuButtons.buy.bg, shopMenuButtons.buy.fg)
     animatedButton(1, shopMenuButtons.sell.x, shopMenuButtons.sell.y, shopMenuButtons.sell.text, nil, nil, shopMenuButtons.sell.xs, 0, nil, shopMenuButtons.sell.bg, shopMenuButtons.sell.fg)
     animatedButton(1, shopMenuButtons.bundle.x, shopMenuButtons.bundle.y, shopMenuButtons.bundle.text, nil, nil, shopMenuButtons.bundle.xs, 0, nil, shopMenuButtons.bundle.bg, shopMenuButtons.bundle.fg)
@@ -1833,7 +1831,7 @@ local function drawMainMenu()
             end
         end
 
-        -- Кнопки главного меню (сдвинуты вправо)
+        -- Кнопки главного меню
         animatedButton(1, menuButtons.shop.x, menuButtons.shop.y, menuButtons.shop.text, nil, nil, menuButtons.shop.xs, 0, nil, menuButtons.shop.bg, menuButtons.shop.fg)
         animatedButton(1, menuButtons.util.x, menuButtons.util.y, menuButtons.util.text, nil, nil, menuButtons.util.xs, 0, nil, menuButtons.util.bg, menuButtons.util.fg)
         animatedButton(1, menuButtons.account.x, menuButtons.account.y, menuButtons.account.text, nil, nil, menuButtons.account.xs, 0, nil, menuButtons.account.bg, menuButtons.account.fg)
