@@ -571,14 +571,6 @@ local function performBuyQuest(quest)
     drawQuestListScreen()
 end
 
--- ========== ЭКРАН ДЕТАЛЕЙ КВЕСТА (СПИСОК ПРЕДМЕТОВ С ПРОКРУТКОЙ) ==========
-local function drawQuestDetailsScreen(quest)
-    currentQuestForDetails = quest
-    currentScreen = "quest_details"
-    questDetailScroll = 1
-    drawQuestDetailList()
-end
-
 local function drawQuestDetailList()
     clear()
     drawScreenBorder()
@@ -649,6 +641,14 @@ local function drawQuestDetailList()
     drawFlexButton(backBtn)
     drawFlexButton(buyBtn)
     drawTempMessage()
+end
+
+-- ========== ЭКРАН ДЕТАЛЕЙ КВЕСТА (СПИСОК ПРЕДМЕТОВ С ПРОКРУТКОЙ) ==========
+local function drawQuestDetailsScreen(quest)
+    currentQuestForDetails = quest
+    currentScreen = "quest_details"
+    questDetailScroll = 1
+    drawQuestDetailList()
 end
 
 -- ========== ОТРИСОВКА ЭКРАНА КВЕСТОВ (СПИСОК) ==========
@@ -3269,9 +3269,4 @@ local function drawCrashPopup(errText)
     end
 end
 
-while true do
-    local ok, err = pcall(main)
-    if not ok then
-        pcall(drawCrashPopup, tostring(err))
-    end
-end
+main()
