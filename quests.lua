@@ -37,7 +37,7 @@ return {
     name = "Закон Мёрфи",
     priceEma = 175,
     requiredItems = {
-      { internalName = "appliedenergistics2:item.ItemMultiMaterial", displayName = "Сингулярность", requiredCount = 1111, damage = 47 }
+      { internalName = "appliedenergistics2:item.ItemMultiMaterial", displayName = "Сингулярность", requiredCount = 500, damage = 47 }
     }
   }
 }
