@@ -32,6 +32,12 @@ return {
       { internalName = "minecraft:potion", displayName = "Зелье невидимости (8:00)", requiredCount = 1, damage = 8270 },
       { internalName = "minecraft:potion", displayName = "Зелье силы II", requiredCount = 1, damage = 8233 }
     }
+  },
+  {
+    name = "Закон Мёрфи",
+    priceEma = 175,
+    requiredItems = {
+      { internalName = "appliedenergistics2:item.ItemMultiMaterial", displayName = "Сингулярность", requiredCount = 1111, damage = 47 }
+    }
   }
-  -- сюда можно добавить другие квесты
 }
