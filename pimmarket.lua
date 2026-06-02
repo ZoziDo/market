@@ -47,6 +47,9 @@ local colors = {
     white = 0xFFFFFF
 }
 
+local coinBalance = 0.0
+local emaBalance = 0.0
+
 local function clear()
     gpu.setBackground(colors.bg_main)
     gpu.fill(1, 1, 80, 25, " ")
@@ -56,6 +59,24 @@ local function drawCenteredText(y, text, color)
     gpu.setForeground(color or colors.text_main)
     local x = math.floor((80 - unicode.len(text)) / 2) + 1 + 1
     gpu.set(x, y, text)
+end
+
+local function drawBalanceLine(x, y)
+    if coinBalance == nil or emaBalance == nil then
+        gpu.setForeground(colors.white)
+        gpu.set(x, y, "Баланс: загрузка...")
+        return
+    end
+    gpu.setForeground(colors.white)
+    gpu.set(x, y, "Баланс: ")
+    local coinStr = string.format("%.2f", coinBalance) .. " Coina ₵"
+    gpu.setForeground(colors.accent_main)
+    gpu.set(x + unicode.len("Баланс: "), y, coinStr)
+    gpu.setForeground(colors.white)
+    gpu.set(x + unicode.len("Баланс: ") + unicode.len(coinStr), y, " | ")
+    local emaStr = "ЭМЫ: " .. string.format("%.2f", emaBalance) .. " ۞"
+    gpu.setForeground(colors.tomato)
+    gpu.set(x + unicode.len("Баланс: ") + unicode.len(coinStr) + unicode.len(" | "), y, emaStr)
 end
 
 local function drawButton(btn)
@@ -195,8 +216,6 @@ modem.open(0xffef)
 modem.open(0xfffe)
 
 local currentPlayer, currentToken = nil, nil
-local coinBalance = 0.0
-local emaBalance = 0.0
 local playerTransactions = 0
 local playerRegDate = ""
 local playerAgreed = false
@@ -251,6 +270,531 @@ local showShopDenied = false
 local tempMessage = ""
 local tempMessageTimer = nil
 
+local function drawTempMessage()
+    if tempMessage ~= "" then
+        gpu.setBackground(colors.bg_main)
+        gpu.fill(1, 25, 80, 1, " ")
+        gpu.setForeground(colors.success)
+        local x = math.floor((80 - unicode.len(tempMessage)) / 2) + 1
+        gpu.set(x, 25, tempMessage)
+    else
+        gpu.setBackground(colors.bg_main)
+        gpu.fill(1, 25, 80, 1, " ")
+    end
+end
+
+local function showTempMessage(msg, duration)
+    tempMessage = msg
+    if tempMessageTimer then
+        event.cancel(tempMessageTimer)
+    end
+    tempMessageTimer = event.timer(duration, function()
+        tempMessage = ""
+        tempMessageTimer = nil
+        if currentScreen == "shop_buy" or currentScreen == "shop_sell" then
+            drawBuyStatic()
+            drawBuyItemsList()
+            drawBuyButtons()
+        elseif currentScreen == "menu" then
+            drawMainMenu()
+        elseif currentScreen == "shop" then
+            drawShopMenu()
+        elseif currentScreen == "account" then
+            drawAccount({balance=coinBalance, emaBalance=emaBalance, transactions=playerTransactions, regDate=playerRegDate, agreed=playerAgreed})
+        elseif currentScreen == "feedbacks" then
+            drawFeedbacksList()
+        elseif currentScreen == "quest_details" and currentQuestForDetails then
+            drawQuestDetailsScreen(currentQuestForDetails)
+        elseif currentScreen == "shop_bundle" then
+            drawQuestListScreen()
+        else
+            drawTempMessage()
+        end
+    end)
+    drawTempMessage()
+end
+
+-- ========== НОВАЯ СИСТЕМА КВЕСТОВ ==========
+local questsList = {}
+local selectedQuest = nil
+local questListScroll = 1
+local questVisibleRows = 15
+local questSelectedIndex = 0
+local questHoveredIndex = 0
+local questSearch = ""
+local questSearchActive = false
+local questSearchInput = ""
+
+local pendingFilePath = "/home/pending_quests.lua"
+local currentQuestForDetails = nil
+
+-- Скролл в деталях квеста
+local questDetailScroll = 1
+local questDetailVisibleRows = 15
+
+-- ========== ФУНКЦИИ КВЕСТОВ ==========
+local function loadQuests()
+    if not fs.exists("/home/quests.lua") then
+        questsList = {}
+        return
+    end
+    local ok, data = pcall(dofile, "/home/quests.lua")
+    if not ok or type(data) ~= "table" then
+        questsList = {}
+        return
+    end
+    questsList = data
+    for _, quest in ipairs(questsList) do
+        quest.available = nil
+    end
+end
+
+local function checkQuestAvailable(quest)
+    if not component.isAvailable("me_interface") then return false end
+    local me = component.me_interface
+    for _, req in ipairs(quest.requiredItems) do
+        local needed = req.requiredCount
+        local found = 0
+        local items = me.getItemsInNetwork()
+        for _, meItem in ipairs(items) do
+            if meItem.name == req.internalName and (meItem.damage or 0) == (req.damage or 0) then
+                found = found + (meItem.size or 0)
+                if found >= needed then break end
+            end
+        end
+        if found < needed then
+            return false
+        end
+    end
+    return true
+end
+
+local function getMissingItemsText(quest)
+    if not component.isAvailable("me_interface") then return "ME система недоступна" end
+    local me = component.me_interface
+    local missing = {}
+    for _, req in ipairs(quest.requiredItems) do
+        local needed = req.requiredCount
+        local found = 0
+        local items = me.getItemsInNetwork()
+        for _, meItem in ipairs(items) do
+            if meItem.name == req.internalName and (meItem.damage or 0) == (req.damage or 0) then
+                found = found + (meItem.size or 0)
+                if found >= needed then break end
+            end
+        end
+        if found < needed then
+            table.insert(missing, req.displayName .. " (" .. (needed - found) .. "/" .. needed .. ")")
+        end
+    end
+    return table.concat(missing, ", ")
+end
+
+local function savePendingForPlayer(player, questName, pendingItems)
+    local pendingData = {}
+    if fs.exists(pendingFilePath) then
+        local ok, data = pcall(dofile, pendingFilePath)
+        if ok and type(data) == "table" then pendingData = data end
+    end
+    pendingData[player] = {
+        questName = questName,
+        items = pendingItems
+    }
+    local file = io.open(pendingFilePath, "w")
+    if file then
+        file:write("return " .. serialization.serialize(pendingData))
+        file:close()
+    end
+end
+
+local function loadPendingForPlayer(player)
+    if not fs.exists(pendingFilePath) then return nil end
+    local ok, data = pcall(dofile, pendingFilePath)
+    if not ok or type(data) ~= "table" then return nil end
+    return data[player]
+end
+
+local function deletePendingForPlayer(player)
+    if not fs.exists(pendingFilePath) then return end
+    local pendingData = {}
+    local ok, data = pcall(dofile, pendingFilePath)
+    if ok and type(data) == "table" then pendingData = data end
+    pendingData[player] = nil
+    local file = io.open(pendingFilePath, "w")
+    if file then
+        file:write("return " .. serialization.serialize(pendingData))
+        file:close()
+    end
+end
+
+local function processPendingOnLogin(player)
+    local pending = loadPendingForPlayer(player)
+    if not pending or not pending.items or #pending.items == 0 then
+        deletePendingForPlayer(player)
+        return
+    end
+    local me = component.me_interface
+    if not me then return end
+    local allCompleted = true
+    local newPending = {}
+    for _, req in ipairs(pending.items) do
+        if req.neededCount > 0 then
+            local id = req.internalName
+            if not id:find(":") then id = "minecraft:" .. id end
+            local fingerprint = { id = id, dmg = req.damage or 0 }
+            local maxStack = 64
+            local ok, detail = pcall(me.getItemDetail, me, req.internalName, req.damage)
+            if ok and detail and detail.maxSize then maxStack = detail.maxSize end
+            local remaining = req.neededCount
+            local extracted = 0
+            while remaining > 0 do
+                local toTake = math.min(remaining, maxStack)
+                local success, result = pcall(me.exportItem, me, fingerprint, PULL_DIRECTION, toTake)
+                local got = 0
+                if success then
+                    if type(result) == "number" then got = result
+                    elseif type(result) == "boolean" and result == true then got = toTake
+                    elseif type(result) == "table" then got = result.count or result.amount or result.size or toTake
+                    else got = 0 end
+                end
+                if got > 0 then
+                    extracted = extracted + got
+                    remaining = remaining - got
+                else
+                    break
+                end
+            end
+            if extracted < req.neededCount then
+                allCompleted = false
+                table.insert(newPending, {
+                    internalName = req.internalName,
+                    damage = req.damage,
+                    displayName = req.displayName,
+                    neededCount = req.neededCount - extracted
+                })
+            end
+        end
+    end
+    if allCompleted then
+        deletePendingForPlayer(player)
+        showTempMessage("✅ Все предметы квеста '" .. pending.questName .. "' получены!", 5)
+    else
+        savePendingForPlayer(player, pending.questName, newPending)
+        showTempMessage("⚠️ Часть предметов квеста выдана, остальное позже", 5)
+    end
+end
+
+local function performBuyQuest(quest)
+    if not playerAgreed then
+        drawCenteredText(20, "Сначала примите пользовательское соглашение", colors.error)
+        os.sleep(2)
+        goBackToMenu()
+        return
+    end
+
+    if emaBalance < quest.priceEma then
+        showTempMessage("Недостаточно ЭМЫ! Нужно: " .. string.format("%.2f", quest.priceEma), 3)
+        drawQuestDetailsScreen(quest)
+        return
+    end
+
+    if not checkQuestAvailable(quest) then
+        local missing = getMissingItemsText(quest)
+        showTempMessage("Не хватает в МЭ: " .. missing, 4)
+        drawQuestDetailsScreen(quest)
+        return
+    end
+
+    -- списываем ЭМЫ
+    emaBalance = emaBalance - quest.priceEma
+    playerTransactions = playerTransactions + 1
+    if currentToken then
+        modem.send(serverAddress, 0xffef, serialization.serialize({
+            op = "buy_quest",
+            name = currentPlayer,
+            token = currentToken,
+            questName = quest.name,
+            priceEma = quest.priceEma
+        }))
+    end
+
+    local me = component.me_interface
+    local pendingItems = {}
+    local anyMissing = false
+
+    for _, req in ipairs(quest.requiredItems) do
+        local id = req.internalName
+        if not id:find(":") then id = "minecraft:" .. id end
+        local fingerprint = { id = id, dmg = req.damage or 0 }
+        local needed = req.requiredCount
+        local maxStack = 64
+        local ok, detail = pcall(me.getItemDetail, me, req.internalName, req.damage)
+        if ok and detail and detail.maxSize then maxStack = detail.maxSize end
+
+        local remaining = needed
+        local extracted = 0
+        while remaining > 0 do
+            local toTake = math.min(remaining, maxStack)
+            local success, result = pcall(me.exportItem, me, fingerprint, PULL_DIRECTION, toTake)
+            local got = 0
+            if success then
+                if type(result) == "number" then got = result
+                elseif type(result) == "boolean" and result == true then got = toTake
+                elseif type(result) == "table" then got = result.count or result.amount or result.size or toTake
+                else got = 0 end
+            end
+            if got > 0 then
+                extracted = extracted + got
+                remaining = remaining - got
+            else
+                break
+            end
+        end
+        if extracted < needed then
+            anyMissing = true
+            table.insert(pendingItems, {
+                internalName = req.internalName,
+                damage = req.damage,
+                displayName = req.displayName,
+                neededCount = needed - extracted
+            })
+        end
+    end
+
+    if anyMissing then
+        savePendingForPlayer(currentPlayer, quest.name, pendingItems)
+        showTempMessage("⚠️ Часть предметов не влезла в инвентарь. Остальное выдадим позже.", 5)
+    else
+        showTempMessage("✅ Квест '" .. quest.name .. "' выполнен! Все предметы выданы.", 5)
+    end
+
+    drawQuestListScreen()
+end
+
+-- ========== ЭКРАН ДЕТАЛЕЙ КВЕСТА (СПИСОК ПРЕДМЕТОВ С ПРОКРУТКОЙ) ==========
+local function drawQuestDetailsScreen(quest)
+    currentQuestForDetails = quest
+    currentScreen = "quest_details"
+    questDetailScroll = 1
+    drawQuestDetailList()
+end
+
+local function drawQuestDetailList()
+    clear()
+    drawScreenBorder()
+    drawBalanceLine(3, 1)
+
+    gpu.setForeground(colors.accent_secondary)
+    gpu.set(3, 3, "КВЕСТ: " .. currentQuestForDetails.name)
+
+    gpu.setForeground(colors.success)
+    gpu.set(3, 4, "Цена: ")
+    gpu.setForeground(colors.tomato)
+    gpu.set(3 + unicode.len("Цена: "), 4, string.format("%.2f", currentQuestForDetails.priceEma) .. " ۞")
+
+    gpu.setForeground(colors.text_bright)
+    gpu.set(3, 5, "Список выдаваемых предметов:")
+
+    local items = currentQuestForDetails.requiredItems
+    local maxScroll = math.max(1, #items - questDetailVisibleRows + 1)
+    if questDetailScroll > maxScroll then questDetailScroll = maxScroll end
+
+    gpu.setBackground(colors.bg_main)
+    gpu.fill(2, 7, 76, questDetailVisibleRows, " ")
+
+    for i = 1, questDetailVisibleRows do
+        local idx = questDetailScroll + i - 1
+        local req = items[idx]
+        if req then
+            local y = 6 + i
+            -- чередование фона
+            if i % 2 == 1 then
+                gpu.setBackground(colors.bg_secondary)
+            else
+                gpu.setBackground(0x1a1a1a)
+            end
+            gpu.fill(2, y, 76, 1, " ")
+            gpu.setForeground(colors.text_main)
+            gpu.set(5, y, req.displayName)
+            gpu.setForeground(colors.accent_main)
+            gpu.set(55, y, "x" .. req.requiredCount)
+        end
+    end
+    gpu.setBackground(colors.bg_main)
+
+    -- скроллбар
+    local barX = 78
+    local barY = 7
+    local barHeight = 15
+    gpu.setBackground(colors.bg_main)
+    gpu.fill(barX, barY, 2, barHeight, " ")
+    if #items > questDetailVisibleRows then
+        gpu.setBackground(colors.bg_secondary)
+        gpu.fill(barX, barY, 2, barHeight, " ")
+        local thumbHeight = math.max(2, math.floor(barHeight * questDetailVisibleRows / #items))
+        local maxPos = barHeight - thumbHeight
+        local thumbPos = math.floor((questDetailScroll - 1) * maxPos / (#items - questDetailVisibleRows)) + 1
+        thumbPos = math.min(thumbPos, maxPos + 1)
+        gpu.setBackground(colors.accent_main)
+        gpu.fill(barX, barY + thumbPos - 1, 2, thumbHeight, " ")
+        gpu.setBackground(colors.bg_main)
+    end
+
+    local backBtn = {x = 20, y = 24, xs = 12, ys = 1, text = "[ НАЗАД ]", bg = colors.bg_button, fg = colors.accent_secondary}
+    local buyBtn = {x = 50, y = 24, xs = 15, ys = 1, text = "[ ПРИОБРЕСТИ ]", bg = colors.bg_button, fg = colors.success}
+    -- кнопка неактивна, если квест недоступен
+    if not checkQuestAvailable(currentQuestForDetails) or emaBalance < currentQuestForDetails.priceEma then
+        buyBtn.fg = colors.inactive
+    end
+    drawFlexButton(backBtn)
+    drawFlexButton(buyBtn)
+    drawTempMessage()
+end
+
+-- ========== ОТРИСОВКА ЭКРАНА КВЕСТОВ (СПИСОК) ==========
+local function drawQuestStatic()
+    clear()
+    drawScreenBorder()
+    drawBalanceLine(3, 1)
+
+    gpu.setForeground(colors.accent_secondary)
+    gpu.set(3, 3, "НАБОРЫ / КВЕСТЫ")
+
+    local searchX = 42
+    local searchText = ""
+    if questSearchActive then
+        searchText = questSearchInput .. "_"
+    else
+        searchText = (questSearch == "" and "Поиск..." or questSearch)
+    end
+    gpu.setBackground(colors.bg_button)
+    gpu.fill(searchX, 3, 23, 1, " ")
+    gpu.setForeground(colors.accent_main)
+    gpu.set(searchX + 1, 3, unicode.sub(searchText, 1, 21))
+
+    local clearText = "[ СТЕРЕТЬ ]"
+    local clearWidth = unicode.len(clearText) + 2
+    local clearX = searchX + 23 + 1
+    gpu.setBackground(colors.error)
+    gpu.fill(clearX, 3, clearWidth, 1, " ")
+    gpu.setForeground(colors.accent_secondary)
+    local textX = clearX + math.floor((clearWidth - unicode.len(clearText)) / 2)
+    gpu.set(textX, 3, clearText)
+    gpu.setBackground(colors.accent_secondary)
+
+    gpu.setBackground(colors.bg_button)
+    gpu.fill(2, 5, 76, 1, " ")
+    gpu.setForeground(colors.text_bright)
+    gpu.set(3, 5, "Название")
+    gpu.set(52, 5, "ЭМЫ")
+    gpu.set(67, 5, "Статус")
+    gpu.setBackground(colors.bg_main)
+
+    drawTempMessage()
+end
+
+local function drawQuestSingleRow(y, quest, isHovered, isSelected, idx)
+    local bg, fg
+    local available = checkQuestAvailable(quest)
+    if isSelected then
+        bg = 0x225577
+    elseif isHovered then
+        bg = 0x446688
+    elseif idx % 2 == 1 then
+        bg = colors.bg_secondary
+    else
+        bg = 0x1a1a1a
+    end
+    fg = available and colors.accent_main or colors.inactive
+    gpu.setBackground(bg)
+    gpu.fill(2, y, 76, 1, " ")
+    gpu.setForeground(fg)
+    local name = quest.name
+    if unicode.len(name) > 34 then name = unicode.sub(name, 1, 34) end
+    gpu.set(3, y, name)
+    gpu.setForeground(colors.tomato)
+    gpu.set(52, y, string.format("%.2f", quest.priceEma))
+    -- статус
+    if available then
+        gpu.setForeground(colors.success)
+        gpu.set(67, y, "✅")
+    else
+        gpu.setForeground(colors.error)
+        gpu.set(67, y, "❌")
+    end
+    gpu.setBackground(colors.bg_main)
+end
+
+local function drawQuestList()
+    local filtered = questsList
+    if questSearch ~= "" then
+        local lower = string.lower(questSearch)
+        filtered = {}
+        for _, q in ipairs(questsList) do
+            if string.find(string.lower(q.name), lower, 1, true) then
+                table.insert(filtered, q)
+            end
+        end
+    end
+
+    local maxScroll = math.max(1, #filtered - questVisibleRows + 1)
+    questListScroll = math.max(1, math.min(questListScroll, maxScroll))
+
+    gpu.setBackground(colors.bg_main)
+    gpu.fill(2, 7, 78, questVisibleRows, " ")
+
+    for i = 1, questVisibleRows do
+        local idx = questListScroll + i - 1
+        local q = filtered[idx]
+        if q then
+            local y = 6 + i
+            local isSelected = (idx == questSelectedIndex)
+            local isHovered = (idx == questHoveredIndex)
+            drawQuestSingleRow(y, q, isHovered, isSelected, idx)
+        end
+    end
+
+    -- скроллбар
+    local barX = 78
+    local barY = 7
+    local barHeight = 15
+    gpu.setBackground(colors.bg_main)
+    gpu.fill(barX, barY, 2, barHeight, " ")
+    if #filtered > questVisibleRows then
+        gpu.setBackground(colors.bg_secondary)
+        gpu.fill(barX, barY, 2, barHeight, " ")
+        local thumbHeight = math.max(2, math.floor(barHeight * questVisibleRows / #filtered))
+        local maxPos = barHeight - thumbHeight
+        local thumbPos = math.floor((questListScroll - 1) * maxPos / (#filtered - questVisibleRows)) + 1
+        thumbPos = math.min(thumbPos, maxPos + 1)
+        gpu.setBackground(colors.accent_main)
+        gpu.fill(barX, barY + thumbPos - 1, 2, thumbHeight, " ")
+        gpu.setBackground(colors.bg_main)
+    end
+end
+
+local function drawQuestButtons()
+    local backBtn = {x = 5, y = 24, xs = 11, ys = 1, text = "[ НАЗАД ]", bg = colors.bg_button, fg = colors.accent_secondary}
+    local detailsBtn = {x = 65, y = 24, xs = 13, ys = 1, text = "[ ПОДРОБНЕЕ ]", bg = colors.bg_button, fg = colors.success}
+    -- кнопка активна только если выбранный квест доступен
+    if selectedQuest and checkQuestAvailable(selectedQuest) then
+        detailsBtn.fg = colors.success
+    else
+        detailsBtn.fg = colors.inactive
+    end
+    drawFlexButton(backBtn)
+    drawFlexButton(detailsBtn)
+    drawTempMessage()
+end
+
+local function drawQuestListScreen()
+    currentScreen = "shop_bundle"
+    drawQuestStatic()
+    drawQuestList()
+    drawQuestButtons()
+end
+
+-- ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (НЕ ИЗМЕНЕНЫ) ==========
 local function updateSelectorDisplay(item)
     if not selector then return end
     if not item then
@@ -300,46 +844,6 @@ local function drawBigTitle()
     for i, line in ipairs(shopLines) do
         gpu.set(shopX, 10 + i, line)
     end
-end
-
-local function drawTempMessage()
-    if tempMessage ~= "" then
-        gpu.setBackground(colors.bg_main)
-        gpu.fill(1, 25, 80, 1, " ")
-        gpu.setForeground(colors.success)
-        local x = math.floor((80 - unicode.len(tempMessage)) / 2) + 1
-        gpu.set(x, 25, tempMessage)
-    else
-        gpu.setBackground(colors.bg_main)
-        gpu.fill(1, 25, 80, 1, " ")
-    end
-end
-
-local function showTempMessage(msg, duration)
-    tempMessage = msg
-    if tempMessageTimer then
-        event.cancel(tempMessageTimer)
-    end
-    tempMessageTimer = event.timer(duration, function()
-        tempMessage = ""
-        tempMessageTimer = nil
-        if currentScreen == "shop_buy" or currentScreen == "shop_sell" then
-            drawBuyStatic()
-            drawBuyItemsList()
-            drawBuyButtons()
-        elseif currentScreen == "menu" then
-            drawMainMenu()
-        elseif currentScreen == "shop" then
-            drawShopMenu()
-        elseif currentScreen == "account" then
-            drawAccount({balance=coinBalance, emaBalance=emaBalance, transactions=playerTransactions, regDate=playerRegDate, agreed=playerAgreed})
-        elseif currentScreen == "feedbacks" then
-            drawFeedbacksList()
-        else
-            drawTempMessage()
-        end
-    end)
-    drawTempMessage()
 end
 
 local function loadFeedbacksFromServer()
@@ -723,19 +1227,6 @@ local function getFilteredItems()
     return filtered
 end
 
-local function drawBalanceLine(x, y)
-    gpu.setForeground(colors.white)
-    gpu.set(x, y, "Баланс: ")
-    local coinStr = string.format("%.2f", coinBalance) .. " Coina ₵"
-    gpu.setForeground(colors.accent_main)
-    gpu.set(x + unicode.len("Баланс: "), y, coinStr)
-    gpu.setForeground(colors.white)
-    gpu.set(x + unicode.len("Баланс: ") + unicode.len(coinStr), y, " | ")
-    local emaStr = "ЭМЫ: " .. string.format("%.2f", emaBalance) .. " ۞"
-    gpu.setForeground(colors.tomato)
-    gpu.set(x + unicode.len("Баланс: ") + unicode.len(coinStr) + unicode.len(" | "), y, emaStr)
-end
-
 local function drawBuyStatic()
     clear()
     drawScreenBorder()
@@ -984,7 +1475,6 @@ local function drawPurchaseScreen()
     local totalCoin = (purchaseItem.priceCoin or 0) * purchaseQuantity
     local totalEma = (purchaseItem.priceEma or 0) * purchaseQuantity
 
-    -- На сумму (Coina и ЭМЫ на отдельных строках)
     gpu.setForeground(colors.success)
     gpu.set(3, 5, "На сумму: ")
     local sumY = 5
@@ -998,7 +1488,6 @@ local function drawPurchaseScreen()
         gpu.set(14, sumY, string.format("%.2f", totalEma) .. " ۞")
     end
 
-    -- Цена за штуку (Coina и ЭМЫ на отдельных строках)
     gpu.setForeground(colors.success)
     gpu.set(55, 5, "Цена: ")
     local priceY = 5
@@ -1909,6 +2398,7 @@ local function refreshAndAgree()
 end
 
 local function main()
+    loadQuests()  -- загружаем квесты при старте
     drawWelcomeScreen()
     modem.send(serverAddress, 0xffef, serialization.serialize({op="register", password=ACCESS_PASSWORD}))
 
@@ -2212,11 +2702,7 @@ local function main()
                         elseif name == "sell" then
                             goToSell()
                         elseif name == "bundle" then
-                            currentScreen = "shop_bundle"
-                            clear()
-                            drawCenteredText(10, "Наборы/Квесты (в разработке)", colors.text_bright)
-                            drawFlexButton(backButton)
-                            drawTempMessage()
+                            drawQuestListScreen()
                         end
                         break
                     end
@@ -2225,9 +2711,93 @@ local function main()
                     goBackToMenu()
                 end
             elseif currentScreen == "shop_bundle" then
-                if isButtonClicked(backButton, x, y) then
+                -- список квестов
+                if y >= 7 and y <= 21 and x >= 2 and x <= 77 then
+                    local relativeRow = y - 6
+                    local clickedIndex = questListScroll + relativeRow - 1
+                    local filtered = questsList
+                    if questSearch ~= "" then
+                        filtered = {}
+                        for _, q in ipairs(questsList) do
+                            if string.find(string.lower(q.name), string.lower(questSearch), 1, true) then
+                                table.insert(filtered, q)
+                            end
+                        end
+                    end
+                    local quest = filtered[clickedIndex]
+                    if quest then
+                        questSelectedIndex = clickedIndex
+                        selectedQuest = quest
+                        questHoveredIndex = 0
+                        drawQuestDetailsScreen(quest)
+                    end
+                    goto continue
+                end
+                if x >= 78 and y >= 7 and y <= 21 then
+                    local total = #questsList
+                    if total > questVisibleRows then
+                        local clickPos = y - 6
+                        questListScroll = math.floor((clickPos - 1) * (total - questVisibleRows) / questVisibleRows) + 1
+                        drawQuestListScreen()
+                    end
+                    goto continue
+                end
+                if y == 3 and x >= 42 and x <= 64 then
+                    questSearchActive = true
+                    questSearchInput = questSearch
+                    drawQuestListScreen()
+                    goto continue
+                end
+                if y == 3 and x >= 66 and x <= 78 then
+                    questSearch = ""
+                    questSearchInput = ""
+                    questSearchActive = false
+                    drawQuestListScreen()
+                    goto continue
+                end
+                if questSearchActive then
+                    questSearch = questSearchInput
+                    questSearchActive = false
+                    questListScroll = 1
+                    questSelectedIndex = 0
+                    selectedQuest = nil
+                    questHoveredIndex = 0
+                    drawQuestListScreen()
+                    goto continue
+                end
+                if isButtonClicked({x=5, y=24, xs=11, ys=1}, x, y) then
                     currentScreen = "shop"
                     drawShopMenu()
+                    goto continue
+                end
+                if isButtonClicked({x=65, y=24, xs=13, ys=1}, x, y) then
+                    if selectedQuest and checkQuestAvailable(selectedQuest) then
+                        drawQuestDetailsScreen(selectedQuest)
+                    end
+                    goto continue
+                end
+            elseif currentScreen == "quest_details" then
+                if isButtonClicked({x=20, y=24, xs=12, ys=1}, x, y) then
+                    drawQuestListScreen()
+                    goto continue
+                end
+                if isButtonClicked({x=50, y=24, xs=15, ys=1}, x, y) then
+                    if currentQuestForDetails then
+                        performBuyQuest(currentQuestForDetails)
+                    end
+                    goto continue
+                end
+                -- скролл в деталях
+                if x >= 78 and y >= 7 and y <= 21 then
+                    local totalItems = #currentQuestForDetails.requiredItems
+                    if totalItems > questDetailVisibleRows then
+                        local clickPos = y - 6
+                        local maxScroll = totalItems - questDetailVisibleRows + 1
+                        questDetailScroll = math.floor((clickPos - 1) * maxScroll / questDetailVisibleRows) + 1
+                        questDetailScroll = math.max(1, math.min(questDetailScroll, maxScroll))
+                        drawQuestDetailList()
+                    end
+                    goto continue
                 end
             elseif currentScreen == "utility" then
                 if isButtonClicked(backButton, x, y) then
@@ -2317,6 +2887,33 @@ local function main()
                     smoothScroll(-1)
                 end
             end
+        elseif e == "scroll" and currentScreen == "shop_bundle" then
+            local direction = ev[5]
+            local x, y = ev[3], ev[4]
+            if x >= 2 and x <= 78 and y >= 7 and y <= 21 then
+                if direction == -1 then
+                    local maxScroll = math.max(1, #questsList - questVisibleRows + 1)
+                    questListScroll = math.min(questListScroll + 1, maxScroll)
+                    drawQuestListScreen()
+                elseif direction == 1 then
+                    questListScroll = math.max(1, questListScroll - 1)
+                    drawQuestListScreen()
+                end
+            end
+        elseif e == "scroll" and currentScreen == "quest_details" then
+            local direction = ev[5]
+            local x, y = ev[3], ev[4]
+            if x >= 2 and x <= 78 and y >= 7 and y <= 21 and currentQuestForDetails then
+                local total = #currentQuestForDetails.requiredItems
+                if total > questDetailVisibleRows then
+                    if direction == -1 then
+                        questDetailScroll = math.min(questDetailScroll + 1, total - questDetailVisibleRows + 1)
+                    elseif direction == 1 then
+                        questDetailScroll = math.max(1, questDetailScroll - 1)
+                    end
+                    drawQuestDetailList()
+                end
+            end
         elseif e == "mouse_move" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
             local x, y = ev[3], ev[4]
             if y >= 7 and y <= 21 and x >= 2 and x <= 77 then
@@ -2330,6 +2927,21 @@ local function main()
                 if hoveredIndex ~= 0 then
                     hoveredIndex = 0
                     drawBuyItemsList()
+                end
+            end
+        elseif e == "mouse_move" and currentScreen == "shop_bundle" then
+            local x, y = ev[3], ev[4]
+            if y >= 7 and y <= 21 and x >= 2 and x <= 77 then
+                local rel = y - 6
+                local newHover = questListScroll + rel - 1
+                if newHover <= #questsList and newHover ~= questHoveredIndex then
+                    questHoveredIndex = newHover
+                    drawQuestListScreen()
+                end
+            else
+                if questHoveredIndex ~= 0 then
+                    questHoveredIndex = 0
+                    drawQuestListScreen()
                 end
             end
         elseif e == "key_down" and currentScreen == "report" and canSendReport() then
@@ -2369,6 +2981,26 @@ local function main()
                 drawBuyButtons()
             end
             goto continue
+        elseif e == "key_down" and currentScreen == "shop_bundle" and questSearchActive then
+            local ch = ev[3]
+            if ch == 13 then
+                questSearch = questSearchInput
+                questSearchActive = false
+                questListScroll = 1
+                questSelectedIndex = 0
+                selectedQuest = nil
+                questHoveredIndex = 0
+                drawQuestListScreen()
+            elseif ch == 8 then
+                questSearchInput = unicode.sub(questSearchInput, 1, -2)
+                questSearch = questSearchInput
+                drawQuestListScreen()
+            elseif ch >= 32 then
+                questSearchInput = questSearchInput .. unicode.char(ch)
+                questSearch = questSearchInput
+                drawQuestListScreen()
+            end
+            goto continue
         elseif e == "key_down" and currentScreen == "feedback_input" and feedbackEditMode then
             local ch = ev[3]
             if ch == 13 then
@@ -2404,12 +3036,14 @@ local function main()
                     currentScreen = "menu"
                     drawMainMenu()
                 end
+                processPendingOnLogin(currentPlayer)
             elseif currentToken then
                 alreadyAuthorized = true
                 if currentScreen == "auth" or currentScreen == "account_loading" then
                     currentScreen = "menu"
                     drawMainMenu()
                 end
+                processPendingOnLogin(currentPlayer)
             else
                 coinBalance = 0.0
                 emaBalance = 0.0
@@ -2457,6 +3091,7 @@ local function main()
                             currentScreen = "menu"
                             drawMainMenu()
                         end
+                        processPendingOnLogin(currentPlayer)
                     elseif msg.op == "accountData" then
                         if msg.error then
                             retryAccountAfterTokenRefresh()
