@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Reactor Control v1.1 (build 3) – ДЕМОНСТРАЦИОННЫЙ ИНТЕРФЕЙС
--- Точная визуальная копия, без реального управления реакторами.
+-- Исправленная версия: добавлены недостающие символы.
 -- Для OpenComputers (McSkill HiTech 1.7.10)
 -- ============================================================================
 
@@ -12,16 +12,12 @@ local term = require("term")
 local unicode = require("unicode")
 local bit = require("bit32")
 
--- ----------------------------------------------------------------------------
--- Настройки буфера (160x50, как в оригинале)
 buffer.setResolution(160, 50)
 buffer.clear(0x000000)
 
 local version = "1.1"
 local build = "3"
-local progVer = version .. "." .. build
 
--- Цветовая схема (тёмная тема, как на картинке)
 local colors = {
     bg      = 0x202020,
     bg2     = 0x101010,
@@ -37,8 +33,7 @@ local colors = {
     msgerror = 0xff0000,
 }
 
--- ----------------------------------------------------------------------------
--- Вспомогательные функции отрисовки символов Брайля (из оригинального кода)
+-- ---------------------- Символы Брайля (дополнено) ---------------------------
 local function brailleChar(dots)
     return unicode.char(
         10240 +
@@ -53,7 +48,6 @@ local function brailleChar(dots)
     )
 end
 
--- Таблицы символов для цифр, рамок и кнопок (сокращённый набор)
 local braill0 = {{1,1,1,0,1,0,1,0},{1,0,1,0,1,0,1,0},{1,1,0,0,0,0,0,0},{1,0,0,0,0,0,0,0}}
 local braill1 = {{0,1,1,1,0,1,0,1},{0,0,0,0,0,0,0,0},{1,1,0,0,0,0,0,0},{1,0,0,0,0,0,0,0}}
 local braill2 = {{1,1,0,0,1,1,1,0},{1,0,1,0,1,0,0,0},{1,1,0,0,0,0,0,0},{1,0,0,0,0,0,0,0}}
@@ -67,6 +61,10 @@ local braill9 = {{1,1,1,0,1,1,0,0},{1,0,1,0,1,0,1,0},{1,1,0,0,0,0,0,0},{1,0,0,0,
 local braill_minus = {{0,0,0,0,1,1,0,0},{0,0,0,0,1,0,0,0},{0,0,0,0,0,0,0,0},{0,0,0,0,0,0,0,0}}
 local braill_dot   = {{0,0,0,0,0,0,0,0},{0,0,0,0,0,0,0,0},{1,0,0,0,0,0,0,0},{0,0,0,0,0,0,0,0}}
 
+-- Дополнительные символы, которых не хватало
+local brail_greenbtn = {{0,0,0,1,1,1,0,1},{0,0,0,0,1,0,0,0},{0,0,0,0,0,0,0,0},{0,0,0,0,0,0,0,0}}
+local brail_redbtn   = {{0,0,0,0,0,1,0,0},{0,0,0,0,1,1,0,0},{0,0,0,0,0,0,0,0},{0,0,0,0,0,0,0,0}}
+
 local brail_console   = {{0,0,0,0,1,1,1,1},{0,0,1,1,0,0,0,0}}
 local brail_fluid     = {{0,1,0,1,1,1,1,1},{1,0,1,0,1,1,1,1},{1,1,0,1,0,0,0,0},{1,1,1,0,0,0,0,0}}
 local brail_thunderbolt = {{0,0,0,0,0,1,0,0},{0,1,1,0,1,1,0,1},{0,0,0,1,0,0,0,0},{1,0,0,0,0,0,0,0}}
@@ -74,6 +72,7 @@ local brail_cherta    = {{1,0,1,0,1,0,1,0},{1,0,1,1,1,0,1,0},{0,0,0,0,1,0,1,0},{
 local brail_time      = {{1,1,1,0,0,1,1,0},{1,1,0,1,1,0,0,1},{1,0,1,1,0,0,0,0},{0,1,1,1,0,0,0,0}}
 local brail_status    = {{0,0,0,1,1,1,1,1},{0,0,1,0,1,1,1,1},{1,1,1,1,1,0,0,0},{1,1,1,1,0,1,0,0}}
 local button1         = {{0,0,0,0,1,1,1,1},{0,0,0,0,1,0,1,1},{1,1,1,1,1,1,1,1},{0,0,0,0,0,1,1,1},{1,1,0,1,0,0,0,0},{1,1,1,0,0,0,0,0},{1,1,1,1,0,0,0,0},{1,1,1,1,1,1,1,0},{1,1,1,1,1,1,0,1}}
+local button1_push    = {{0,0,0,0,0,0,1,1},{0,0,0,0,0,0,1,0},{1,1,1,1,1,1,1,1},{0,0,0,0,0,0,0,1},{0,1,0,0,0,0,0,0},{1,0,0,0,0,0,0,0},{1,1,0,0,0,0,0,0}} -- добавлено
 local brail_verticalbar = {{0,0,0,0,0,0,1,1},{0,0,0,0,1,1,1,1},{0,0,1,1,1,1,1,1},{1,1,1,1,1,1,1,1}}
 
 local braillMap = {
@@ -163,8 +162,6 @@ local function centerText(text, totalWidth)
     return string.rep(" ", pad) .. text
 end
 
--- ----------------------------------------------------------------------------
--- Бегущая строка (для "Спасибо за поддержку...")
 local scrollPos = 1
 local maxWidth = 33
 local function drawMarquee(x, y, text, color)
@@ -183,13 +180,8 @@ local function drawMarquee(x, y, text, color)
     buffer.drawChanges()
 end
 
--- ----------------------------------------------------------------------------
--- Отрисовка статической части интерфейса (рамки, кнопки, заголовки)
 local function drawStatic()
-    -- Очистка и фон (изображение отсутствует, рисуем вручную)
     buffer.drawRectangle(1, 1, 160, 50, colors.bg, 0, " ")
-
-    -- Верхняя информационная панель
     buffer.drawText(3, 2, colors.textclr, "---Reactor Control v" .. version .. "---")
     buffer.drawText(3, 3, colors.textclr, "Автор приложения: P1KaCh0337")
     buffer.drawText(3, 4, colors.textclr, "Версия приложения: " .. version .. ", Build " .. build)
@@ -202,7 +194,6 @@ local function drawStatic()
     buffer.drawText(3, 12, colors.textclr, "Реакторы не найдены!")
     buffer.drawText(3, 13, colors.textclr, "Проверьте подключение реакторов!")
 
-    -- Основной блок "РЕАКТОРЫ"
     buffer.drawRectangle(5, 15, 114, 37, colors.bg4, 0, " ")
     buffer.drawRectangle(37, 29, 50, 3, colors.bg2, 0, " ")
     buffer.drawRectangle(36, 30, 52, 1, colors.bg2, 0, " ")
@@ -213,7 +204,6 @@ local function drawStatic()
     buffer.drawText(43, 30, 0xcccccc, "У вас не подключено ни одного реактора!")
     buffer.drawText(40, 30, 0xffd900, "⚠")
 
-    -- Правая панель "Информационное окно отладки"
     buffer.drawRectangle(123, 2, 35, 48, colors.bg, 0, " ")
     for i = 0, 34 do
         buffer.drawText(123 + i, 1, colors.bg, brailleChar(brail_console[1]))
@@ -221,11 +211,8 @@ local function drawStatic()
     end
     buffer.drawText(124, 2, colors.textclr, "Информационное окно отладки:")
 
-    -- Текст поддержки
     buffer.drawText(124, 5, colors.textclr, "Спасибо за поддержку:")
-    -- Бегущая строка будет обновляться в цикле
 
-    -- Нижние кнопки
     animatedButton(1, 5, 44, "🔧", nil, nil, 4, nil, nil, 0xa91df9, 0xffffff)
     animatedButton(1, 5, 47, "ⓘ", nil, nil, 4, nil, nil, 0xa91df9, 0x05e2ff)
     animatedButton(1, 13, 44, "Отключить реакторы!", nil, nil, 24, nil, nil, 0xfd3232)
@@ -235,14 +222,10 @@ local function drawStatic()
     animatedButton(1, 41, 47, "Выход из программы.", nil, nil, 23, nil, nil, colors.whitebtn)
     animatedButton(1, 68, 47, "Метрика: Auto", nil, nil, 18, nil, nil, colors.whitebtn)
 
-    -- Подпись внизу
     buffer.drawText(123, 50, 0x666666, "Reactor Control v" .. version .. "." .. build .. " by P1KaChU337")
 end
 
--- ----------------------------------------------------------------------------
--- Динамическая часть (значения, показатели, часы)
 local function drawDynamic()
-    -- Блок "Жидкости в МЭ сети"
     local fl_y1 = 30
     buffer.drawRectangle(123, fl_y1-1, 35, 4, colors.bg, 0, " ")
     for i = 0, 34 do
@@ -253,7 +236,6 @@ local function drawDynamic()
     drawDigit(125, fl_y1+1, brail_fluid, 0x0088ff)
     drawNumberWithText(143, fl_y1+1, 50000, 2, colors.textclr, "Mb", colors.textclr)
 
-    -- Блок "Настройка порога жидкости"
     fl_y1 = 35
     buffer.drawRectangle(123, fl_y1-1, 35, 4, colors.bg, 0, " ")
     for i = 0, 34 do
@@ -261,11 +243,10 @@ local function drawDynamic()
         buffer.drawText(123 + i, fl_y1,   colors.bg2, brailleChar(brail_console[2]))
     end
     buffer.drawText(124, fl_y1-1, colors.textclr, "Настройка порога жидкости:")
-    drawDigit(124, fl_y1+1, brail_greenbtn, 0xa6ff00)  -- + кнопка
-    drawDigit(126, fl_y1+1, brail_redbtn,   0xff2121)  -- - кнопка
+    drawDigit(124, fl_y1+1, brail_greenbtn, 0xa6ff00)
+    drawDigit(126, fl_y1+1, brail_redbtn,   0xff2121)
     drawNumberWithText(144, fl_y1+1, 50000, 2, colors.textclr, "Mb", colors.textclr)
 
-    -- Блок "Генерация всех реакторов"
     fl_y1 = 40
     buffer.drawRectangle(123, fl_y1, 35, 4, colors.bg, 0, " ")
     for i = 0, 34 do
@@ -276,7 +257,6 @@ local function drawDynamic()
     drawDigit(125, fl_y1+2, brail_thunderbolt, 0xffc400)
     drawNumberWithText(144, fl_y1+2, 0, 2, colors.textclr, "Rf/t", colors.textclr)
 
-    -- Блок "Статус комплекса"
     buffer.drawRectangle(89, 44, 31, 6, colors.bg, 0, " ")
     buffer.drawText(90, 44, colors.textclr, "Статус комплекса:")
     for i = 0, 30 do
@@ -292,7 +272,6 @@ local function drawDynamic()
     buffer.drawText(90, 47, colors.textclr, "Общее потребление")
     buffer.drawText(90, 48, colors.textclr, "жидкости: 0 Mb/s")
 
-    -- Индикатор Stop (красный)
     buffer.drawRectangle(112, 47, 6, 1, 0xfd3232, 0, " ")
     buffer.drawRectangle(113, 46, 4, 3, 0xfd3232, 0, " ")
     buffer.drawText(112, 46, 0xfd3232, brailleChar(brail_status[1]))
@@ -301,8 +280,7 @@ local function drawDynamic()
     buffer.drawText(112, 48, 0xfd3232, brailleChar(brail_status[4]))
     buffer.drawText(113, 47, 0x9d0000, "Stop")
 
-    -- Блок времени работы (справа внизу)
-    fl_y1 = 45  -- или 46 при flux, но у нас flux нет
+    fl_y1 = 45
     buffer.drawRectangle(123, fl_y1, 35, 4, colors.bg, 0, " ")
     for i = 0, 34 do
         buffer.drawText(123 + i, fl_y1-1, colors.bg, brailleChar(brail_console[1]))
@@ -316,17 +294,13 @@ local function drawDynamic()
     drawNumberWithText(154, fl_y1+2, 0, 2, colors.textclr, "Min", colors.textclr)
 end
 
--- ----------------------------------------------------------------------------
--- Обработка касаний (кнопки реагируют, но ничего не делают, кроме выхода)
 local function handleTouch(x, y)
-    -- Кнопка выхода (координаты из оригинального кода)
     if y >= 47 and y <= 49 and x >= 41 and x <= 64 then
         buffer.clear(0x000000)
         buffer.drawChanges()
         term.clear()
         os.exit()
     end
-    -- Остальные кнопки – просто анимация и сообщение
     if y >= 44 and y <= 46 then
         if x >= 13 and x <= 37 then
             buffer.drawRectangle(12, 44, 26, 3, colors.bg3, 0, " ")
@@ -367,7 +341,6 @@ local function handleTouch(x, y)
             animatedButton(1, 68, 47, "Метрика: Auto", nil, nil, 18, nil, nil, colors.whitebtn)
         end
     end
-    -- Кнопки настроек и информации (🔧, ⓘ) – просто анимация
     if y >= 44 and y <= 46 and x >= 5 and x <= 9 then
         buffer.drawRectangle(4, 44, 6, 3, colors.bg3, 0, " ")
         animatedButton(1, 5, 44, "🔧", nil, nil, 4, nil, nil, 0x8100cc, 0xffffff)
@@ -387,14 +360,12 @@ local function handleTouch(x, y)
     buffer.drawChanges()
 end
 
--- ----------------------------------------------------------------------------
--- Главный цикл (только отрисовка и анимация)
 local lastTime = computer.uptime()
 local second = 0
 local minute = 0
 local hour = 0
-
 local supportersText = "а реакторы для тестов, Fiellyns - спасибо за поддержку!"
+
 drawStatic()
 drawDynamic()
 buffer.drawChanges()
@@ -412,7 +383,6 @@ while true do
             end
             second = 0
         end
-        -- Обновляем часы и бегущую строку
         drawDynamic()
         drawMarquee(124, 6, supportersText .. "                            ", 0xF15F2C)
         buffer.drawChanges()
