@@ -47,8 +47,7 @@ local colors = {
     white = 0xFFFFFF
 }
 
--- ==================== НОВЫЕ СТИЛИЗОВАННЫЕ КНОПКИ ====================
--- Braille символы для кнопок (как в test_buttons_fixed.lua)
+-- ==================== Braille-кнопки (как в test_buttons_fixed.lua) ====================
 local function brailleChar(dots)
     return unicode.char(
         10240 +
@@ -99,14 +98,17 @@ local function shortenNameCentered(name, maxLength)
     return centerText(name, maxLength)
 end
 
--- Анимированная кнопка для стилизованных меню (высота 3 строки)
+-- Исправленная функция для GPU: предварительная очистка всей области
 local function animatedButton(push, x, y, text, length, color, textcolor)
     color = color or 0x059bff
     textcolor = textcolor or colors.text_bright
     length = length or 4
     local btn = (push == 1) and button1 or button1_push
 
+    -- Очищаем всю область кнопки (рамка + внутренность)
     gpu.setBackground(color)
+    gpu.fill(x - 1, y, length + 2, 3, " ")
+
     -- Левая граница
     gpu.set(x - 1, y, brailleChar(btn[4]))
     gpu.set(x - 1, y + 1, brailleChar(btn[3]))
@@ -117,13 +119,13 @@ local function animatedButton(push, x, y, text, length, color, textcolor)
     gpu.set(x + length, y + 1, brailleChar(btn[3]))
     gpu.set(x + length, y + 2, brailleChar(btn[6]))
 
-    -- Центральная линия
+    -- Центральная линия (верх и низ)
     for i = 0, length - 1 do
         gpu.set(x + i, y, brailleChar(btn[1]))
         gpu.set(x + i, y + 2, brailleChar(btn[7]))
     end
 
-    -- Текст (ровно по центру)
+    -- Текст (центральная строка)
     if push == 1 then
         gpu.fill(x, y + 1, length, 1, " ")
         gpu.setBackground(color)
@@ -135,7 +137,7 @@ local function animatedButton(push, x, y, text, length, color, textcolor)
     gpu.setBackground(colors.bg_main)
 end
 
--- Обычная кнопка для всех остальных случаев (прямоугольник, центрированный текст)
+-- Обычные кнопки (прямоугольные) для остальных элементов
 local function drawFlexButton(btn)
     gpu.setBackground(btn.bg)
     gpu.fill(btn.x, btn.y, btn.xs, btn.ys, " ")
@@ -145,9 +147,7 @@ local function drawFlexButton(btn)
     gpu.set(textX, textY, btn.text)
     gpu.setBackground(colors.bg_main)
 end
-
--- Удаляем старую функцию drawButton, она больше не нужна
--- ==================== КОНЕЦ НОВЫХ КНОПОК ====================
+-- ==================================================================
 
 local function clear()
     gpu.setBackground(colors.bg_main)
@@ -1068,7 +1068,6 @@ local function drawPurchaseScreen()
     local totalCoin = (purchaseItem.priceCoin or 0) * purchaseQuantity
     local totalEma = (purchaseItem.priceEma or 0) * purchaseQuantity
 
-    -- На сумму (Coina и ЭМЫ на отдельных строках)
     gpu.setForeground(colors.success)
     gpu.set(3, 5, "На сумму: ")
     local sumY = 5
@@ -1082,7 +1081,6 @@ local function drawPurchaseScreen()
         gpu.set(14, sumY, string.format("%.2f", totalEma) .. " ۞")
     end
 
-    -- Цена за штуку (Coina и ЭМЫ на отдельных строках)
     gpu.setForeground(colors.success)
     gpu.set(55, 5, "Цена: ")
     local priceY = 5
@@ -1750,7 +1748,7 @@ local function drawShopMenu()
         drawTempMessage()
         return
     end
-    -- Рисуем стилизованные кнопки магазина
+    -- Используем исправленную animatedButton для кнопок магазина
     for _, btn in pairs(shopMenuButtons) do
         animatedButton(1, btn.x, btn.y, btn.text, btn.xs, btn.bg, btn.fg)
     end
@@ -2244,7 +2242,6 @@ local function main()
                     end
                 end
             elseif currentScreen == "menu" then
-                -- Проверка кликов по стилизованным кнопкам (их координаты совпадают с btn.x, btn.y, btn.xs, btn.ys)
                 for name, btn in pairs(menuButtons) do
                     if x >= btn.x and x < btn.x + btn.xs and y >= btn.y and y < btn.y + btn.ys then
                         if name == "shop" then
