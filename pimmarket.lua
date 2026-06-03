@@ -47,6 +47,108 @@ local colors = {
     white = 0xFFFFFF
 }
 
+-- ==================== НОВЫЕ СТИЛИЗОВАННЫЕ КНОПКИ ====================
+-- Braille символы для кнопок (как в test_buttons_fixed.lua)
+local function brailleChar(dots)
+    return unicode.char(
+        10240 +
+        (dots[8] or 0) * 128 +
+        (dots[7] or 0) * 64 +
+        (dots[6] or 0) * 32 +
+        (dots[4] or 0) * 16 +
+        (dots[2] or 0) * 8 +
+        (dots[5] or 0) * 4 +
+        (dots[3] or 0) * 2 +
+        (dots[1] or 0)
+    )
+end
+
+local button1 = {
+    {0,0,0,0,1,1,1,1},
+    {0,0,0,0,1,0,1,1},
+    {1,1,1,1,1,1,1,1},
+    {0,0,0,0,0,1,1,1},
+    {1,1,0,1,0,0,0,0},
+    {1,1,1,0,0,0,0,0},
+    {1,1,1,1,0,0,0,0},
+    {1,1,1,1,1,1,1,0},
+    {1,1,1,1,1,1,0,1},
+}
+
+local button1_push = {
+    {0,0,0,0,0,0,1,1},
+    {0,0,0,0,0,0,1,0},
+    {1,1,1,1,1,1,1,1},
+    {0,0,0,0,0,0,0,1},
+    {0,1,0,0,0,0,0,0},
+    {1,0,0,0,0,0,0,0},
+    {1,1,0,0,0,0,0,0},
+}
+
+local function centerText(text, width)
+    local len = unicode.len(text)
+    local pad = math.floor((width - len) / 2)
+    if pad < 0 then pad = 0 end
+    return string.rep(" ", pad) .. text
+end
+
+local function shortenNameCentered(name, maxLength)
+    if unicode.len(name) > maxLength then
+        name = unicode.sub(name, 1, maxLength - 3) .. "..."
+    end
+    return centerText(name, maxLength)
+end
+
+-- Анимированная кнопка для стилизованных меню (высота 3 строки)
+local function animatedButton(push, x, y, text, length, color, textcolor)
+    color = color or 0x059bff
+    textcolor = textcolor or colors.text_bright
+    length = length or 4
+    local btn = (push == 1) and button1 or button1_push
+
+    gpu.setBackground(color)
+    -- Левая граница
+    gpu.set(x - 1, y, brailleChar(btn[4]))
+    gpu.set(x - 1, y + 1, brailleChar(btn[3]))
+    gpu.set(x - 1, y + 2, brailleChar(btn[5]))
+
+    -- Правая граница
+    gpu.set(x + length, y, brailleChar(btn[2]))
+    gpu.set(x + length, y + 1, brailleChar(btn[3]))
+    gpu.set(x + length, y + 2, brailleChar(btn[6]))
+
+    -- Центральная линия
+    for i = 0, length - 1 do
+        gpu.set(x + i, y, brailleChar(btn[1]))
+        gpu.set(x + i, y + 2, brailleChar(btn[7]))
+    end
+
+    -- Текст (ровно по центру)
+    if push == 1 then
+        gpu.fill(x, y + 1, length, 1, " ")
+        gpu.setBackground(color)
+        gpu.setForeground(textcolor)
+        gpu.set(x, y + 1, shortenNameCentered(text, length))
+    elseif push == 0 then
+        os.sleep(0.2)
+    end
+    gpu.setBackground(colors.bg_main)
+end
+
+-- Обычная кнопка для всех остальных случаев (прямоугольник, центрированный текст)
+local function drawFlexButton(btn)
+    gpu.setBackground(btn.bg)
+    gpu.fill(btn.x, btn.y, btn.xs, btn.ys, " ")
+    gpu.setForeground(btn.fg)
+    local textX = btn.x + math.floor((btn.xs - unicode.len(btn.text)) / 2)
+    local textY = btn.y + math.floor((btn.ys - 1) / 2)
+    gpu.set(textX, textY, btn.text)
+    gpu.setBackground(colors.bg_main)
+end
+
+-- Удаляем старую функцию drawButton, она больше не нужна
+-- ==================== КОНЕЦ НОВЫХ КНОПОК ====================
+
 local function clear()
     gpu.setBackground(colors.bg_main)
     gpu.fill(1, 1, 80, 25, " ")
@@ -56,26 +158,6 @@ local function drawCenteredText(y, text, color)
     gpu.setForeground(color or colors.text_main)
     local x = math.floor((80 - unicode.len(text)) / 2) + 1 + 1
     gpu.set(x, y, text)
-end
-
-local function drawButton(btn)
-    gpu.setBackground(btn.bg)
-    gpu.fill(btn.x, btn.y, btn.xs, btn.ys, " ")
-    gpu.setForeground(btn.fg)
-    local textX = btn.x + math.floor((btn.xs - unicode.len(btn.text)) / 2)
-    local textY = btn.y + math.floor((btn.ys - 1) / 2)
-    gpu.set(textX, textY, btn.text)
-    gpu.setBackground(colors.bg_main)
-end
-
-local function drawFlexButton(btn)
-    gpu.setBackground(btn.bg)
-    gpu.fill(btn.x, btn.y, btn.xs, btn.ys, " ")
-    gpu.setForeground(btn.fg)
-    local textX = btn.x + math.floor((btn.xs - unicode.len(btn.text)) / 2)
-    local textY = btn.y + math.floor((btn.ys - 1) / 2)
-    gpu.set(textX, textY, btn.text)
-    gpu.setBackground(colors.bg_main)
 end
 
 local function safeDoFile(path)
@@ -468,10 +550,18 @@ local function drawFeedbackInputScreen()
     drawTempMessage()
 end
 
+-- Стилизованные кнопки главного меню (Магазин, Полезности, Аккаунт)
 local menuButtons = {
-    shop    = {x=32, xs=20, y=9,  ys=3, text="🛒 Магазин",     tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main},
-    util    = {x=32, xs=20, y=13, ys=3, text="🛠 Полезности",   tx=5, ty=1, bg=colors.bg_button, fg=colors.accent_main},
-    account = {x=32, xs=20, y=17, ys=3, text="👤 Аккаунт",      tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main}
+    shop    = {x=32, xs=20, y=9,  ys=3, text="🛒 Магазин",     bg=colors.bg_button, fg=colors.accent_main},
+    util    = {x=32, xs=20, y=13, ys=3, text="🛠 Полезности",   bg=colors.bg_button, fg=colors.accent_main},
+    account = {x=32, xs=20, y=17, ys=3, text="👤 Аккаунт",      bg=colors.bg_button, fg=colors.accent_main}
+}
+
+-- Стилизованные кнопки меню магазина (Покупка, Пополнение, Наборы/Квесты)
+local shopMenuButtons = {
+    buy    = {x=32, xs=20, y=9,  ys=3, text="🛍 Покупка",     bg=colors.bg_button, fg=colors.accent_main},
+    sell   = {x=32, xs=20, y=13, ys=3, text="💰 Пополнение",  bg=colors.bg_button, fg=colors.accent_main},
+    bundle = {x=32, xs=20, y=17, ys=3, text="🎁 Наборы/Квесты", bg=colors.bg_button, fg=colors.accent_main}
 }
 
 local function drawBottomPanel()
@@ -495,12 +585,6 @@ local function isButtonClicked(btn, x, y)
 end
 
 local nextButton    = {text = "[ КУПИТЬ ]",  x=59, y=24, xs=11, ys=1, bg=colors.bg_button, fg=colors.inactive}
-
-local shopMenuButtons = {
-    buy    = {x=32, xs=20, y=9,  ys=3, text="🛍 Покупка",     tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main},
-    sell   = {x=32, xs=20, y=13, ys=3, text="💰 Пополнение",  tx=5, ty=1, bg=colors.bg_button, fg=colors.accent_main},
-    bundle = {x=32, xs=20, y=17, ys=3, text="🎁 Наборы/Квесты", tx=4, ty=1, bg=colors.bg_button, fg=colors.accent_main}
-}
 
 local function canSendReport()
     if not lastReportTime then return true end
@@ -1666,8 +1750,9 @@ local function drawShopMenu()
         drawTempMessage()
         return
     end
+    -- Рисуем стилизованные кнопки магазина
     for _, btn in pairs(shopMenuButtons) do
-        drawButton(btn)
+        animatedButton(1, btn.x, btn.y, btn.text, btn.xs, btn.bg, btn.fg)
     end
     drawFlexButton(backButton)
     drawTempMessage()
@@ -1731,8 +1816,9 @@ local function drawMainMenu()
             end
         end
 
+        -- Рисуем стилизованные кнопки главного меню
         for _, btn in pairs(menuButtons) do
-            drawButton(btn)
+            animatedButton(1, btn.x, btn.y, btn.text, btn.xs, btn.bg, btn.fg)
         end
         drawBottomPanel()
     else
@@ -2158,6 +2244,7 @@ local function main()
                     end
                 end
             elseif currentScreen == "menu" then
+                -- Проверка кликов по стилизованным кнопкам (их координаты совпадают с btn.x, btn.y, btn.xs, btn.ys)
                 for name, btn in pairs(menuButtons) do
                     if x >= btn.x and x < btn.x + btn.xs and y >= btn.y and y < btn.y + btn.ys then
                         if name == "shop" then
