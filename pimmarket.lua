@@ -47,7 +47,7 @@ local colors = {
     white = 0xFFFFFF
 }
 
--- ==================== Braille-кнопки (как в test_buttons_fixed.lua) ====================
+-- ==================== BRAILLE-КНОПКИ (АДАПТИРОВАНО ДЛЯ GPU) ====================
 local function brailleChar(dots)
     return unicode.char(
         10240 +
@@ -98,54 +98,49 @@ local function shortenNameCentered(name, maxLength)
     return centerText(name, maxLength)
 end
 
--- Исправленная функция для GPU: предварительная очистка всей области
+-- Анимация кнопки для GPU (полностью аналогична buffer-версии)
 local function animatedButton(push, x, y, text, length, color, textcolor)
     color = color or 0x059bff
     textcolor = textcolor or colors.text_bright
     length = length or 4
     local btn = (push == 1) and button1 or button1_push
 
-    -- Очищаем всю область кнопки (рамка + внутренность)
-    gpu.setBackground(color)
+    -- 1. Очищаем ВСЮ область кнопки (ширина length+2, высота 3)
+    gpu.setBackground(colors.bg_main)    -- фон экрана
     gpu.fill(x - 1, y, length + 2, 3, " ")
 
-    -- Левая граница
+    -- 2. Рисуем рамку (Braille)
+    gpu.setBackground(color)  -- цвет рамки
+    -- левая граница
     gpu.set(x - 1, y, brailleChar(btn[4]))
     gpu.set(x - 1, y + 1, brailleChar(btn[3]))
     gpu.set(x - 1, y + 2, brailleChar(btn[5]))
-
-    -- Правая граница
+    -- правая граница
     gpu.set(x + length, y, brailleChar(btn[2]))
     gpu.set(x + length, y + 1, brailleChar(btn[3]))
     gpu.set(x + length, y + 2, brailleChar(btn[6]))
-
-    -- Центральная линия (верх и низ)
+    -- верхняя и нижняя линии
     for i = 0, length - 1 do
         gpu.set(x + i, y, brailleChar(btn[1]))
         gpu.set(x + i, y + 2, brailleChar(btn[7]))
     end
 
-    -- Текст (центральная строка)
+    -- 3. Внутренняя строка (текст)
     if push == 1 then
-        gpu.fill(x, y + 1, length, 1, " ")
         gpu.setBackground(color)
+        gpu.fill(x, y + 1, length, 1, " ")
         gpu.setForeground(textcolor)
         gpu.set(x, y + 1, shortenNameCentered(text, length))
     elseif push == 0 then
         os.sleep(0.2)
     end
+
     gpu.setBackground(colors.bg_main)
 end
 
--- Обычные кнопки (прямоугольные) для остальных элементов
+-- Обычные прямоугольные кнопки (для совместимости)
 local function drawFlexButton(btn)
-    gpu.setBackground(btn.bg)
-    gpu.fill(btn.x, btn.y, btn.xs, btn.ys, " ")
-    gpu.setForeground(btn.fg)
-    local textX = btn.x + math.floor((btn.xs - unicode.len(btn.text)) / 2)
-    local textY = btn.y + math.floor((btn.ys - 1) / 2)
-    gpu.set(textX, textY, btn.text)
-    gpu.setBackground(colors.bg_main)
+    animatedButton(1, btn.x, btn.y, btn.text, btn.xs, btn.bg, btn.fg)
 end
 -- ==================================================================
 
@@ -2242,8 +2237,13 @@ local function main()
                     end
                 end
             elseif currentScreen == "menu" then
-                for name, btn in pairs(menuButtons) do
+               for name, btn in pairs(menuButtons) do
                     if x >= btn.x and x < btn.x + btn.xs and y >= btn.y and y < btn.y + btn.ys then
+                        -- Анимация нажатия
+                        animatedButton(2, btn.x, btn.y, btn.text, btn.xs, btn.bg, btn.fg)
+                        os.sleep(0.2)
+                        animatedButton(1, btn.x, btn.y, btn.text, btn.xs, btn.bg, btn.fg)
+                
                         if name == "shop" then
                             if playerAgreed then
                                 goToShop()
@@ -2291,6 +2291,11 @@ local function main()
             elseif currentScreen == "shop" then
                 for name, btn in pairs(shopMenuButtons) do
                     if x >= btn.x and x < btn.x + btn.xs and y >= btn.y and y < btn.y + btn.ys then
+                        -- Анимация нажатия
+                        animatedButton(2, btn.x, btn.y, btn.text, btn.xs, btn.bg, btn.fg)
+                        os.sleep(0.2)
+                        animatedButton(1, btn.x, btn.y, btn.text, btn.xs, btn.bg, btn.fg)
+                
                         if name == "buy" then
                             goToBuy()
                         elseif name == "sell" then
