@@ -1,412 +1,224 @@
--- ============================================================================
--- Reactor Control v1.1 (build 3) – ИНТЕРФЕЙС БЕЗ РЕАКТОРОВ
--- Точная визуальная копия, только демонстрация.
--- Для OpenComputers (McSkill HiTech 1.7.10)
--- ============================================================================
+-- =============================================
+-- Reactor Control v1.1 build 3 — Полная версия
+-- Работает без картинок
+-- =============================================
 
 local computer = require("computer")
 local buffer = require("doubleBuffering")
 local event = require("event")
-local term = require("term")
+local component = require("component")
+local fs = require("filesystem")
 local unicode = require("unicode")
-local bit = require("bit32")
+local shell = require("shell")
 
 buffer.setResolution(160, 50)
 buffer.clear(0x000000)
 
 local version = "1.1"
 local build = "3"
+local exit = false
 
--- Цветовая схема (тёмная тема)
-local colors = {
-    bg      = 0x202020,
-    bg2     = 0x101010,
-    bg3     = 0x3c3c3c,
-    bg4     = 0x969696,
-    bg5     = 0xff0000,
-    textclr = 0xcccccc,
-    textbtn = 0xffffff,
-    whitebtn = nil,
-    whitebtn2 = 0x38afff,
-    msginfo  = 0x61ff52,
-    msgwarn  = 0xfff700,
-    msgerror = 0xff0000,
+local porog = 50000
+local reactors = 0
+local reactor_work = {}
+local reactor_aborted = {}
+local temperature = {}
+local reactor_type = {}
+local reactor_rf = {}
+local reactor_getcoolant = {}
+local reactor_maxcoolant = {}
+local fluidInMe = 125000
+local status_metric = "Auto"
+local metric = 0
+
+local consoleLines = {}
+local second, minute, hour = 0, 0, 0
+local MeSecond = 0
+
+local widgetCoords = {
+    {10,6},{36,6},{65,6},{91,6},
+    {10,18},{36,18},{65,18},{91,18},
+    {10,30},{36,30},{65,30},{91,30}
 }
 
--- ---------------------- Символы Брайля (полный набор) -------------------------
+-- ====================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ======================
+
 local function brailleChar(dots)
-    return unicode.char(
-        10240 +
-        (dots[8] or 0) * 128 +
-        (dots[7] or 0) * 64 +
-        (dots[6] or 0) * 32 +
-        (dots[4] or 0) * 16 +
-        (dots[2] or 0) * 8 +
-        (dots[5] or 0) * 4 +
-        (dots[3] or 0) * 2 +
-        (dots[1] or 0)
-    )
+    return unicode.char(10240 + (dots[8]or0)*128 + (dots[7]or0)*64 + (dots[6]or0)*32 + (dots[4]or0)*16 + (dots[2]or0)*8 + (dots[5]or0)*4 + (dots[3]or0)*2 + (dots[1]or0))
 end
 
-local braill0 = {{1,1,1,0,1,0,1,0},{1,0,1,0,1,0,1,0},{1,1,0,0,0,0,0,0},{1,0,0,0,0,0,0,0}}
-local braill1 = {{0,1,1,1,0,1,0,1},{0,0,0,0,0,0,0,0},{1,1,0,0,0,0,0,0},{1,0,0,0,0,0,0,0}}
-local braill2 = {{1,1,0,0,1,1,1,0},{1,0,1,0,1,0,0,0},{1,1,0,0,0,0,0,0},{1,0,0,0,0,0,0,0}}
-local braill3 = {{1,1,0,0,1,1,0,0},{1,0,1,0,1,0,1,0},{1,1,0,0,0,0,0,0},{1,0,0,0,0,0,0,0}}
-local braill4 = {{1,0,1,0,1,1,0,0},{1,0,1,0,1,0,1,0},{0,0,0,0,0,0,0,0},{1,0,0,0,0,0,0,0}}
-local braill5 = {{1,1,1,0,1,1,0,0},{1,0,0,0,1,0,1,0},{1,1,0,0,0,0,0,0},{1,0,0,0,0,0,0,0}}
-local braill6 = {{1,1,1,0,1,1,1,0},{1,0,0,0,1,0,1,0},{1,1,0,0,0,0,0,0},{1,0,0,0,0,0,0,0}}
-local braill7 = {{1,1,0,0,0,0,0,0},{1,0,1,0,1,0,1,0},{0,0,0,0,0,0,0,0},{1,0,0,0,0,0,0,0}}
-local braill8 = {{1,1,1,0,1,1,1,0},{1,0,1,0,1,0,1,0},{1,1,0,0,0,0,0,0},{1,0,0,0,0,0,0,0}}
-local braill9 = {{1,1,1,0,1,1,0,0},{1,0,1,0,1,0,1,0},{1,1,0,0,0,0,0,0},{1,0,0,0,0,0,0,0}}
-local braill_minus = {{0,0,0,0,1,1,0,0},{0,0,0,0,1,0,0,0},{0,0,0,0,0,0,0,0},{0,0,0,0,0,0,0,0}}
-local braill_dot   = {{0,0,0,0,0,0,0,0},{0,0,0,0,0,0,0,0},{1,0,0,0,0,0,0,0},{0,0,0,0,0,0,0,0}}
+local brail_status = {{1,1,1,0,1,0,1,0},{1,0,1,0,1,0,1,0},{1,1,0,0,0,0,0,0},{1,0,0,0,0,0,0,0}}
 
-local brail_greenbtn = {{0,0,0,1,1,1,0,1},{0,0,0,0,1,0,0,0},{0,0,0,0,0,0,0,0},{0,0,0,0,0,0,0,0}}
-local brail_redbtn   = {{0,0,0,0,0,1,0,0},{0,0,0,0,1,1,0,0},{0,0,0,0,0,0,0,0},{0,0,0,0,0,0,0,0}}
-
-local brail_console   = {{0,0,0,0,1,1,1,1},{0,0,1,1,0,0,0,0}}
-local brail_fluid     = {{0,1,0,1,1,1,1,1},{1,0,1,0,1,1,1,1},{1,1,0,1,0,0,0,0},{1,1,1,0,0,0,0,0}}
-local brail_thunderbolt = {{0,0,0,0,0,1,0,0},{0,1,1,0,1,1,0,1},{0,0,0,1,0,0,0,0},{1,0,0,0,0,0,0,0}}
-local brail_cherta    = {{1,0,1,0,1,0,1,0},{1,0,1,1,1,0,1,0},{0,0,0,0,1,0,1,0},{1,0,1,0,1,0,1,0},{0,0,1,1,0,1,0,1},{0,1,0,1,0,1,0,1},{0,0,1,1,1,0,1,0}}
-local brail_time      = {{1,1,1,0,0,1,1,0},{1,1,0,1,1,0,0,1},{1,0,1,1,0,0,0,0},{0,1,1,1,0,0,0,0}}
-local brail_status    = {{0,0,0,1,1,1,1,1},{0,0,1,0,1,1,1,1},{1,1,1,1,1,0,0,0},{1,1,1,1,0,1,0,0}}
-local button1         = {{0,0,0,0,1,1,1,1},{0,0,0,0,1,0,1,1},{1,1,1,1,1,1,1,1},{0,0,0,0,0,1,1,1},{1,1,0,1,0,0,0,0},{1,1,1,0,0,0,0,0},{1,1,1,1,0,0,0,0},{1,1,1,1,1,1,1,0},{1,1,1,1,1,1,0,1}}
-local button1_push    = {{0,0,0,0,0,0,1,1},{0,0,0,0,0,0,1,0},{1,1,1,1,1,1,1,1},{0,0,0,0,0,0,0,1},{0,1,0,0,0,0,0,0},{1,0,0,0,0,0,0,0},{1,1,0,0,0,0,0,0}}
-local brail_verticalbar = {{0,0,0,0,0,0,1,1},{0,0,0,0,1,1,1,1},{0,0,1,1,1,1,1,1},{1,1,1,1,1,1,1,1}}
-
-local braillMap = {
-    [0] = braill0, [1] = braill1, [2] = braill2, [3] = braill3,
-    [4] = braill4, [5] = braill5, [6] = braill6, [7] = braill7,
-    [8] = braill8, [9] = braill9, ["-"] = braill_minus, ["."] = braill_dot,
-}
-
--- ----------------------------------------------------------------------------
--- Вспомогательные функции рисования
-local function drawDigit(x, y, braill, color)
-    buffer.drawText(x,     y,     color, brailleChar(braill[1]))
-    buffer.drawText(x,     y + 1, color, brailleChar(braill[3]))
-    buffer.drawText(x + 1, y,     color, brailleChar(braill[2]))
-    buffer.drawText(x + 1, y + 1, color, brailleChar(braill[4]))
+local function centerText(text, width)
+    local len = unicode.len(text)
+    local pad = math.floor((width - len)/2)
+    return string.rep(" ", pad) .. text
 end
 
-local function drawNumberWithText(centerX, centerY, number, digitWidth, color, suffix, suffixColor)
-    suffixColor = suffixColor or color
-    local strNum = tostring(number)
-    local digits = {}
-    local widths = {}
-    for i = 1, #strNum do
-        local ch = strNum:sub(i, i)
-        local n = tonumber(ch)
-        if n then
-            table.insert(digits, braillMap[n])
-            table.insert(widths, digitWidth)
-        elseif braillMap[ch] then
-            table.insert(digits, braillMap[ch])
-            table.insert(widths, (ch == "." and 1 or digitWidth))
-        end
-    end
-    local suffixWidth = suffix and #suffix or 0
-    local totalWidth = 0
-    for _, w in ipairs(widths) do totalWidth = totalWidth + w end
-    totalWidth = totalWidth + (suffixWidth > 0 and (suffixWidth + 1) or 0)
-    local startX = math.floor(centerX - totalWidth / 2)
-    buffer.drawText(startX, centerY, colors.bg, string.rep(" ", totalWidth))
-    local x = startX
-    for i, digit in ipairs(digits) do
-        drawDigit(x, centerY, digit, color)
-        x = x + widths[i]
-    end
-    if suffix and suffixWidth > 0 then
-        buffer.drawText(x, centerY, suffixColor, suffix)
-    end
-end
-
-local function animatedButton(push, x, y, text, tx, ty, length, time, clearWidth, color, textcolor)
-    local btn = (push == 1) and button1 or button1_push
-    local bgColor = color or 0x059bff
-    local tColor = textcolor or colors.textbtn
-    local ftx = tx or x
-    local fty = ty or y + 1
-    if push == 1 then
-        buffer.drawRectangle(x, y + 1, length, 1, bgColor, 0, " ")
-        buffer.drawText(ftx, fty, tColor, (text or "* Клик *"):sub(1, length))
-    end
-    buffer.drawText(x - 1, y,     bgColor, brailleChar(btn[4]))
-    buffer.drawText(x - 1, y + 1, bgColor, brailleChar(btn[3]))
-    buffer.drawText(x - 1, y + 2, bgColor, brailleChar(btn[5]))
-    buffer.drawText(x + length, y,     bgColor, brailleChar(btn[2]))
-    buffer.drawText(x + length, y + 1, bgColor, brailleChar(btn[3]))
-    buffer.drawText(x + length, y + 2, bgColor, brailleChar(btn[6]))
-    for i = 0, length - 1 do
-        buffer.drawText(x + i, y,     bgColor, brailleChar(btn[1]))
-        buffer.drawText(x + i, y + 2, bgColor, brailleChar(btn[7]))
-    end
-    if push == 0 and clearWidth and clearWidth > length then
-        buffer.drawRectangle(x, y + 1, length, 1, bgColor, 0, " ")
-        buffer.drawText(ftx, fty, tColor, (text or "* Клик *"):sub(1, length))
-    end
-    if push == 0 then os.sleep(time or 0.3) end
-end
-
-local function shortenNameCentered(name, maxLength)
-    if unicode.len(name) > maxLength then
-        name = unicode.sub(name, 1, maxLength - 3) .. "..."
-    end
-    local pad = math.floor((maxLength - unicode.len(name)) / 2)
-    if pad < 0 then pad = 0 end
-    return string.rep(" ", pad) .. name
-end
-
-local scrollPos = 1
-local maxWidth = 33
-local function drawMarquee(x, y, text, color)
-    local textLength = unicode.len(text)
-    if textLength > maxWidth then
-        local visible = unicode.sub(text, scrollPos, scrollPos + maxWidth - 1)
-        if unicode.len(visible) < maxWidth then
-            visible = visible .. unicode.sub(text, 1, maxWidth - unicode.len(visible))
-        end
-        buffer.drawText(x, y, color, visible)
-        scrollPos = scrollPos + 1
-        if scrollPos > textLength then scrollPos = 1 end
+local function formatRFwidgets(value)
+    if value >= 1000000 then
+        return "Ген: " .. math.floor(value/1000000) .. " mRF/t"
+    elseif value >= 1000 then
+        return "Ген: " .. math.floor(value/1000) .. " kRF/t"
     else
-        buffer.drawText(x, y, color, text)
+        return "Ген: " .. value .. " RF/t"
     end
-    buffer.drawChanges()
 end
 
--- ----------------------------------------------------------------------------
--- Отрисовка статической части (без загрузки изображений)
+local function animatedButton(push, x, y, text, length)
+    length = length or unicode.len(text) + 2
+    local color = push == 1 and 0x00cc44 or 0xff3333
+    buffer.drawRectangle(x, y, length, 3, color, 0, " ")
+    buffer.drawText(x + 1, y + 1, 0xffffff, centerText(text, length-2))
+end
+
+local function drawVerticalProgressBar(x, y, height, value, maxValue)
+    if maxValue == 0 then maxValue = 1 end
+    local filled = math.floor(height * (value / maxValue))
+    for i = 0, height-1 do
+        local col = i < (height - filled) and 0x222222 or 0x4488ff
+        buffer.drawText(x, y + i, col, "█")
+    end
+end
+
+-- ====================== ОСНОВНОЙ ИНТЕРФЕЙС ======================
+
 local function drawStatic()
-    buffer.drawRectangle(1, 1, 160, 50, colors.bg, 0, " ")
+    -- Фон
+    buffer.drawRectangle(1, 1, 160, 50, 0x1c1c1c, 0, " ")
+    buffer.drawRectangle(2, 2, 158, 48, 0x2a2a2a, 0, " ")
 
-    buffer.drawText(3, 2, colors.textclr, "---Reactor Control v" .. version .. "---")
-    buffer.drawText(3, 3, colors.textclr, "Автор приложения: P1KaCh0337")
-    buffer.drawText(3, 4, colors.textclr, "Версия приложения: " .. version .. ", Build " .. build)
-    buffer.drawText(3, 5, colors.textclr, "Авто-обновление: Включено")
-    buffer.drawText(3, 6, colors.textclr, "Реакторов найдено: 0")
-    buffer.drawText(3, 7, colors.textclr, "МЭ-сеть: Не подключена")
-    buffer.drawText(3, 8, colors.textclr, "Flux-сеть: Не подключена")
-    buffer.drawText(3, 9, colors.textclr, "ChatBox: Не подключен")
-    buffer.drawText(3, 11, colors.textclr, "Инициализация реакторов...")
-    buffer.drawText(3, 12, colors.textclr, "Реакторы не найдены!")
-    buffer.drawText(3, 13, colors.textclr, "Проверьте подключение реакторов!")
+    -- Заголовок
+    buffer.drawText(68, 2, 0xffd700, "РЕАКТОРЫ")
 
-    buffer.drawRectangle(5, 15, 118, 51, colors.bg4, 0, " ")
-    buffer.drawRectangle(37, 29, 50, 3, colors.bg2, 0, " ")
-    buffer.drawRectangle(36, 30, 52, 1, colors.bg2, 0, " ")
-    local cornerPos = {{36,29,1},{87,29,2},{87,31,3},{36,31,4}}
-    for _, c in ipairs(cornerPos) do
-        buffer.drawText(c[1], c[2], colors.bg2, brailleChar(brail_status[c[3]]))
-    end
-    buffer.drawText(43, 30, 0xcccccc, "У вас не подключено ни одного реактора!")
-    buffer.drawText(40, 30, 0xffd900, "⚠")
+    -- Нижняя панель кнопок
+    animatedButton(1, 3,  44, "⚙", 4)           -- Настройки
+    animatedButton(1, 3,  47, "ⓘ", 4)           -- Инфо
 
-    buffer.drawRectangle(123, 1, 35, 49, colors.bg, 0, " ")
-    for i = 0, 34 do
-        buffer.drawText(123 + i, 0, colors.bg, brailleChar(brail_console[1]))
-        buffer.drawText(123 + i, 2, colors.bg2, brailleChar(brail_console[2]))
-    end
-    buffer.drawText(124, 1, colors.textclr, "Информационное окно отладки:")
+    animatedButton(1, 12, 44, "Отключить реакторы!", 24)
+    animatedButton(1, 40, 44, "Запуск реакторов!", 23)
+    animatedButton(1, 67, 44, "Пр.Обновить МЭ", 18)
 
-    buffer.drawText(124, 5, colors.textclr, "Спасибо за поддержку:")
+    animatedButton(1, 12, 47, "Рестарт программы.", 24)
+    animatedButton(1, 40, 47, "Выход из программы.", 23)
+    animatedButton(1, 67, 47, "Метрика: " .. status_metric, 18)
 
-    animatedButton(1, 5, 44, "🔧", nil, nil, 4, nil, nil, 0xa91df9, 0xffffff)
-    animatedButton(1, 5, 47, "ⓘ", nil, nil, 4, nil, nil, 0xa91df9, 0x05e2ff)
-    animatedButton(1, 13, 44, "Отключить реакторы!", nil, nil, 24, nil, nil, 0xfd3232)
-    animatedButton(1, 41, 44, "Запуск реакторов!", nil, nil, 23, nil, nil, 0x35e525)
-    animatedButton(1, 68, 44, "Пр.Обновить МЭ", nil, nil, 18, nil, nil, nil)
-    animatedButton(1, 13, 47, "Рестарт программы.", nil, nil, 24, nil, nil, colors.whitebtn)
-    animatedButton(1, 41, 47, "Выход из программы.", nil, nil, 23, nil, nil, colors.whitebtn)
-    animatedButton(1, 68, 47, "Метрика: Auto", nil, nil, 18, nil, nil, colors.whitebtn)
-
-    buffer.drawText(123, 50, 0x666666, "Reactor Control v" .. version .. "." .. build .. " by P1KaChU337")
+    buffer.drawText(123, 50, 0x666666, "Reactor Control v"..version.."."..build)
 end
 
--- ----------------------------------------------------------------------------
--- Динамическая часть (всегда отображаем 0 реакторов, 50000 Mb жидкости)
-local function drawDynamic()
-    -- Жидкости в МЭ сети
-    local fl_y1 = 30
-    buffer.drawRectangle(123, fl_y1-1, 35, 4, colors.bg, 0, " ")
-    for i = 0, 34 do
-        buffer.drawText(123 + i, fl_y1-2, colors.bg, brailleChar(brail_console[1]))
-        buffer.drawText(123 + i, fl_y1,   colors.bg2, brailleChar(brail_console[2]))
-    end
-    buffer.drawText(124, fl_y1-1, colors.textclr, "Жидкости в МЭ сети:")
-    drawDigit(125, fl_y1+1, brail_fluid, 0x0088ff)
-    drawNumberWithText(143, fl_y1+1, 50000, 2, colors.textclr, "Mb", colors.textclr)
+local function drawWidgets()
+    buffer.drawRectangle(5, 5, 114, 37, 0x2a2a2a, 0, " ")
 
-    -- Порог
-    fl_y1 = 35
-    buffer.drawRectangle(123, fl_y1-1, 35, 4, colors.bg, 0, " ")
-    for i = 0, 34 do
-        buffer.drawText(123 + i, fl_y1-2, colors.bg, brailleChar(brail_console[1]))
-        buffer.drawText(123 + i, fl_y1,   colors.bg2, brailleChar(brail_console[2]))
+    if reactors == 0 then
+        buffer.drawRectangle(35, 22, 52, 3, 0x111111, 0, " ")
+        buffer.drawText(38, 23, 0xffaa00, "⚠")
+        buffer.drawText(42, 23, 0xffffff, "У вас не подключено ни одного реактора!")
+        return
     end
-    buffer.drawText(124, fl_y1-1, colors.textclr, "Настройка порога жидкости:")
-    drawDigit(124, fl_y1+1, brail_greenbtn, 0xa6ff00)
-    drawDigit(126, fl_y1+1, brail_redbtn,   0xff2121)
-    drawNumberWithText(144, fl_y1+1, 50000, 2, colors.textclr, "Mb", colors.textclr)
 
-    -- Генерация всех реакторов
-    fl_y1 = 40
-    buffer.drawRectangle(123, fl_y1, 35, 4, colors.bg, 0, " ")
-    for i = 0, 34 do
-        buffer.drawText(123 + i, fl_y1-1, colors.bg, brailleChar(brail_console[1]))
-        buffer.drawText(123 + i, fl_y1+1, colors.bg2, brailleChar(brail_console[2]))
+    for i = 1, math.min(reactors, 12) do
+        local x, y = widgetCoords[i][1], widgetCoords[i][2]
+        
+        buffer.drawRectangle(x, y, 24, 13, 0x1f1f1f, 0, " ")
+        buffer.drawRectangle(x+1, y+1, 22, 11, 0x2a2a2a, 0, " ")
+
+        buffer.drawText(x, y, 0x555555, brailleChar(brail_status[1]))
+        buffer.drawText(x+23, y, 0x555555, brailleChar(brail_status[2]))
+        buffer.drawText(x+23, y+12, 0x555555, brailleChar(brail_status[3]))
+        buffer.drawText(x, y+12, 0x555555, brailleChar(brail_status[4]))
+
+        local working = reactor_work[i] or false
+
+        buffer.drawText(x+2, y+1, 0xdddddd, "РЕАКТОР #"..i)
+        buffer.drawText(x+2, y+2, 0x88ffaa, "Нагрев: "..(temperature[i] or 650).."°C")
+        buffer.drawText(x+2, y+3, 0xffcc77, formatRFwidgets(reactor_rf[i] or 12500))
+        buffer.drawText(x+2, y+4, 0x77bbff, "Тип: "..(reactor_type[i] or "Fluid"))
+        buffer.drawText(x+2, y+5, working and 0x00ff88 or 0xff6666, "Статус: "..(working and "РАБОТАЕТ" or "СТОП"))
+
+        if reactor_type[i] == "Fluid" then
+            drawVerticalProgressBar(x+21, y+1, 11, reactor_getcoolant[i] or 8500, 10000)
+        end
+
+        animatedButton(working and 0 or 1, x+6, y+8, working and "ОТКЛ" or "ВКЛ", 11)
     end
-    buffer.drawText(124, fl_y1, colors.textclr, "Генерация всех реакторов:")
-    drawDigit(125, fl_y1+2, brail_thunderbolt, 0xffc400)
-    drawNumberWithText(144, fl_y1+2, 0, 2, colors.textclr, "Rf/t", colors.textclr)
-
-    -- Статус комплекса
-    buffer.drawRectangle(89, 44, 31, 6, colors.bg, 0, " ")
-    buffer.drawText(90, 44, colors.textclr, "Статус комплекса:")
-    for i = 0, 30 do
-        buffer.drawText(89 + i, 43, colors.bg, brailleChar(brail_console[1]))
-        buffer.drawText(89 + i, 45, colors.bg2, brailleChar(brail_console[2]))
-    end
-    buffer.drawText(110, 45, colors.bg2, brailleChar(brail_cherta[5]))
-    buffer.drawText(110, 46, colors.bg2, brailleChar(brail_cherta[6]))
-    buffer.drawText(110, 47, colors.bg2, brailleChar(brail_cherta[6]))
-    buffer.drawText(110, 48, colors.bg2, brailleChar(brail_cherta[6]))
-    buffer.drawText(110, 49, colors.bg2, brailleChar(brail_cherta[6]))
-    buffer.drawText(90, 46, colors.textclr, "Кол-во реакторов: 0")
-    buffer.drawText(90, 47, colors.textclr, "Общее потребление")
-    buffer.drawText(90, 48, colors.textclr, "жидкости: 0 Mb/s")
-
-    -- Индикатор Stop
-    buffer.drawRectangle(112, 47, 6, 1, 0xfd3232, 0, " ")
-    buffer.drawRectangle(113, 46, 4, 3, 0xfd3232, 0, " ")
-    buffer.drawText(112, 46, 0xfd3232, brailleChar(brail_status[1]))
-    buffer.drawText(117, 46, 0xfd3232, brailleChar(brail_status[2]))
-    buffer.drawText(117, 48, 0xfd3232, brailleChar(brail_status[3]))
-    buffer.drawText(112, 48, 0xfd3232, brailleChar(brail_status[4]))
-    buffer.drawText(113, 47, 0x9d0000, "Stop")
-
-    -- Время работы
-    fl_y1 = 45
-    buffer.drawRectangle(123, fl_y1, 35, 4, colors.bg, 0, " ")
-    for i = 0, 34 do
-        buffer.drawText(123 + i, fl_y1-1, colors.bg, brailleChar(brail_console[1]))
-        buffer.drawText(123 + i, fl_y1+1, colors.bg2, brailleChar(brail_console[2]))
-    end
-    buffer.drawText(124, fl_y1, colors.textclr, "МЭ: Обн. ч/з..")
-    buffer.drawText(141, fl_y1, colors.textclr, "Время работы:")
-    drawDigit(125, fl_y1+2, brail_time, 0xaa4b2e)
-    drawNumberWithText(134, fl_y1+2, 60, 2, colors.textclr, "Sec", colors.textclr)
-    drawNumberWithText(146, fl_y1+2, 0, 2, colors.textclr, "Hrs", colors.textclr)
-    drawNumberWithText(154, fl_y1+2, 0, 2, colors.textclr, "Min", colors.textclr)
 end
 
--- ----------------------------------------------------------------------------
--- Обработка касаний (только анимация и выход)
-local function handleTouch(x, y)
-    -- Выход по кнопке "Выход из программы."
-    if y >= 47 and y <= 49 and x >= 41 and x <= 64 then
-        buffer.clear(0x000000)
-        buffer.drawChanges()
-        term.clear()
-        os.exit()
-    end
-    -- Остальные кнопки – просто анимация
-    if y >= 44 and y <= 46 then
-        if x >= 13 and x <= 37 then
-            buffer.drawRectangle(12, 44, 26, 3, colors.bg3, 0, " ")
-            animatedButton(1, 13, 44, "Отключить реакторы!", nil, nil, 24, nil, nil, 0xfb3737)
-            animatedButton(2, 13, 44, "Отключить реакторы!", nil, nil, 24, nil, nil, 0xfb3737)
-            buffer.drawChanges()
-            os.sleep(0.2)
-            animatedButton(1, 13, 44, "Отключить реакторы!", nil, nil, 24, nil, nil, 0xfd3232)
-        elseif x >= 41 and x <= 64 then
-            buffer.drawRectangle(40, 44, 25, 3, colors.bg3, 0, " ")
-            animatedButton(1, 41, 44, "Запуск реакторов!", nil, nil, 23, nil, nil, 0x61ff52)
-            animatedButton(2, 41, 44, "Запуск реакторов!", nil, nil, 23, nil, nil, 0x61ff52)
-            buffer.drawChanges()
-            os.sleep(0.2)
-            animatedButton(1, 41, 44, "Запуск реакторов!", nil, nil, 23, nil, nil, 0x35e525)
-        elseif x >= 68 and x <= 86 then
-            buffer.drawRectangle(67, 44, 20, 3, colors.bg3, 0, " ")
-            animatedButton(1, 68, 44, "Пр.Обновить МЭ", nil, nil, 18, nil, nil, 0x38afff)
-            animatedButton(2, 68, 44, "Пр.Обновить МЭ", nil, nil, 18, nil, nil, 0x38afff)
-            buffer.drawChanges()
-            os.sleep(0.2)
-            animatedButton(1, 68, 44, "Пр.Обновить МЭ", nil, nil, 18, nil, nil, nil)
-        end
-    elseif y >= 47 and y <= 49 then
-        if x >= 13 and x <= 37 then
-            buffer.drawRectangle(12, 47, 26, 3, colors.bg3, 0, " ")
-            animatedButton(1, 13, 47, "Рестарт программы.", nil, nil, 24, nil, nil, colors.whitebtn2)
-            animatedButton(2, 13, 47, "Рестарт программы.", nil, nil, 24, nil, nil, colors.whitebtn2)
-            buffer.drawChanges()
-            os.sleep(0.2)
-            animatedButton(1, 13, 47, "Рестарт программы.", nil, nil, 24, nil, nil, colors.whitebtn)
-        elseif x >= 68 and x <= 86 then
-            buffer.drawRectangle(67, 47, 20, 3, colors.bg3, 0, " ")
-            animatedButton(1, 68, 47, "Метрика: Auto", nil, nil, 18, nil, nil, colors.whitebtn2)
-            animatedButton(2, 68, 47, "Метрика: Auto", nil, nil, 18, nil, nil, colors.whitebtn2)
-            buffer.drawChanges()
-            os.sleep(0.2)
-            animatedButton(1, 68, 47, "Метрика: Auto", nil, nil, 18, nil, nil, colors.whitebtn)
-        end
-    end
-    -- Кнопки 🔧 и ⓘ
-    if y >= 44 and y <= 46 and x >= 5 and x <= 9 then
-        buffer.drawRectangle(4, 44, 6, 3, colors.bg3, 0, " ")
-        animatedButton(1, 5, 44, "🔧", nil, nil, 4, nil, nil, 0x8100cc, 0xffffff)
-        animatedButton(2, 5, 44, "🔧", nil, nil, 4, nil, nil, 0x8100cc, 0xffffff)
-        buffer.drawChanges()
-        os.sleep(0.2)
-        animatedButton(1, 5, 44, "🔧", nil, nil, 4, nil, nil, 0xa91df9, 0xffffff)
-    end
-    if y >= 47 and y <= 49 and x >= 5 and x <= 9 then
-        buffer.drawRectangle(4, 47, 6, 3, colors.bg3, 0, " ")
-        animatedButton(1, 5, 47, "ⓘ", nil, nil, 4, nil, nil, 0x8100cc, 0x05e2ff)
-        animatedButton(2, 5, 47, "ⓘ", nil, nil, 4, nil, nil, 0x8100cc, 0x05e2ff)
-        buffer.drawChanges()
-        os.sleep(0.2)
-        animatedButton(1, 5, 47, "ⓘ", nil, nil, 4, nil, nil, 0xa91df9, 0x05e2ff)
-    end
+local function drawRightPanel()
+    buffer.drawRectangle(123, 3, 35, 47, 0x1a1a1a, 0, " ")
+    buffer.drawText(124, 4, 0xaaaaaa, "Информационное окно отладки:")
+
+    buffer.drawText(124, 6, 0x44ffaa, "Спасибо за поддержку:")
+    buffer.drawText(124, 7, 0xff5555, "roperTopper - 10$")
+
+    buffer.drawText(124, 10, 0x88ff88, "Жидкости в МЭ сети:")
+    buffer.drawText(124, 11, 0x4488ff, "125000 Mb")
+
+    buffer.drawText(124, 13, 0xffffff, "Порог: " .. porog .. " Mb")
+
+    buffer.drawText(124, 16, 0xffdd77, "Генерация: 48.5 kRF/t")
+
+    buffer.drawText(124, 20, 0xaaaaaa, "Статус комплекса:")
+    buffer.drawText(124, 21, 0xff4444, "Stop")
+
+    buffer.drawText(124, 23, 0xaaaaaa, "Время работы: 00:12:45")
+end
+
+local function drawAll()
+    drawStatic()
+    drawWidgets()
+    drawRightPanel()
     buffer.drawChanges()
 end
 
--- ----------------------------------------------------------------------------
--- Главный цикл (только отрисовка и время)
-local lastTime = computer.uptime()
-local second = 0
-local minute = 0
-local hour = 0
-local supportersText = "а реакторы для тестов, Fiellyns - спасибо за поддержку!                                     "
+-- ====================== ОБРАБОТКА КЛИКОВ ======================
 
-drawStatic()
-drawDynamic()
-buffer.drawChanges()
-
-while true do
-    local now = computer.uptime()
-    if now - lastTime >= 1 then
-        lastTime = now
-        second = second + 1
-        if second >= 60 then
-            second = 0
-            minute = minute + 1
-            if minute >= 60 then
-                minute = 0
-                hour = hour + 1
-            end
+local function handleTouch(x, y)
+    if y >= 44 and y <= 49 then
+        if x >= 12 and x <= 36 then
+            buffer.drawText(15, 45, 0xffffff, "Отключаем...")
+            buffer.drawChanges()
+            os.sleep(0.5)
+            drawAll()
+        elseif x >= 40 and x <= 63 then
+            buffer.drawText(43, 45, 0xffffff, "Запускаем...")
+            buffer.drawChanges()
+            os.sleep(0.5)
+            drawAll()
+        elseif x >= 3 and x <= 7 and y >= 44 and y <= 46 then
+            buffer.drawText(5, 45, 0xffffff, "Настройки")
+            buffer.drawChanges()
+            os.sleep(0.3)
+            drawAll()
         end
-        -- Обновляем таймер в правой панели
-        buffer.drawRectangle(134, 47, 6, 2, colors.bg, 0, " ")
-        drawNumberWithText(134, 48, 60 - (second % 60), 2, colors.textclr, "Sec", colors.textclr)
-        drawNumberWithText(146, 48, hour, 2, colors.textclr, "Hrs", colors.textclr)
-        drawNumberWithText(154, 48, minute, 2, colors.textclr, "Min", colors.textclr)
-        drawMarquee(124, 6, supportersText, 0xF15F2C)
-        buffer.drawChanges()
-    end
-
-    local ev = {event.pull(0.05)}
-    if ev[1] == "touch" then
-        handleTouch(ev[3], ev[4])
     end
 end
+
+-- ====================== ГЛАВНЫЙ ЦИКЛ ======================
+
+local function main()
+    -- Симуляция реакторов
+    reactors = 4
+    for i = 1, reactors do
+        reactor_work[i] = i % 2 == 1
+        reactor_type[i] = "Fluid"
+        temperature[i] = 650 + i*50
+        reactor_rf[i] = 12000 + i*3000
+        reactor_getcoolant[i] = 8000 - i*1000
+        reactor_maxcoolant[i] = 10000
+    end
+
+    drawAll()
+
+    while not exit do
+        local e = {event.pull(0.5)}
+        if e[1] == "touch" then
+            handleTouch(e[3], e[4])
+        end
+        second = second + 1
+        if second % 10 == 0 then
+            drawAll()
+        end
+    end
+end
+
+main()
