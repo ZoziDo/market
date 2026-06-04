@@ -44,7 +44,17 @@ local widgetCoords = {
 -- ====================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ======================
 
 local function brailleChar(dots)
-    return unicode.char(10240 + (dots[8]or0)*128 + (dots[7]or0)*64 + (dots[6]or0)*32 + (dots[4]or0)*16 + (dots[2]or0)*8 + (dots[5]or0)*4 + (dots[3]or0)*2 + (dots[1]or0))
+    return unicode.char(
+        10240 +
+        (dots[8] or 0) * 128 +
+        (dots[7] or 0) * 64 +
+        (dots[6] or 0) * 32 +
+        (dots[4] or 0) * 16 +
+        (dots[2] or 0) * 8 +
+        (dots[5] or 0) * 4 +
+        (dots[3] or 0) * 2 +
+        (dots[1] or 0)
+    )
 end
 
 local brail_status = {{1,1,1,0,1,0,1,0},{1,0,1,0,1,0,1,0},{1,1,0,0,0,0,0,0},{1,0,0,0,0,0,0,0}}
