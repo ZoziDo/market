@@ -426,7 +426,6 @@ return {
   { internalName = "ThermalFoundation:material", displayName = "Смесь эндериума", price_coin = 0.00, price_ema = 0.09, damage = 44 },
   { internalName = "minecraft:snowball", displayName = "Снежок", price = 0.01, currency = "res" },
   { internalName = "EnderIO:itemExtractSpeedUpgrade", displayName = "Снижение скорости для предметной трубы", price = 1.62, currency = "res", damage = 1 },
-  { internalName = "luxinfineitems:AECompressedSpeedCard", displayName = "Совершенная карта ускорения", price = 75.35, currency = "res", damage = 2 },
   { internalName = "luxinfineitems:advanced_portable_storage_cell_2", displayName = "Совершенная переносная ячейка", price = 3160.00, currency = "res" },
   { internalName = "luxinfineitems:AEUltInterface", displayName = "Совершенный МЭ интерфейс", price = 180.00, currency = "res" },
   { internalName = "luxinfineitems:AEAdvMolecularAssembler", displayName = "Совершенный молекулярный сборщик", price_coin = 57.82, price_ema = 0.12, damage = 1 },
