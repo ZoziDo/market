@@ -2603,35 +2603,7 @@ local function main()
     end
 end
 
-local function drawCrashPopup(errText)
-    local popupWidth = 50
-    local popupHeight = 8
-    local popupX = math.floor((80 - popupWidth) / 2)
-    local popupY = 9
-
-    gpu.setBackground(colors.bg_main)
-    gpu.fill(1, 1, 80, 25, " ")
-    gpu.setBackground(colors.bg_main)
-
-    drawPopupBorder(popupX, popupY, popupWidth, popupHeight, colors.error)
-
-    gpu.setForeground(colors.error)
-    local title = "ОШИБКА"
-    local titleX = popupX + math.floor((popupWidth - unicode.len(title)) / 2)
-    gpu.set(titleX, popupY, title)
-
-    gpu.setForeground(colors.text_main)
-    local shortErr = errText:sub(1, popupWidth - 4)
-    local errX = popupX + 2
-    gpu.set(errX, popupY + 2, shortErr)
-
-    for i = 3, 1, -1 do
-        gpu.setForeground(colors.success)
-        local msg = "Перезагрузка через " .. i .. " сек..."
-        local msgX = popupX + math.floor((popupWidth - unicode.len(msg)) / 2)
-        gpu.set(msgX, popupY + 5, msg)
-        os.sleep(1)
-    end
-end
-
-main()
+-- ========== ИСПРАВЛЕННАЯ КОНЦОВКА ==========
+-- Запускаем программу без цикла перезапуска
+-- При Ctrl+C программа просто продолжит работу (event.ignore)
+pcall(main)
