@@ -1,7 +1,6 @@
 local component = require("component")
 local unicode = require("unicode")
 local color = require("color")
-local image = require("image")
 
 --------------------------------------------------------------------------------
 
@@ -311,41 +310,6 @@ local function drawText(x, y, textColor, data, transparency)
     end
 end
 
-local function drawImage(startX, startY, picture, blendForeground)
-    local bufferIndex, pictureIndex, imageWidth, backgrounds, foregrounds, alphas, symbols = bufferWidth * (startY - 1) + startX, 1, picture[1], picture[3], picture[4], picture[5], picture[6]
-    local bufferIndexStepOnReachOfImageWidth = bufferWidth - imageWidth
-
-    for y = startY, startY + picture[2] - 1 do
-        if y >= drawLimitY1 and y <= drawLimitY2 then
-            for x = startX, startX + imageWidth - 1 do
-                if x >= drawLimitX1 and x <= drawLimitX2 then
-                    if alphas[pictureIndex] == 0 then
-                        newFrameBackgrounds[bufferIndex], newFrameForegrounds[bufferIndex] = backgrounds[pictureIndex], foregrounds[pictureIndex]
-                    elseif alphas[pictureIndex] > 0 and alphas[pictureIndex] < 1 then
-                        newFrameBackgrounds[bufferIndex] = colorBlend(newFrameBackgrounds[bufferIndex], backgrounds[pictureIndex], alphas[pictureIndex])
-
-                        if blendForeground then
-                            newFrameForegrounds[bufferIndex] = colorBlend(newFrameForegrounds[bufferIndex], foregrounds[pictureIndex], alphas[pictureIndex])
-                        else
-                            newFrameForegrounds[bufferIndex] = foregrounds[pictureIndex]
-                        end
-                    elseif alphas[pictureIndex] == 1 and symbols[pictureIndex] ~= " " then
-                        newFrameForegrounds[bufferIndex] = foregrounds[pictureIndex]
-                    end
-
-                    newFrameSymbols[bufferIndex] = symbols[pictureIndex]
-                end
-
-                bufferIndex, pictureIndex = bufferIndex + 1, pictureIndex + 1
-            end
-
-            bufferIndex = bufferIndex + bufferIndexStepOnReachOfImageWidth
-        else
-            bufferIndex, pictureIndex = bufferIndex + bufferWidth, pictureIndex + imageWidth
-        end
-    end
-end
-
 local function drawFrame(x, y, width, height, color)
     local stringUp, stringDown, x2 = "┌" .. string.rep("─", width - 2) .. "┐", "└" .. string.rep("─", width - 2) .. "┘", x + width - 1
 
@@ -471,7 +435,6 @@ end
 
 --------------------------------------------------------------------------------
 
--- Основная функция вывода изменений на экран (аналог present)
 local function drawChanges(force)
     local index, indexStepOnEveryLine, changes = bufferWidth * (drawLimitY1 - 1) + drawLimitX1, (bufferWidth - drawLimitX2 + drawLimitX1 - 1), {}
     local x, equalChars, equalCharsIndex, charX, charIndex, currentForeground
@@ -555,7 +518,6 @@ end
 
 bindGPU(component.getPrimary("gpu").address)
 
--- Экспортируем функции
 return {
     getIndex = getIndex,
     setDrawLimit = setDrawLimit,
@@ -583,14 +545,13 @@ return {
     rasterizeEllipse = rasterizeEllipse,
     semiPixelRawSet = semiPixelRawSet,
     semiPixelSet = semiPixelSet,
-    drawChanges = drawChanges,          -- <-- главная функция вывода
-    present = drawChanges,              -- псевдоним для удобства
+    drawChanges = drawChanges,
+    present = drawChanges,
 
     drawRectangle = drawRectangle,
     drawLine = drawLine,
     drawEllipse = drawEllipse,
     drawText = drawText,
-    drawImage = drawImage,
     drawFrame = drawFrame,
 
     drawSemiPixelRectangle = drawSemiPixelRectangle,
