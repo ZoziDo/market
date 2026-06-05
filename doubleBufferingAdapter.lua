@@ -19,6 +19,8 @@ local function clearBuffers()
     end
 end
 
+local adapter = {}
+
 function adapter.setResolution(w, h)
     width, height = w, h
     realGPU.setResolution(w, h)
@@ -93,7 +95,7 @@ function adapter.present()
     local lastBG = nil
     local lastFG = nil
     for y = 1, height do
-        local lineStart = true
+        local lineStart = 1
         local lineStr = ""
         for x = 1, width do
             local id = idx(x, y)
