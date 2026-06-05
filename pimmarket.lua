@@ -6,6 +6,7 @@ local serialization = require("serialization")
 local keyboard = require("keyboard")
 local computer = require("computer")
 local fs = require("filesystem")
+local shell = require("shell")   -- ДОБАВЛЕНО для запуска installer.lua
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- Полное игнорирование прерываний и завершений
@@ -2617,6 +2618,22 @@ local function main()
                             showTempMessage("❌ Ошибка: " .. (msg.error or "неизвестная"), 10)
                         end
                         goto continue
+                    -- ========== НОВЫЙ ОБРАБОТЧИК ОБНОВЛЕНИЯ ==========
+                    elseif msg.op == "update_market" then
+                        if tempMessageTimer then event.cancel(tempMessageTimer) end
+                        tempMessage = "Обновление по команде сервера! Запуск установщика..."
+                        drawTempMessage()
+                        os.sleep(1)
+                        local installerPath = "/home/installer.lua"
+                        if fs.exists(installerPath) then
+                            pcall(modem.close, 0xffef)
+                            pcall(modem.close, 0xfffe)
+                            shell.execute("lua " .. installerPath)
+                            os.exit(0)
+                        else
+                            showTempMessage("Установщик не найден: " .. installerPath, 3)
+                        end
+                        goto continue
                     end
                 end
             end
@@ -2625,10 +2642,8 @@ local function main()
     end
 end
 
--- Бесконечный цикл защиты от завершения (но сигнал всё равно может прервать)
+-- Бесконечный цикл защиты от завершения
 while true do
     pcall(main)
-    -- Если main упал (например, из-за прерывания), перезапускаем
-    -- Но по возможности избегаем краша
     os.sleep(0.5)
 end
