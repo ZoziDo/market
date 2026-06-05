@@ -1,3 +1,4 @@
+-- PIM Market Installer (исправленный)
 ------------------------------------ config ------------------------------------
 local REPOSITORY  = "https://raw.githubusercontent.com/ZoziDo/market/main/"
 
@@ -8,7 +9,7 @@ local filesToDownload = {
   {url = REPOSITORY .. "agreement.lua",   path = "/home/agreement.lua"},
 }
 
-local appTitle = "PIM Market – Installer (home)"
+local appTitle = "PIM Market – Installer (fixed)"
 local rebootAfter = true
 -------------------------------------------------------------------------------
 
@@ -112,15 +113,11 @@ local function tickSpinner()
   text(X+W-4, Y+3, s, COL_DIM)
 end
 
-local function ensureDirs()
-  if not fs.exists("/market") then fs.makeDirectory("/market") end
-end
-
+-- /home всегда существует, ничего создавать не нужно
 local function install()
   drawChrome()
-  ensureDirs()
   writeStatus("Initializing installer…", COL_DIM)
-  log("Preparing directory /market …", COL_DIM)
+  log("Installing to /home directory ...", COL_DIM)
 
   local total = #filesToDownload
   local okCount, failCount = 0, 0
@@ -130,7 +127,8 @@ local function install()
     writeStatus("Downloading "..label, COL_TEXT)
     log("wget "..shorten(f.url,45), COL_DIM)
 
-    local res = shell.execute("wget -fq "..f.url.." "..f.path)
+    -- Убираем -q (тихий режим), чтобы видеть ошибки
+    local res = shell.execute("wget -f "..f.url.." "..f.path)
     tickSpinner()
 
     if res then
@@ -147,13 +145,17 @@ local function install()
       math.floor(ratio*100), okCount, failCount), COL_DIM)
   end
 
-  -- Автозапуск pimmarket.lua
-  local f = io.open("/home/.shrc","w")
-  if f then 
-    f:write("lua /market/pimmarket.lua\n") 
-    f:close() 
+  -- Проверяем, скачался ли главный файл, прежде чем прописывать автозапуск
+  if fs.exists("/home/pimmarket.lua") then
+    local f = io.open("/home/.shrc","w")
+    if f then 
+      f:write("lua /home/pimmarket.lua\n") 
+      f:close() 
+    end
+    log("Autostart set: /home/.shrc -> lua /home/pimmarket.lua", COL_OK)
+  else
+    log("WARNING: /home/pimmarket.lua not found, autostart NOT set", COL_WARN)
   end
-  log("Autostart set: /home/.shrc -> lua /market/pimmarket.lua", COL_OK)
 
   if failCount == 0 then
     writeStatus("Installation complete! All OK.", COL_OK)
@@ -161,7 +163,7 @@ local function install()
     writeStatus("Completed with errors. Check log.", COL_WARN)
   end
 
-  text(X+2, Y+H-2, "PIM Market | Installer (market)", COL_DIM)
+  text(X+2, Y+H-2, "PIM Market | Installer (fixed)", COL_DIM)
 
   if rebootAfter then
     for n=3,1,-1 do
