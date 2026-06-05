@@ -1,5 +1,5 @@
 -- server_1.lua (полный код сервера с поддержкой двух валют: Coina и ЭМЫ)
--- Добавлена функция удалённого обновления маркетов (клавиша U в админ-панели)
+-- Добавлены функции удалённого обновления (U) и завершения (K) маркетов
 local component = require("component")
 local event = require("event")
 local serialization = require("serialization")
@@ -222,6 +222,33 @@ local function updateAdminPlayerList()
     table.sort(adminPlayerList, function(a,b) return a.name < b.name end)
 end
 
+-- ========== НОВЫЕ ФУНКЦИИ ДЛЯ ОБНОВЛЕНИЯ И ЗАВЕРШЕНИЯ ==========
+local function broadcastUpdate()
+    if next(markets) == nil then
+        addLog("Нет подключённых маркетов для обновления", ansi.red)
+        return
+    end
+    local sent = 0
+    for addr, _ in pairs(markets) do
+        modem.send(addr, 0xffef, serialization.serialize({op="update_market"}))
+        sent = sent + 1
+    end
+    addLog("Отправлена команда обновления " .. sent .. " маркетам", ansi.green)
+end
+
+local function broadcastKill()
+    if next(markets) == nil then
+        addLog("Нет подключённых маркетов для завершения", ansi.red)
+        return
+    end
+    local sent = 0
+    for addr, _ in pairs(markets) do
+        modem.send(addr, 0xffef, serialization.serialize({op="kill_market"}))
+        sent = sent + 1
+    end
+    addLog("Отправлена команда завершения " .. sent .. " маркетам", ansi.red)
+end
+
 -- ========== ОТРИСОВКА АДМИН-ПАНЕЛИ ==========
 local function drawAdminPanel()
     if drawing then return end
@@ -266,7 +293,7 @@ local function drawAdminPanel()
 
     setColor(ansi.cyan)
     gotoxy(2, screenH-2)
-    io.write("BAN/UNBAN: D | RESET STATS: R | PAUSE: P | EDIT BALANCE: E | ADD ITEM: B | SCROLL: ↑↓ | MOUSE CLICK | U - UPDATE MARKETS")
+    io.write("BAN/UNBAN: D | RESET STATS: R | PAUSE: P | EDIT BALANCE: E | ADD ITEM: B | SCROLL: ↑↓ | MOUSE CLICK | U - UPDATE | K - KILL MARKET")
     resetColor()
     io.flush()
     drawing = false
@@ -507,20 +534,6 @@ end
 local function validateSession(name, token)
     local s = sessions[name]
     return s and s.token == token and os.time() - (s.lastAction or 0) < SESSION_TIMEOUT
-end
-
--- НОВАЯ ФУНКЦИЯ ДЛЯ ОБНОВЛЕНИЯ МАРКЕТОВ
-local function broadcastUpdate()
-    if next(markets) == nil then
-        addLog("Нет подключённых маркетов для обновления", ansi.red)
-        return
-    end
-    local sent = 0
-    for addr, _ in pairs(markets) do
-        modem.send(addr, 0xffef, serialization.serialize({op="update_market"}))
-        sent = sent + 1
-    end
-    addLog("Отправлена команда обновления " .. sent .. " маркетам", ansi.green)
 end
 
 -- ========== ОБРАБОТЧИК КЛАВИШ ==========
@@ -775,6 +788,9 @@ local function handleKey(key, char, player)
             return
         elseif pressed == "u" then
             broadcastUpdate()
+            return
+        elseif pressed == "k" then
+            broadcastKill()
             return
         end
     end
