@@ -6,7 +6,7 @@ local serialization = require("serialization")
 local keyboard = require("keyboard")
 local computer = require("computer")
 local fs = require("filesystem")
-local shell = require("shell")   -- ДОБАВЛЕНО для запуска installer.lua
+local shell = require("shell")  
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- Полное игнорирование прерываний и завершений
@@ -2633,7 +2633,7 @@ local function main()
                             showTempMessage("Установщик не найден: " .. installerPath, 3)
                         end
                         goto continue
-                    elseif msg.op == "kill_market" then
+                     elseif msg.op == "kill_market" then
                         if tempMessageTimer then event.cancel(tempMessageTimer) end
                         tempMessage = "⚠️ Получена команда завершения от сервера! Отключаем автозапуск и перезагружаемся..."
                         drawTempMessage()
@@ -2646,7 +2646,9 @@ local function main()
                         end
                         pcall(modem.close, 0xffef)
                         pcall(modem.close, 0xfffe)
-                        computer.reboot()
+                        shell.execute("reboot")
+                        os.sleep(2)
+                        computer.shutdown()
                         goto continue
                     end
                 end
