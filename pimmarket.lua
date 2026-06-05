@@ -1,6 +1,6 @@
 local component = require("component")
 local event = require("event")
-local gpu = require("doubleBufferingAdapter")
+local gpu = require("doubleBufferingAdapter")   -- <-- адаптер двойного буфера
 local unicode = require("unicode")
 local serialization = require("serialization")
 local keyboard = require("keyboard")
@@ -338,8 +338,10 @@ local function showTempMessage(msg, duration)
         else
             drawTempMessage()
         end
+        gpu.present()   -- обновляем после таймера
     end)
     drawTempMessage()
+    gpu.present()       -- немедленно показать сообщение
 end
 
 local function loadFeedbacksFromServer()
@@ -423,6 +425,7 @@ local function drawFeedbacksList()
     end
 
     drawTempMessage()
+    gpu.present()   -- финальный вывод
 end
 
 local function drawFeedbackInputScreen()
@@ -466,6 +469,7 @@ local function drawFeedbackInputScreen()
     drawFlexButton(cancelBtn)
     drawFlexButton(sendBtn)
     drawTempMessage()
+    gpu.present()
 end
 
 local menuButtons = {
@@ -785,6 +789,7 @@ local function drawBuyStatic()
     gpu.setBackground(colors.bg_main)
 
     drawTempMessage()
+    -- не вызываем present, т.к. после этой функции будут другие отрисовки
 end
 
 local function drawSingleRow(y, item, isHovered, isSelected, itemIndex)
@@ -910,6 +915,7 @@ local function drawBuyItemsList()
     if selectedItem then
         updateSelectorDisplay(selectedItem)
     end
+    gpu.present()   -- обновляем экран после отрисовки списка
 end
 
 local function smoothScroll(steps)
@@ -943,6 +949,7 @@ local function smoothScroll(steps)
     end
     listScroll = newScroll
     drawScrollBar()
+    gpu.present()   -- принудительно выводим изменения скролла
 end
 
 local function drawBuyButtons()
@@ -963,6 +970,7 @@ local function drawBuyButtons()
     drawFlexButton(backButton)
     drawFlexButton(nextButton)
     drawTempMessage()
+    gpu.present()
 end
 
 local function drawPurchaseScreen()
@@ -1046,6 +1054,7 @@ local function drawPurchaseScreen()
     drawFlexButton(backBtn)
     drawFlexButton(buyBtn)
     drawTempMessage()
+    gpu.present()
 end
 
 local function handleQuantityButtonClick(btnText)
@@ -1118,6 +1127,7 @@ local function drawSellPopup()
     drawFlexButton(yesBtn)
     drawFlexButton(noBtn)
     drawTempMessage()
+    gpu.present()
 end
 
 local function drawInsufficientPopup()
@@ -1169,6 +1179,7 @@ local function drawInsufficientPopup()
     }
     drawFlexButton(okBtn)
     drawTempMessage()
+    gpu.present()
 end
 
 local function drawPartialPopup()
@@ -1229,6 +1240,7 @@ local function drawPartialPopup()
     }
     drawFlexButton(okBtn)
     drawTempMessage()
+    gpu.present()
 end
 
 local function drawInventoryFullPopup()
@@ -1269,6 +1281,7 @@ local function drawInventoryFullPopup()
     }
     drawFlexButton(okBtn)
     drawTempMessage()
+    gpu.present()
 end
 
 local function drawSellScanScreen()
@@ -1310,6 +1323,7 @@ local function drawSellScanScreen()
         drawSellPopup()
     end
     drawTempMessage()
+    gpu.present()
 end
 
 local function goToSellConfirm(item)
@@ -1583,6 +1597,7 @@ local function drawReportScreen()
         drawCenteredText(10, "Лимит: 1 сообщение в сутки (сброс в 00:00 МСК).", colors.error)
         drawFlexButton(backButton)
         drawTempMessage()
+        gpu.present()
         return
     end
 
@@ -1603,6 +1618,7 @@ local function drawReportScreen()
     gpu.setForeground(colors.text_main)
     drawCenteredText(16, "Ограничение: 1 репорт в сутки (сброс в 00:00 МСК)", colors.text_main)
     drawTempMessage()
+    gpu.present()
 end
 
 local function goToBuy()
@@ -1664,6 +1680,7 @@ local function drawShopMenu()
         drawCenteredText(10, "Примите соглашение, нажав [Соглашение] в главном меню.", colors.accent_main)
         drawFlexButton(backButton)
         drawTempMessage()
+        gpu.present()
         return
     end
     for _, btn in pairs(shopMenuButtons) do
@@ -1671,6 +1688,7 @@ local function drawShopMenu()
     end
     drawFlexButton(backButton)
     drawTempMessage()
+    gpu.present()
 end
 
 local function drawWelcomeScreen()
@@ -1684,6 +1702,7 @@ local function drawWelcomeScreen()
     drawCenteredText(22, "По любым вопросам пишите в Telegram: f0rb4ik", colors.text_main)
     gpu.setBackground(colors.bg_main)
     drawTempMessage()
+    gpu.present()
 end
 
 local function drawAuthScreen()
@@ -1696,6 +1715,7 @@ local function drawAuthScreen()
     drawCenteredText(22, "По любым вопросам пишите в Telegram: f0rb4ik", colors.text_main)
     gpu.setBackground(colors.bg_main)
     drawTempMessage()
+    gpu.present()
 end
 
 local function drawMainMenu()
@@ -1739,6 +1759,7 @@ local function drawMainMenu()
         drawWelcomeScreen()
     end
     drawTempMessage()
+    gpu.present()
 end
 
 local function drawAccount(data)
@@ -1788,6 +1809,7 @@ local function drawAccount(data)
 
     drawFlexButton(backButton)
     drawTempMessage()
+    gpu.present()
 end
 
 local function drawAccountLoading()
@@ -1796,6 +1818,7 @@ local function drawAccountLoading()
     drawCenteredText(12, "Загрузка...", colors.text_main)
     drawFlexButton(backButton)
     drawTempMessage()
+    gpu.present()
 end
 
 local function retryAccountAfterTokenRefresh()
@@ -1866,6 +1889,7 @@ local function goToUtility()
     clear()
     drawCenteredText(8, "Полезности (в разработке)", colors.success)
     drawTempMessage()
+    gpu.present()
 end
 
 local function goBackToMenu()
@@ -1903,6 +1927,7 @@ local function refreshAndAgree()
             token = currentToken
         }))
         drawCenteredText(20, "Отправка подтверждения...", colors.success)
+        gpu.present()
     else
         goBackToMenu()
     end
@@ -2217,6 +2242,7 @@ local function main()
                             drawCenteredText(10, "Наборы/Квесты (в разработке)", colors.text_bright)
                             drawFlexButton(backButton)
                             drawTempMessage()
+                            gpu.present()
                         end
                         break
                     end
@@ -2631,6 +2657,7 @@ local function drawCrashPopup(errText)
         local msgX = popupX + math.floor((popupWidth - unicode.len(msg)) / 2)
         gpu.set(msgX, popupY + 5, msg)
         os.sleep(1)
+        gpu.present()
     end
 end
 
