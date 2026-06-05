@@ -2454,7 +2454,7 @@ local function main()
             pcall(selector.setSlot, 0, nil)
             pcall(selector.setSlot, 1, nil)
             drawWelcomeScreen()
-                elseif e == "modem_message" then
+        elseif e == "modem_message" then
             local sender = ev[3]
             local data = ev[6]
             if sender == serverAddress then
@@ -2618,7 +2618,6 @@ local function main()
                             showTempMessage("❌ Ошибка: " .. (msg.error or "неизвестная"), 10)
                         end
                         goto continue
-                    -- ========== ОБРАБОТЧИК ОБНОВЛЕНИЯ ==========
                     elseif msg.op == "update_market" then
                         if tempMessageTimer then event.cancel(tempMessageTimer) end
                         tempMessage = "Обновление по команде сервера! Запуск установщика..."
@@ -2634,7 +2633,6 @@ local function main()
                             showTempMessage("Установщик не найден: " .. installerPath, 3)
                         end
                         goto continue
-                    -- ========== НОВЫЙ ОБРАБОТЧИК ЗАВЕРШЕНИЯ ==========
                     elseif msg.op == "kill_market" then
                         if tempMessageTimer then event.cancel(tempMessageTimer) end
                         tempMessage = "⚠️ Получена команда завершения от сервера! Выход..."
@@ -2642,7 +2640,12 @@ local function main()
                         os.sleep(1)
                         pcall(modem.close, 0xffef)
                         pcall(modem.close, 0xfffe)
-                        os.exit(0)
+                        if originalExit then
+                            originalExit(0)
+                        else
+                            os.exit(0)
+                        end
+                        goto continue
                     end
                 end
             end
