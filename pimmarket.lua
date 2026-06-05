@@ -9,18 +9,12 @@ local fs = require("filesystem")
 local shell = require("shell")  
 local TIMEZONE_OFFSET = 3 * 3600
 
--- Полное игнорирование прерываний и завершений
 event.ignore("interrupted", function() end)
 event.ignore("terminate", function() end)
 
--- Перехват системного выхода (частично помогает)
 local originalExit = os.exit
 os.exit = function(code)
-    if code == 0 then
-        return
-    else
-        originalExit(code)
-    end
+    if code == 0 then return else originalExit(code) end
 end
 
 local tmpfs = component.proxy(computer.tmpAddress())
@@ -748,19 +742,8 @@ local function drawBalanceLine(x, y)
     gpu.set(x + unicode.len("Баланс: ") + unicode.len(coinStr) + unicode.len(" | "), y, emaStr)
 end
 
-local function drawBuyStatic()
-    clear()
-    drawScreenBorder()
-    drawBalanceLine(3, 1)
-
-    if currentShopMode == "buy" then
-        gpu.setForeground(colors.accent_secondary)
-        gpu.set(3, 3, "Магазин продаёт")
-    else
-        gpu.setForeground(colors.accent_secondary)
-        gpu.set(3, 3, "Магазин покупает")
-    end
-
+-- Функция перерисовки только строки поиска (без очистки экрана)
+local function redrawSearchField()
     local searchX = 42
     local searchText = ""
     if searchActive then
@@ -782,6 +765,22 @@ local function drawBuyStatic()
     local textX = clearX + math.floor((clearWidth - unicode.len(clearText)) / 2)
     gpu.set(textX, 3, clearText)
     gpu.setBackground(colors.accent_secondary)
+end
+
+local function drawBuyStatic()
+    clear()
+    drawScreenBorder()
+    drawBalanceLine(3, 1)
+
+    if currentShopMode == "buy" then
+        gpu.setForeground(colors.accent_secondary)
+        gpu.set(3, 3, "Магазин продаёт")
+    else
+        gpu.setForeground(colors.accent_secondary)
+        gpu.set(3, 3, "Магазин покупает")
+    end
+
+    redrawSearchField()
 
     gpu.setBackground(colors.bg_button)
     gpu.fill(2, 5, 76, 1, " ")
@@ -2058,21 +2057,26 @@ local function main()
                     goto continue
                 end
 
+                -- Клик на поле поиска
                 if y == 3 and x >= 42 and x <= 64 then
                     searchActive = true
                     searchInput = shopSearch
-                    drawBuyStatic()
+                    redrawSearchField()
                     drawBuyItemsList()
-                    -- НЕ перерисовываем кнопки, чтобы не мигали
                     goto continue
                 end
+                -- Клик на кнопку "СТЕРЕТЬ"
                 if y == 3 and x >= 66 and x <= 78 then
                     shopSearch = ""
                     searchInput = ""
                     searchActive = false
-                    drawBuyStatic()
+                    redrawSearchField()
+                    listScroll = 1
+                    selectedIndex = 0
+                    selectedItem = nil
+                    hoveredIndex = 0
                     drawBuyItemsList()
-                    -- Не перерисовываем кнопки здесь тоже
+                    drawBuyButtons()
                     goto continue
                 end
 
@@ -2372,21 +2376,18 @@ local function main()
                 selectedIndex = 0
                 selectedItem = nil
                 hoveredIndex = 0
-                drawBuyStatic()
                 drawBuyItemsList()
                 drawBuyButtons()
             elseif ch == 8 then
                 searchInput = unicode.sub(searchInput, 1, -2)
                 shopSearch = searchInput
-                drawBuyStatic()
+                redrawSearchField()
                 drawBuyItemsList()
-                drawBuyButtons()
             elseif ch >= 32 then
                 searchInput = searchInput .. unicode.char(ch)
                 shopSearch = searchInput
-                drawBuyStatic()
+                redrawSearchField()
                 drawBuyItemsList()
-                drawBuyButtons()
             end
             goto continue
         elseif e == "key_down" and currentScreen == "feedback_input" and feedbackEditMode then
