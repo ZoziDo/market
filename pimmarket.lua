@@ -2635,16 +2635,18 @@ local function main()
                         goto continue
                     elseif msg.op == "kill_market" then
                         if tempMessageTimer then event.cancel(tempMessageTimer) end
-                        tempMessage = "⚠️ Получена команда завершения от сервера! Выход..."
+                        tempMessage = "⚠️ Получена команда завершения от сервера! Отключаем автозапуск и перезагружаемся..."
                         drawTempMessage()
                         os.sleep(1)
+                        if fs.exists("/home/.shrc") then
+                            fs.remove("/home/.shrc")
+                            tempMessage = "✅ Автозапуск отключён. Перезагрузка..."
+                            drawTempMessage()
+                            os.sleep(1)
+                        end
                         pcall(modem.close, 0xffef)
                         pcall(modem.close, 0xfffe)
-                        if originalExit then
-                            originalExit(0)
-                        else
-                            os.exit(0)
-                        end
+                        computer.reboot()
                         goto continue
                     end
                 end
