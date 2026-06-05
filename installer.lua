@@ -27,11 +27,11 @@ local COL_BG     = 0x0A0F0A
 local COL_FRAME  = 0x0F1F0F
 local COL_TEXT   = 0xDDFFDD
 local COL_DIM    = 0x99CC99
-local COL_WARN   = 0xFFD37F
-local COL_ERR    = 0xFF6B6B
+local COL_WARN   = 0xFF6347
+local COL_ERR    = 0xFF4D7A
 local COL_OK     = 0x7CFF7C
-local COL_BARBG  = 0x123312
-local COL_BAR    = 0x22FF88
+local COL_BARBG  = 0x00E5C9
+local COL_BAR    = 0x8B5CF6
 
 local sw, sh = gpu.getResolution()
 local oldBG, oldFG = gpu.getBackground(), gpu.getForeground()
