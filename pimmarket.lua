@@ -16,8 +16,6 @@ event.ignore("terminate", function() end)
 -- Перехват системного выхода (частично помогает)
 local originalExit = os.exit
 os.exit = function(code)
-    -- Ничего не делаем, просто возвращаем управление
-    -- Это предотвратит немедленное завершение при вызове os.exit
     if code == 0 then
         return
     else
@@ -1934,7 +1932,6 @@ local function main()
         if e == "key_down" then
             local _, _, _, code, char = table.unpack(ev)
             if char == 3 or (code == 46) then -- Ctrl+C
-                -- ничего не делаем, просто пропускаем
                 goto continue
             end
         end
@@ -2066,7 +2063,7 @@ local function main()
                     searchInput = shopSearch
                     drawBuyStatic()
                     drawBuyItemsList()
-                    drawBuyButtons()
+                    -- НЕ перерисовываем кнопки, чтобы не мигали
                     goto continue
                 end
                 if y == 3 and x >= 66 and x <= 78 then
@@ -2075,7 +2072,7 @@ local function main()
                     searchActive = false
                     drawBuyStatic()
                     drawBuyItemsList()
-                    drawBuyButtons()
+                    -- Не перерисовываем кнопки здесь тоже
                     goto continue
                 end
 
