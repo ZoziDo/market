@@ -8,8 +8,21 @@ local computer = require("computer")
 local fs = require("filesystem")
 local TIMEZONE_OFFSET = 3 * 3600
 
+-- Полное игнорирование прерываний и завершений
 event.ignore("interrupted", function() end)
 event.ignore("terminate", function() end)
+
+-- Перехват системного выхода (частично помогает)
+local originalExit = os.exit
+os.exit = function(code)
+    -- Ничего не делаем, просто возвращаем управление
+    -- Это предотвратит немедленное завершение при вызове os.exit
+    if code == 0 then
+        return
+    else
+        originalExit(code)
+    end
+end
 
 local tmpfs = component.proxy(computer.tmpAddress())
 local function getRealTimestamp()
@@ -1916,6 +1929,15 @@ local function main()
         local ev = {event.pull(0.5)}
         local e = ev[1]
 
+        -- Игнорируем клавишу Ctrl+C на уровне события клавиатуры
+        if e == "key_down" then
+            local _, _, _, code, char = table.unpack(ev)
+            if char == 3 or (code == 46) then -- Ctrl+C
+                -- ничего не делаем, просто пропускаем
+                goto continue
+            end
+        end
+
         if currentScreen == "auth" then
             if os.clock() - authStartTime >= AUTH_TIMEOUT then
                 currentScreen = "menu"
@@ -2603,7 +2625,10 @@ local function main()
     end
 end
 
--- ========== ИСПРАВЛЕННАЯ КОНЦОВКА ==========
--- Запускаем программу без цикла перезапуска
--- При Ctrl+C программа просто продолжит работу (event.ignore)
-pcall(main)
+-- Бесконечный цикл защиты от завершения (но сигнал всё равно может прервать)
+while true do
+    pcall(main)
+    -- Если main упал (например, из-за прерывания), перезапускаем
+    -- Но по возможности избегаем краша
+    os.sleep(0.5)
+end
