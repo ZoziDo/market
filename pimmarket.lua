@@ -1,6 +1,6 @@
 local component = require("component")
 local event = require("event")
-local gpu = component.gpu
+local gpu = require("doubleBufferingAdapter")
 local unicode = require("unicode")
 local serialization = require("serialization")
 local keyboard = require("keyboard")
