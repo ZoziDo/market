@@ -1,4 +1,5 @@
 -- server_1.lua (полный код сервера с поддержкой двух валют: Coina и ЭМЫ)
+-- Добавлена функция удалённого обновления маркетов (клавиша U в админ-панели)
 local component = require("component")
 local event = require("event")
 local serialization = require("serialization")
@@ -265,7 +266,7 @@ local function drawAdminPanel()
 
     setColor(ansi.cyan)
     gotoxy(2, screenH-2)
-    io.write("BAN/UNBAN: D | RESET STATS: R | PAUSE: P | EDIT BALANCE: E | ADD ITEM: B | SCROLL: ↑↓ | MOUSE CLICK")
+    io.write("BAN/UNBAN: D | RESET STATS: R | PAUSE: P | EDIT BALANCE: E | ADD ITEM: B | SCROLL: ↑↓ | MOUSE CLICK | U - UPDATE MARKETS")
     resetColor()
     io.flush()
     drawing = false
@@ -506,6 +507,20 @@ end
 local function validateSession(name, token)
     local s = sessions[name]
     return s and s.token == token and os.time() - (s.lastAction or 0) < SESSION_TIMEOUT
+end
+
+-- НОВАЯ ФУНКЦИЯ ДЛЯ ОБНОВЛЕНИЯ МАРКЕТОВ
+local function broadcastUpdate()
+    if next(markets) == nil then
+        addLog("Нет подключённых маркетов для обновления", ansi.red)
+        return
+    end
+    local sent = 0
+    for addr, _ in pairs(markets) do
+        modem.send(addr, 0xffef, serialization.serialize({op="update_market"}))
+        sent = sent + 1
+    end
+    addLog("Отправлена команда обновления " .. sent .. " маркетам", ansi.green)
 end
 
 -- ========== ОБРАБОТЧИК КЛАВИШ ==========
@@ -757,6 +772,9 @@ local function handleKey(key, char, player)
             else
                 log("WARN", "Попытка добавления предмета не админом: " .. tostring(player))
             end
+            return
+        elseif pressed == "u" then
+            broadcastUpdate()
             return
         end
     end
