@@ -1,4 +1,4 @@
--- PIM Market Installer (исправленный)
+-- PIM Market Installer (исправленный, без лишнего вывода wget)
 ------------------------------------ config ------------------------------------
 local REPOSITORY  = "https://raw.githubusercontent.com/ZoziDo/market/main/"
 
@@ -113,7 +113,6 @@ local function tickSpinner()
   text(X+W-4, Y+3, s, COL_DIM)
 end
 
--- /home всегда существует, ничего создавать не нужно
 local function install()
   drawChrome()
   writeStatus("Initializing installer…", COL_DIM)
@@ -127,8 +126,8 @@ local function install()
     writeStatus("Downloading "..label, COL_TEXT)
     log("wget "..shorten(f.url,45), COL_DIM)
 
-    -- Убираем -q (тихий режим), чтобы видеть ошибки
-    local res = shell.execute("wget -f "..f.url.." "..f.path)
+    -- ТИХАЯ ЗАГРУЗКА (без вывода в консоль)
+    local res = shell.execute("wget -fq "..f.url.." "..f.path .. " > /dev/null 2>&1")
     tickSpinner()
 
     if res then
@@ -145,7 +144,6 @@ local function install()
       math.floor(ratio*100), okCount, failCount), COL_DIM)
   end
 
-  -- Проверяем, скачался ли главный файл, прежде чем прописывать автозапуск
   if fs.exists("/home/pimmarket.lua") then
     local f = io.open("/home/.shrc","w")
     if f then 
