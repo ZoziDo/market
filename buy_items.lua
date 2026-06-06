@@ -101,7 +101,7 @@ return {
   { internalName = "metadrive:block_compressor", displayName = "Квантовый компрессор", price_coin = 784.61, price_ema = 18.25 },
   { internalName = "metadrive:block_thermal_smelter", displayName = "Квантовая индукционная плавильня", price = 770.00, currency = "res" },
   { internalName = "metadrive:block_advanced_squeezer", displayName = "Квантовая соковыжималка", price_coin = 641.90, price_ema = 16.29 },
-  { internalName = "metadrive:block_ic2_centrifuge", displayName = "Квантовая термальная центрифуга", price = 91.90, currency = "res" },
+  { internalName = "metadrive:block_ic2_centrifuge", displayName = "Квантовая термальная центрифуга", price_coin = 750.70, price_ema = 16.30 },
   { internalName = "metadrive:block_advanced_carpenter", displayName = "Квантовый плотник", price_coin = 732.64, price_ema = 18.32 },
   { internalName = "metadrive:block_extractor", displayName = "Квантовый экстрактор", price_coin = 650.88, price_ema = 16.27 },
   { internalName = "metadrive:block_ore_washing", displayName = "Квантовый рудопромывочный механизм", price_coin = 672.16, price_ema = 16.80 },
