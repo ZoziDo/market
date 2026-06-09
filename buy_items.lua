@@ -438,7 +438,7 @@ return {
   { internalName = "EnderIO:itemAlloy", displayName = "Сплав из красного камня", price = 5.06, currency = "res", damage = 3 },
   { internalName = "IC2:blockMachine2", displayName = "Термальная центрифуга", price = 113.20, currency = "res", damage = 3 },
   { internalName = "dwcity:Topaz", displayName = "Топаз", price = 5.00, currency = "res" },
-  { internalName = "IC2:itemTritiumCell", displayName = "Топливный стержень (Тритий)", price = 48.0, currency = "res" },
+  { internalName = "IC2:itemTritiumCell", displayName = "Топливный стержень (Тритий)", price_coin = 50.50, price_ema = 1.00 },
   { internalName = "IC2:reactoryUraniumSimple", displayName = "Топливный стержень (Уран)", price = 5.76, currency = "res" },
   { internalName = "IC2:blockPersonal", displayName = "Торговый аппарат", price_coin = 0.00, price_ema = 26.67, damage = 1 },
   { internalName = "dwcity:ThoriumBlock", displayName = "Ториевый блок", price = 63.00, currency = "res" },
