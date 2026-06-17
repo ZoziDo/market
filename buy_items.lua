@@ -537,6 +537,6 @@ return {
   { internalName = "minecraft:bone", displayName = "Кость", price_coin = 0.00, price_ema = 0.2 },
   { internalName = "Forestry:royalJelly", displayName = "Маточное молочко", price_coin = 0.00, price_ema = 0.05 },
   { internalName = "DraconicEvolution:draconicCore", displayName = "Драконье ядро", price_coin = 132.00, price_ema = 13.40 },
-  { internalName = "IC2:itemPlutonium", displayName = "Плутоний", price = 4.90, currency = "res" },
+  { internalName = "IC2:itemPlutonium", displayName = "Плутоний", price = 15.00, currency = "res" },
   { internalName = "minecraft:stone", displayName = "Камень", price = 0.02, currency = "res" }
 }
