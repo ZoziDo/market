@@ -1,6 +1,7 @@
 
 return {
   { internalName = "metadrive:block_reactor_coolant_injector", displayName = "Впрыскиватель хладагента", price_coin = 480.00, price_ema = 0.00 },
+  { internalName = "minecraft:dye", displayName = "Чернильный мешок", price_coin = 1.10, price_ema = 0.00 },
   { internalName = "BuildCraft|Silicon:laserTableBlock", displayName = "Сборочный стол", price_coin = 0.00, price_ema = 2.81 },
   { internalName = "minecraft:apple", displayName = "Яблоко", price_coin = 0.00, price_ema = 0.02 },
   { internalName = "EnderIO:itemAlloy", displayName = "Призрачный сплав", price_coin = 1.00, price_ema = 0.00, damage = 7 },
