@@ -1930,7 +1930,7 @@ local function main()
         -- Игнорируем клавишу Ctrl+C на уровне события клавиатуры
         if e == "key_down" then
             local _, _, _, code, char = table.unpack(ev)
-            if char == 3 or (code == 46) then -- Ctrl+C
+            if char == 3 then -- Ctrl+C
                 goto continue
             end
         end
