@@ -92,7 +92,7 @@ return {
   { internalName = "dwcity:Sky_materia", displayName = "Ледяная Материя", price_coin = 15.6, price_ema = 1.04 },
   { internalName = "ExtraTrees:food", displayName = "Кокос", price_coin = 1.00, price_ema = 0.01, damage = 50 },
   { internalName = "GraviSuite:vajra", displayName = "Ваджра", price_coin = 1000.50, price_ema = 200.00 },
-  { internalName = "dwcity:Powder11", displayName = "Трижды сжатый камень", price_coin = 80.00, price_ema = 2.00 },
+  { internalName = "dwcity:Powder11", displayName = "Трижды сжатый камень", price_coin = 180.00, price_ema = 0.00 },
   { internalName = "dwcity:Powder7", displayName = "Дважды сжатый адский кирпич", price = 555.55, currency = "res" },
   { internalName = "dwcity:PalladiumReactorChamber", displayName = "Палладиевая реакторная камера", price = 555.55, currency = "res" },
   { internalName = "appliedenergistics2:item.ItemMultiPart", displayName = "МЭ плотный кабель - Изменчивый", price = 7.50, currency = "res", damage = 76 },
