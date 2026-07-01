@@ -192,12 +192,63 @@ function addLog(text, fg)
     while #logBuffer > 200 do table.remove(logBuffer, 1) end
 end
 
-local function log(level, msg)
+-- Улучшенная система логирования
+local function log(level, msg, emoji)
     local color = ansi.white
     if level == "INFO" then color = ansi.green
     elseif level == "WARN" then color = ansi.yellow
-    elseif level == "ERROR" then color = ansi.red end
-    addLog("[" .. getRealTimeString() .. "] [" .. level .. "] " .. msg, color)
+    elseif level == "ERROR" then color = ansi.red
+    elseif level == "SUCCESS" then color = ansi.green
+    elseif level == "IMPORTANT" then color = ansi.magenta end
+    
+    local prefix = ""
+    if emoji then prefix = emoji .. " " end
+    
+    addLog("[" .. getRealTimeString() .. "] " .. prefix .. msg, color)
+    
+    -- Дублируем важные события в отдельный файл
+    if level == "IMPORTANT" or level == "SUCCESS" or level == "WARN" then
+        local logFile = io.open("/home/server_events.log", "a")
+        if logFile then
+            logFile:write("[" .. getRealDateTimeString() .. "] " .. prefix .. msg .. "\n")
+            logFile:close()
+        end
+    end
+end
+
+-- Фильтр для входящих сообщений (убираем лишние логи)
+local function logIncoming(from, msg)
+    -- Логируем только важные операции
+    local importantOps = {
+        ["enter"] = true,
+        ["sell"] = true,
+        ["buy"] = true,
+        ["agree"] = true,
+        ["report"] = true,
+        ["add_feedback"] = true,
+        ["get_feedbacks"] = true
+    }
+    
+    if importantOps[msg.op] then
+        -- Для входа показываем только если это успешный вход
+        if msg.op == "enter" then
+            if msg.name and msg.name ~= "" then
+                log("INFO", "👤 Вход игрока: " .. msg.name)
+            end
+        elseif msg.op == "sell" then
+            log("SUCCESS", "💰 Продажа от " .. msg.name .. ": " .. (msg.item or "?") .. " x" .. (msg.qty or 0))
+        elseif msg.op == "buy" then
+            log("SUCCESS", "🛒 Покупка от " .. msg.name .. ": " .. (msg.item or "?") .. " x" .. (msg.qty or 0))
+        elseif msg.op == "agree" then
+            log("IMPORTANT", "📝 Соглашение принято: " .. msg.name)
+        elseif msg.op == "report" then
+            log("WARN", "📩 Репорт от " .. msg.name)
+        elseif msg.op == "add_feedback" then
+            log("INFO", "📝 Отзыв от " .. msg.name)
+        elseif msg.op == "get_feedbacks" then
+            log("INFO", "📋 Запрос отзывов от " .. msg.name)
+        end
+    end
 end
 
 local function isAdminConnected()
@@ -223,7 +274,7 @@ local function broadcastUpdate()
         modem.send(addr, 0xffef, serialization.serialize({op="update_market"}))
         sent = sent + 1
     end
-    addLog("Отправлена команда обновления " .. sent .. " маркетам", ansi.green)
+    log("SUCCESS", "Обновление отправлено " .. sent .. " терминалам")
 end
 
 local function broadcastKill()
@@ -236,7 +287,7 @@ local function broadcastKill()
         modem.send(addr, 0xffef, serialization.serialize({op="kill_market"}))
         sent = sent + 1
     end
-    addLog("Отправлена команда завершения " .. sent .. " маркетам", ansi.red)
+    log("WARN", "Команда завершения отправлена " .. sent .. " терминалам")
 end
 
 local function drawAdminPanel()
@@ -511,7 +562,7 @@ local function getOrCreatePlayer(name)
             hasFeedback = false
         }
         saveDB()
-        log("INFO", "Создан игрок " .. name)
+        log("SUCCESS", "🎮 Новый игрок: " .. name)
     end
     return players[name]
 end
@@ -584,7 +635,7 @@ local function handleKey(key, char, player)
                         if addItemResponse then break end
                     end
                     if addItemResponse and addItemResponse.success then
-                        addLog("Предмет успешно добавлен!", ansi.green)
+                        log("SUCCESS", "✅ Предмет добавлен: " .. addItemFields.display)
                         for addr, _ in pairs(markets) do
                             modem.send(addr, 0xffef, serialization.serialize({op = "reload_buy_items"}))
                         end
@@ -640,7 +691,7 @@ local function handleKey(key, char, player)
                 if emaVal then
                     editingPlayer.data.emaBalance = emaVal
                 end
-                log("INFO", "Баланс игрока " .. editingPlayer.name .. " изменён: Coin=" .. (coinVal or editingPlayer.data.balance) .. " ₵, ЭМЫ=" .. (emaVal or editingPlayer.data.emaBalance) .. " ۞")
+                log("INFO", "📊 Баланс игрока " .. editingPlayer.name .. " изменён: Coin=" .. (coinVal or editingPlayer.data.balance) .. " ₵, ЭМЫ=" .. (emaVal or editingPlayer.data.emaBalance) .. " ۞")
                 saveDB()
             end
             editBalanceMode = false
@@ -704,18 +755,19 @@ local function handleKey(key, char, player)
                 adminScroll = 0
                 selectedAdminIndex = 1
                 updateAdminPlayerList()
+                log("INFO", "🔐 Админ-панель открыта")
                 drawAdminPanel()
             else
-                log("WARN", "Попытка входа в админ-панель не админом: " .. tostring(player))
+                log("WARN", "⚠️ Попытка входа в админ-панель не админом: " .. tostring(player))
             end
             return
         elseif pressed == "p" then
             if isAdmin then
                 shopPaused = not shopPaused
-                log("INFO", "Магазин " .. (shopPaused and "приостановлен" or "возобновлён"))
+                log("IMPORTANT", "⏸️ Магазин " .. (shopPaused and "приостановлен" or "возобновлён"))
                 drawInterface()
             else
-                log("WARN", "Попытка паузы магазина не админом: " .. tostring(player))
+                log("WARN", "⚠️ Попытка паузы магазина не админом: " .. tostring(player))
             end
             return
         elseif pressed == "r" then
@@ -725,11 +777,12 @@ local function handleKey(key, char, player)
     else
         if pressed == "p" then
             shopPaused = not shopPaused
-            log("INFO", "Магазин " .. (shopPaused and "приостановлен" or "возобновлён"))
+            log("IMPORTANT", "⏸️ Магазин " .. (shopPaused and "приостановлен" or "возобновлён"))
             drawAdminPanel()
             return
         elseif pressed == "a" then
             adminMode = false
+            log("INFO", "🔐 Выход из админ-панели")
             drawInterface()
             return
         elseif pressed == "d" then
@@ -737,7 +790,7 @@ local function handleKey(key, char, player)
             if ply then
                 ply.data.banned = not ply.data.banned
                 saveDB()
-                log("INFO", "Игрок " .. ply.name .. (ply.data.banned and " забанен" or " разбанен"))
+                log("IMPORTANT", "🚫 Игрок " .. ply.name .. (ply.data.banned and " ЗАБАНЕН" or " РАЗБАНЕН"))
                 drawAdminPanel()
             end
             return
@@ -748,7 +801,7 @@ local function handleKey(key, char, player)
                 ply.data.balance = 0
                 ply.data.emaBalance = 0
                 saveDB()
-                log("INFO", "Статистика игрока " .. ply.name .. " сброшена")
+                log("INFO", "📊 Статистика игрока " .. ply.name .. " сброшена")
                 drawAdminPanel()
             end
             return
@@ -768,7 +821,7 @@ local function handleKey(key, char, player)
                 addItemCurrentField = 1
                 drawAddItemForm()
             else
-                log("WARN", "Попытка добавления предмета не админом: " .. tostring(player))
+                log("WARN", "⚠️ Попытка добавления предмета не админом: " .. tostring(player))
             end
             return
         elseif pressed == "u" then
@@ -796,7 +849,7 @@ end
 
 
 local function main()
-    log("INFO", "Сервер запущен. Ожидание терминалов...")
+    log("SUCCESS", "🚀 Сервер запущен. Ожидание терминалов...")
     drawInterface()
 
     while true do
@@ -821,6 +874,7 @@ local function main()
                 goto continue
             end
 
+            -- Проверка на спам
             local last = sessions["__modem_"..from] or 0
             if os.time() - last < 0.5 then
                 log("WARN", "Спам от " .. from)
@@ -828,23 +882,24 @@ local function main()
             end
             sessions["__modem_"..from] = os.time()
 
-            log("INFO", string.format("От %s | op=%s | name=%s | token=%s", from, tostring(msg.op), msg.name or "?", msg.token or "нет"))
+            -- Логируем только важные события
+            logIncoming(from, msg)
 
             if msg.op == "register" then
                 if msg.password ~= ACCESS_PASSWORD then
                     modem.send(from, 0xffef, serialization.serialize({op="error", message="Неверный пароль"}))
-                    log("WARN", "Попытка подключения с неверным паролем от " .. from)
+                    log("WARN", "❌ Попытка подключения с неверным паролем от " .. from)
                     if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                     goto continue
                 end
                 marketConnected = true
                 if not owner then
                     owner = from
-                    log("INFO", "✅ АДМИН ЗАРЕГИСТРИРОВАН: " .. from)
+                    log("SUCCESS", "🔐 АДМИН ЗАРЕГИСТРИРОВАН: " .. from)
                 end
                 if not markets[from] then
                     markets[from] = true
-                    log("INFO", "✅ Терминал добавлен в список рассылки: " .. from)
+                    log("SUCCESS", "✅ Терминал подключён: " .. from)
                 end
                 modem.send(from, 0xffef, serialization.serialize({op="welcome", owner=(from==owner), shopPaused=shopPaused}))
                 if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
@@ -857,13 +912,14 @@ local function main()
                 end
                 local playerName = msg.name
                 if not playerName or playerName == "" then
-                    log("WARN", "Вход без имени от " .. from)
+                    log("WARN", "❌ Вход без имени от " .. from)
                     if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                     goto continue
                 end
                 local player = getOrCreatePlayer(playerName)
                 if player.banned then
                     modem.send(from, 0xffef, serialization.serialize({op="error", message="Вы забанены"}))
+                    log("WARN", "🚫 Забаненный игрок пытается войти: " .. playerName)
                     if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                     goto continue
                 end
@@ -873,11 +929,10 @@ local function main()
                 if existingSession and os.time() - (existingSession.lastAction or 0) < SESSION_TIMEOUT then
                     token = existingSession.token
                     existingSession.lastAction = os.time()
-                    log("INFO", "👤 " .. playerName .. " продлил сессию. Токен: " .. token)
                 else
                     token = tostring(math.floor(math.random() * 900000000 + 100000000))
                     sessions[playerName] = {token = token, lastAction = os.time()}
-                    log("INFO", "👤 " .. playerName .. " вошёл. Токен: " .. token)
+                    log("SUCCESS", "👤 " .. playerName .. " вошёл в систему")
                 end
 
                 modem.send(from, 0xffef, serialization.serialize({
@@ -893,7 +948,7 @@ local function main()
                 goto continue
             elseif msg.op == "getAccount" then
                 if not validateSession(msg.name, msg.token) then
-                    log("WARN", "Неверный токен для getAccount от " .. (msg.name or "?"))
+                    log("WARN", "❌ Неверный токен для getAccount от " .. (msg.name or "?"))
                     modem.send(from, 0xffef, serialization.serialize({op="accountData", error = true, message = "Токен устарел"}))
                     if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                     goto continue
@@ -912,7 +967,6 @@ local function main()
                         shopPaused = shopPaused
                     }
                 }))
-                log("INFO", "Аккаунт отправлен для " .. msg.name)
                 if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
             elseif msg.op == "sell" then
@@ -922,7 +976,7 @@ local function main()
                     goto continue
                 end
                 if not validateSession(msg.name, msg.token) then
-                    log("WARN", "Неверный токен для sell")
+                    log("WARN", "❌ Неверный токен для sell от " .. (msg.name or "?"))
                     if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                     goto continue
                 end
@@ -934,10 +988,10 @@ local function main()
 
                 if internalName == "customnpcs:npcMoney" then
                     player.emaBalance = (player.emaBalance or 0) + value
-                    log("INFO", string.format("💚 %s пополнил ЭМЫ: предмет '%s' x%d на сумму %.2f ۞", msg.name, msg.item, qty, value))
+                    log("SUCCESS", "💚 " .. msg.name .. " пополнил ЭМЫ: " .. (msg.item or "?") .. " x" .. qty .. " на " .. string.format("%.2f", value) .. " ۞")
                 else
                     player.balance = (player.balance or 0) + value
-                    log("INFO", string.format("💰 %s пополнил Coina: предмет '%s' x%d на сумму %.2f ₵", msg.name, msg.item, qty, value))
+                    log("SUCCESS", "💰 " .. msg.name .. " пополнил Coina: " .. (msg.item or "?") .. " x" .. qty .. " на " .. string.format("%.2f", value) .. " ₵")
                 end
                 player.transactions = (player.transactions or 0) + 1
                 sessions[msg.name].lastAction = os.time()
@@ -957,7 +1011,7 @@ local function main()
                     goto continue
                 end
                 if not validateSession(msg.name, msg.token) then
-                    log("WARN", "Неверный токен для buy")
+                    log("WARN", "❌ Неверный токен для buy от " .. (msg.name or "?"))
                     if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                     goto continue
                 end
@@ -968,6 +1022,7 @@ local function main()
 
                 if player.balance < value_coin or player.emaBalance < value_ema then
                     modem.send(from, 0xffef, serialization.serialize({op="error", message="Недостаточно средств"}))
+                    log("WARN", "❌ " .. msg.name .. " пытался купить " .. (msg.item or "?") .. " x" .. (msg.qty or 0) .. " но недостаточно средств")
                     goto continue
                 end
 
@@ -986,24 +1041,23 @@ local function main()
                     if priceStr ~= "" then priceStr = priceStr .. " + " end
                     priceStr = priceStr .. string.format("%.2f", value_ema) .. "۞"
                 end
-                log("INFO", string.format("🛒 %s купил %s x%d за %s", msg.name, msg.item, msg.qty, priceStr))
+                log("SUCCESS", "🛒 " .. msg.name .. " купил " .. (msg.item or "?") .. " x" .. (msg.qty or 0) .. " за " .. priceStr)
                 if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
             elseif msg.op == "report" then
                 if not validateSession(msg.name, msg.token) then
-                    log("WARN", "Неверный токен для report")
+                    log("WARN", "❌ Неверный токен для report")
                     if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                     goto continue
                 end
                 globalStats.totalReports = (globalStats.totalReports or 0) + 1
                 saveGlobalStats()
-                log("INFO", "📩 Репорт от " .. msg.name .. " (" .. msg.time .. ")")
+                log("IMPORTANT", "📩 Репорт от " .. msg.name .. " (" .. msg.time .. ")")
                 log("INFO", "   Текст: " .. (msg.text or ""))
                 local file = io.open("/home/reports.log", "a")
                 if file then
                     file:write("[" .. msg.time .. "] " .. msg.name .. ": " .. msg.text .. "\n")
                     file:close()
-                    log("INFO", "✅ Сохранено в reports.log")
                 else
                     log("ERROR", "❌ Не удалось открыть reports.log")
                 end
@@ -1011,7 +1065,7 @@ local function main()
                 goto continue
             elseif msg.op == "agree" then
                 if not validateSession(msg.name, msg.token) then
-                    log("WARN", "Неверный токен для agree")
+                    log("WARN", "❌ Неверный токен для agree")
                     modem.send(from, 0xffef, serialization.serialize({ op="agree", error = true, message = "Токен устарел" }))
                     if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                     goto continue
@@ -1021,7 +1075,7 @@ local function main()
                     player.agreed = true
                     saveDB()
                     sessions[msg.name].lastAction = os.time()
-                    log("INFO", "📝 " .. msg.name .. " принял пользовательское соглашение")
+                    log("IMPORTANT", "📝 " .. msg.name .. " принял пользовательское соглашение")
                     modem.send(from, 0xffef, serialization.serialize({ op = "agree", success = true, agreed = true }))
                 else
                     modem.send(from, 0xffef, serialization.serialize({ op = "agree", error = true, message = "Игрок не найден" }))
@@ -1088,7 +1142,7 @@ local function main()
                 player.hasFeedback = true
                 saveDB()
                 modem.send(from, 0xffef, serialization.serialize({op="add_feedback_response", success=true}))
-                log("INFO", "📝 Новый отзыв от " .. msg.name .. ": " .. msg.text)
+                log("INFO", "📝 Новый отзыв от " .. msg.name)
                 goto continue
             end
         end
