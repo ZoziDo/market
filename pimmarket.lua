@@ -33,89 +33,6 @@ local function getRealTimeHM()
     return os.date("%H:%M:%S", getRealTimestamp())
 end
 
-local function getRealDateTimeString()
-    return os.date("%d.%m.%Y %H:%M:%S", getRealTimestamp())
-end
-
--- ============================================================
--- ОТЛАДЧИК
--- ============================================================
-local debugMode = true
-local debugFile = "/home/debug.log"
-
-local function debugLog(msg, level)
-    if not debugMode then return end
-    level = level or "INFO"
-    
-    -- Вывод в консоль
-    local consoleMsg = "[" .. getRealTimeString() .. "] [" .. level .. "] " .. msg
-    print(consoleMsg)
-    
-    -- Запись в файл
-    local file = io.open(debugFile, "a")
-    if file then
-        file:write("[" .. getRealDateTimeString() .. "] [" .. level .. "] " .. msg .. "\n")
-        file:close()
-    end
-end
-
--- Функция для дампа состояния
-local function dumpState()
-    debugLog("=== ДАМП СОСТОЯНИЯ ===")
-    debugLog("currentPlayer: " .. tostring(currentPlayer))
-    debugLog("currentToken: " .. tostring(currentToken and "есть" or "нет"))
-    debugLog("alreadyAuthorized: " .. tostring(alreadyAuthorized))
-    debugLog("authInProgress: " .. tostring(authInProgress))
-    debugLog("currentScreen: " .. tostring(currentScreen))
-    debugLog("lockedPlayer: " .. tostring(lockedPlayer))
-    debugLog("coinBalance: " .. tostring(coinBalance))
-    debugLog("emaBalance: " .. tostring(emaBalance))
-    debugLog("playerAgreed: " .. tostring(playerAgreed))
-    debugLog("=== КОНЕЦ ДАМПА ===")
-end
-
--- ============================================================
--- СИСТЕМНАЯ БЛОКИРОВКА
--- ============================================================
-local function isAdmin(user)
-    for _, adminUser in pairs(table.pack(computer.users())) do
-        if adminUser == user then return true end
-    end
-    return false
-end
-
-local function getPimAddr()
-    for addr in component.list("pim") do
-        return addr
-    end
-    return nil
-end
-
--- Функция проверки на PIM
-local function checkPlayerOnPIM(playerName)
-    local pimAddr = getPimAddr()
-    if not pimAddr then 
-        debugLog("PIM не найден!", "WARN")
-        return false 
-    end
-    
-    debugLog("Проверка PIM для " .. tostring(playerName))
-    local success, playerOnPim = pcall(function()
-        return component.invoke(pimAddr, "getPlayerOnPim")
-    end)
-    
-    if not success then
-        debugLog("Ошибка вызова getPlayerOnPim: " .. tostring(playerOnPim), "ERROR")
-        return false
-    end
-    
-    debugLog("Игрок на PIM: " .. tostring(playerOnPim))
-    return playerOnPim == playerName
-end
-
--- ============================================================
--- АВТОРИЗАЦИЯ
--- ============================================================
 local serverAddress = "2a904dc5-cbac-47de-be90-6f407fa91ecc"
 local ACCESS_PASSWORD = "secret"
 
@@ -136,86 +53,6 @@ local colors = {
     white = 0xFFFFFF
 }
 
--- Переменные блокировки
-local lockedPlayer = nil
-local lockTimeout = 300
-local lastActivityTime = 0
-local lockWarningShown = false
-
--- Функция блокировки компьютера
-local function lockComputerViaUser(playerName)
-    if not playerName or playerName == "" then return false end
-    if isAdmin(playerName) then return true end
-    
-    debugLog("Блокировка системы для: " .. playerName, "IMPORTANT")
-    return true
-end
-
--- Функция разблокировки
-local function unlockComputerViaUser(playerName)
-    if not playerName or playerName == "" then return false end
-    if isAdmin(playerName) then return true end
-    
-    debugLog("Разблокировка системы для: " .. playerName, "IMPORTANT")
-    return true
-end
-
-local function isSystemLockedForPlayer(playerName)
-    return false -- Отключаем системную блокировку
-end
-
-local function lockForPlayer(playerName)
-    if playerName and playerName ~= "" then
-        lockedPlayer = playerName
-        lastActivityTime = os.clock()
-        lockWarningShown = false
-        lockComputerViaUser(playerName)
-        debugLog("🔒 Блокировка установлена для: " .. playerName, "IMPORTANT")
-        return true
-    end
-    return false
-end
-
-local function unlockComputer()
-    if lockedPlayer then
-        unlockComputerViaUser(lockedPlayer)
-        debugLog("🔓 Разблокировка для: " .. lockedPlayer, "IMPORTANT")
-    end
-    lockedPlayer = nil
-    lastActivityTime = 0
-    lockWarningShown = false
-end
-
-local function adminResetLock(playerName)
-    if isAdmin(playerName) then
-        unlockComputer()
-        return true
-    end
-    return false
-end
-
-local function drawLockStatus()
-    if lockedPlayer then
-        gpu.setBackground(colors.bg_main)
-        gpu.fill(1, 25, 80, 1, " ")
-        gpu.setForeground(colors.accent_secondary)
-        local status = "🔒 Владелец: " .. lockedPlayer
-        local timeLeft = math.ceil(lockTimeout - (os.clock() - lastActivityTime))
-        if timeLeft < 10 then
-            gpu.setForeground(colors.error)
-        end
-        local fullStatus = status .. " | Таймаут: " .. timeLeft .. "с"
-        if unicode.len(fullStatus) > 78 then
-            fullStatus = status .. " | " .. timeLeft .. "с"
-        end
-        local x = math.floor((80 - unicode.len(fullStatus)) / 2) + 1
-        gpu.set(x, 25, fullStatus)
-    end
-end
-
--- ============================================================
--- ОСТАЛЬНОЙ КОД
--- ============================================================
 local function clear()
     gpu.setBackground(colors.bg_main)
     gpu.fill(1, 1, 80, 25, " ")
@@ -324,6 +161,13 @@ local drawAgreementScreen = safeDoFile("/home/agreement.lua")
 
 local modem = component.modem
 
+local function getPimAddr()
+    for addr in component.list("pim") do
+        return addr
+    end
+    return nil
+end
+
 local PUSH_DIRECTION = "down"
 local PULL_DIRECTION = "up"
 
@@ -357,6 +201,7 @@ modem.open(0xffef)
 modem.open(0xfffe)
 
 local currentPlayer, currentToken = nil, nil
+local pimOwner = nil  -- Игрок, который стоит на PIM
 local coinBalance = 0.0
 local emaBalance = 0.0
 local playerTransactions = 0
@@ -364,11 +209,10 @@ local playerRegDate = ""
 local playerAgreed = false
 local currentScreen = "welcome"
 local authStartTime = 0
-local AUTH_TIMEOUT = 10
+local AUTH_TIMEOUT = 3
 local accountRequestTime = 0
 local ACCOUNT_TIMEOUT = 3
 local alreadyAuthorized = false
-local authInProgress = false
 
 local shopItems = {}
 local shopSearch = ""
@@ -413,6 +257,12 @@ local showShopDenied = false
 
 local tempMessage = ""
 local tempMessageTimer = nil
+
+-- Функция проверки, является ли игрок владельцем PIM
+local function isPimOwner(playerName)
+    if not playerName or not pimOwner then return false end
+    return playerName == pimOwner
+end
 
 local function updateSelectorDisplay(item)
     if not selector then return end
@@ -477,7 +327,6 @@ local function drawTempMessage()
     else
         gpu.setBackground(colors.bg_main)
         gpu.fill(1, 25, 80, 1, " ")
-        drawLockStatus()
     end
 end
 
@@ -636,6 +485,7 @@ end
 
 local menuButtons = {
     shop    = {x=32, xs=20, y=9,  ys=3, text="🛒 Магазин",     tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main},
+
     account = {x=32, xs=20, y=17, ys=3, text="👤 Аккаунт",      tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main}
 }
 
@@ -664,6 +514,7 @@ local nextButton    = {text = "[ КУПИТЬ ]",  x=59, y=24, xs=11, ys=1, bg=c
 local shopMenuButtons = {
     buy    = {x=32, xs=20, y=9,  ys=3, text="🛍 Покупка",     tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main},
     sell   = {x=32, xs=20, y=17, ys=3, text="💰 Пополнение",  tx=5, ty=1, bg=colors.bg_button, fg=colors.accent_main},
+
 }
 
 local function canSendReport()
@@ -900,6 +751,7 @@ local function drawBalanceLine(x, y)
     gpu.set(x + unicode.len("Баланс: ") + unicode.len(coinStr) + unicode.len(" | "), y, emaStr)
 end
 
+-- Функция перерисовки только строки поиска (без очистки экрана)
 local function redrawSearchField()
     local searchX = 42
     local searchText = ""
@@ -1152,6 +1004,7 @@ local function drawPurchaseScreen()
     local totalCoin = (purchaseItem.priceCoin or 0) * purchaseQuantity
     local totalEma = (purchaseItem.priceEma or 0) * purchaseQuantity
 
+    -- На сумму (Coina и ЭМЫ на отдельных строках)
     gpu.setForeground(colors.success)
     gpu.set(3, 5, "На сумму: ")
     local sumY = 5
@@ -1165,6 +1018,7 @@ local function drawPurchaseScreen()
         gpu.set(14, sumY, string.format("%.2f", totalEma) .. " ۞")
     end
 
+    -- Цена за штуку (Coina и ЭМЫ на отдельных строках)
     gpu.setForeground(colors.success)
     gpu.set(55, 5, "Цена: ")
     local priceY = 5
@@ -1966,7 +1820,6 @@ end
 
 local function retryAccountAfterTokenRefresh()
     if not currentPlayer then return end
-    debugLog("Повторный запрос токена для: " .. currentPlayer, "WARN")
     modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
     local start = os.clock()
     while os.clock() - start < 3 do
@@ -1982,14 +1835,12 @@ local function retryAccountAfterTokenRefresh()
                     emaBalance = msg.emaBalance or 0.0
                     playerAgreed = msg.agreed or false
                     alreadyAuthorized = true
-                    authInProgress = false
                     currentScreen = "account_loading"
                     accountRequestTime = os.clock()
                     drawAccountLoading()
                     modem.send(serverAddress, 0xffef, serialization.serialize({
                         op = "getAccount", name = currentPlayer, token = currentToken
                     }))
-                    debugLog("Токен обновлён для: " .. currentPlayer, "SUCCESS")
                     return
                 end
             end
@@ -1997,16 +1848,13 @@ local function retryAccountAfterTokenRefresh()
             currentPlayer = nil
             currentToken = nil
             alreadyAuthorized = false
-            authInProgress = false
             currentScreen = "welcome"
             drawWelcomeScreen()
-            debugLog("Игрок вышел во время обновления токена", "WARN")
             return
         end
     end
     currentScreen = "menu"
     drawMainMenu()
-    debugLog("Не удалось обновить токен", "ERROR")
 end
 
 local function goToAccount()
@@ -2081,7 +1929,6 @@ local function refreshAndAgree()
 end
 
 local function main()
-    debugLog("=== ЗАПУСК МАГАЗИНА ===")
     drawWelcomeScreen()
     modem.send(serverAddress, 0xffef, serialization.serialize({op="register", password=ACCESS_PASSWORD}))
 
@@ -2089,55 +1936,18 @@ local function main()
         local ev = {event.pull(0.5)}
         local e = ev[1]
 
-        -- Проверка таймаута блокировки
-        if lockedPlayer and os.clock() - lastActivityTime > lockTimeout then
-            unlockComputer()
-            if currentScreen == "welcome" or currentScreen == "auth" then
-                drawWelcomeScreen()
-            end
-        end
-
-        -- Проверка, что игрок всё ещё на PIM
-        if lockedPlayer and currentPlayer == lockedPlayer then
-            if not checkPlayerOnPIM(lockedPlayer) then
-                debugLog("Игрок " .. lockedPlayer .. " ушёл с PIM", "WARN")
-                unlockComputer()
-                currentPlayer = nil
-                currentToken = nil
-                alreadyAuthorized = false
-                authInProgress = false
-                currentScreen = "welcome"
-                drawWelcomeScreen()
-            end
-        end
-
-        -- Таймаут авторизации
-        if currentScreen == "auth" and authInProgress then
-            if os.clock() - authStartTime > AUTH_TIMEOUT then
-                authInProgress = false
-                debugLog("Таймаут авторизации для " .. tostring(currentPlayer), "ERROR")
-                gpu.setBackground(colors.bg_main)
-                gpu.fill(1, 25, 80, 1, " ")
-                gpu.setForeground(colors.error)
-                local errMsg = "❌ Ошибка: сервер не отвечает. Попробуйте заново."
-                local x = math.floor((80 - unicode.len(errMsg)) / 2) + 1
-                gpu.set(x, 25, errMsg)
-                os.sleep(2)
-                currentScreen = "welcome"
-                drawWelcomeScreen()
-            end
-        end
-
-        -- Игнорируем клавишу Ctrl+C
+        -- Игнорируем клавишу Ctrl+C на уровне события клавиатуры
         if e == "key_down" then
             local _, _, _, code, char = table.unpack(ev)
             if char == 3 then -- Ctrl+C
                 goto continue
             end
-            
-            -- Проверяем, что нажимает клавишу владелец
-            if lockedPlayer and currentPlayer ~= lockedPlayer then
-                goto continue
+        end
+
+        if currentScreen == "auth" then
+            if os.clock() - authStartTime >= AUTH_TIMEOUT then
+                currentScreen = "menu"
+                drawMainMenu()
             end
         end
 
@@ -2148,33 +1958,13 @@ local function main()
         end
 
         if e == "touch" then
-            local x, y = ev[3], ev[4]
-            local playerName = ev[5] or "Неизвестно"
-            
-            -- Проверяем блокировку для касаний
-            if lockedPlayer and lockedPlayer ~= playerName then
-                gpu.setBackground(colors.bg_main)
-                gpu.fill(1, 25, 80, 1, " ")
-                gpu.setForeground(colors.error)
-                local msg = "❌ Компьютер занят игроком: " .. lockedPlayer
-                local msgX = math.floor((80 - unicode.len(msg)) / 2) + 1
-                gpu.set(msgX, 25, msg)
-                if not lockWarningShown then
-                    computer.beep(800, 0.3)
-                    lockWarningShown = true
-                end
-                goto continue
-            end
-            
-            -- Обновляем время активности владельца
-            if lockedPlayer and lockedPlayer == playerName then
-                lastActivityTime = os.clock()
-                lockWarningShown = false
-            end
+            local x = ev[2]
+            local y = ev[3]
+            local playerName = ev[6]
 
-            -- Административная разблокировка
-            if x >= 75 and x <= 80 and y >= 24 and y <= 25 and isAdmin(playerName) then
-                adminResetLock(playerName)
+            -- ПРОВЕРКА: только владелец PIM может управлять
+            if not isPimOwner(playerName) then
+                -- Если это не владелец PIM, игнорируем его действия
                 goto continue
             end
 
@@ -2284,6 +2074,7 @@ local function main()
                     goto continue
                 end
 
+                -- Клик на поле поиска
                 if y == 3 and x >= 42 and x <= 64 then
                     searchActive = true
                     searchInput = shopSearch
@@ -2291,6 +2082,7 @@ local function main()
                     drawBuyItemsList()
                     goto continue
                 end
+                -- Клик на кнопку "СТЕРЕТЬ"
                 if y == 3 and x >= 66 and x <= 78 then
                     shopSearch = ""
                     searchInput = ""
@@ -2556,7 +2348,12 @@ local function main()
                 end
             end
         elseif e == "scroll" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
-            local direction = ev[5]
+            -- Проверяем, кто скроллит (для scroll события имя игрока в ev[5])
+            local playerName = ev[5]
+            if not isPimOwner(playerName) then
+                goto continue
+            end
+            local direction = ev[6]
             local x = ev[3]
             local y = ev[4]
             if x >= 2 and x <= 78 and y >= 7 and y <= 21 then
@@ -2567,6 +2364,10 @@ local function main()
                 end
             end
         elseif e == "mouse_move" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
+            -- mouse_move не содержит имени игрока, поэтому проверяем только если есть владелец
+            if not pimOwner then
+                goto continue
+            end
             local x, y = ev[3], ev[4]
             if y >= 7 and y <= 21 and x >= 2 and x <= 77 then
                 local rel = y - 6
@@ -2581,168 +2382,111 @@ local function main()
                     drawBuyItemsList()
                 end
             end
-        elseif e == "key_down" and currentScreen == "report" and canSendReport() then
-            local ch = ev[3]
-            if ch == 13 then
-                drawReportScreen()
-            elseif ch == 8 then
-                reportInput = unicode.sub(reportInput, 1, -2)
-                drawReportScreen()
-            elseif ch >= 32 then
-                reportInput = reportInput .. unicode.char(ch)
-                drawReportScreen()
-            end
-        elseif e == "key_down" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") and searchActive then
-            local ch = ev[3]
-            if ch == 13 then
-                shopSearch = searchInput
-                searchActive = false
-                listScroll = 1
-                selectedIndex = 0
-                selectedItem = nil
-                hoveredIndex = 0
-                drawBuyItemsList()
-                drawBuyButtons()
-            elseif ch == 8 then
-                searchInput = unicode.sub(searchInput, 1, -2)
-                shopSearch = searchInput
-                redrawSearchField()
-                drawBuyItemsList()
-            elseif ch >= 32 then
-                searchInput = searchInput .. unicode.char(ch)
-                shopSearch = searchInput
-                redrawSearchField()
-                drawBuyItemsList()
-            end
-            goto continue
-        elseif e == "key_down" and currentScreen == "feedback_input" and feedbackEditMode then
-            local ch = ev[3]
-            if ch == 13 then
-                if feedbackInput ~= "" and currentToken then
-                    modem.send(serverAddress, 0xffef, serialization.serialize({
-                        op = "add_feedback",
-                        name = currentPlayer,
-                        token = currentToken,
-                        text = feedbackInput,
-                        time = getRealTimeString()
-                    }))
-                    showTempMessage("✅ Отзыв отправлен! Спасибо!", 10)
-                end
-                feedbackEditMode = false
-                feedbackInput = ""
-                currentScreen = "feedbacks"
-                drawFeedbacksList()
-            elseif ch == 8 then
-                feedbackInput = unicode.sub(feedbackInput, 1, -2)
-                drawFeedbackInputScreen()
-            elseif ch >= 32 then
-                if unicode.len(feedbackInput) < 200 then
-                    feedbackInput = feedbackInput .. unicode.char(ch)
-                    drawFeedbackInputScreen()
-                end
-            end
-            goto continue
-        elseif e == "player_on" or e == "pim" or e == "pim_player_enter" then
-            local playerName = ev[2] or "Игрок"
-            currentPlayer = playerName:match("^%s*(.-)%s*$") or playerName
-            
-            debugLog("=== СОБЫТИЕ ВХОДА ===", "IMPORTANT")
-            debugLog("Событие: " .. e, "INFO")
-            debugLog("Игрок: " .. currentPlayer, "INFO")
-            debugLog("Текущий lockedPlayer: " .. tostring(lockedPlayer), "INFO")
-            debugLog("alreadyAuthorized: " .. tostring(alreadyAuthorized), "INFO")
-            debugLog("currentToken: " .. tostring(currentToken and "есть" or "нет"), "INFO")
-            debugLog("currentScreen: " .. currentScreen, "INFO")
-            
-            -- Проверяем системную блокировку
-            if isSystemLockedForPlayer(currentPlayer) then
-                if lockedPlayer and lockedPlayer ~= currentPlayer then
-                    debugLog("Система заблокирована для " .. currentPlayer .. " владельцем: " .. lockedPlayer, "WARN")
-                    gpu.setBackground(colors.bg_main)
-                    gpu.fill(1, 1, 80, 25, " ")
-                    drawScreenBorder()
-                    drawCenteredText(10, "❌ Компьютер занят другим игроком!", colors.error)
-                    drawCenteredText(11, "Владелец: " .. lockedPlayer, colors.error)
-                    drawCenteredText(12, "Подождите освобождения", colors.text_main)
-                    drawTempMessage()
-                    currentScreen = "welcome"
-                    goto continue
-                end
-            end
-            
-            -- Блокируем компьютер для этого игрока
-            if not lockForPlayer(currentPlayer) then
-                debugLog("Не удалось заблокировать для: " .. currentPlayer, "ERROR")
+        elseif e == "key_down" then
+            local playerName = ev[5]
+            -- Проверяем, только владелец PIM может использовать клавиатуру
+            if not isPimOwner(playerName) then
                 goto continue
             end
             
-            -- Если уже есть токен, сразу переходим в меню
-            if currentToken and alreadyAuthorized then
-                debugLog("Уже есть токен для " .. currentPlayer .. ", переход в меню", "SUCCESS")
+            if currentScreen == "report" and canSendReport() then
+                local ch = ev[3]
+                if ch == 13 then
+                    drawReportScreen()
+                elseif ch == 8 then
+                    reportInput = unicode.sub(reportInput, 1, -2)
+                    drawReportScreen()
+                elseif ch >= 32 then
+                    reportInput = reportInput .. unicode.char(ch)
+                    drawReportScreen()
+                end
+            elseif (currentScreen == "shop_buy" or currentScreen == "shop_sell") and searchActive then
+                local ch = ev[3]
+                if ch == 13 then
+                    shopSearch = searchInput
+                    searchActive = false
+                    listScroll = 1
+                    selectedIndex = 0
+                    selectedItem = nil
+                    hoveredIndex = 0
+                    drawBuyItemsList()
+                    drawBuyButtons()
+                elseif ch == 8 then
+                    searchInput = unicode.sub(searchInput, 1, -2)
+                    shopSearch = searchInput
+                    redrawSearchField()
+                    drawBuyItemsList()
+                elseif ch >= 32 then
+                    searchInput = searchInput .. unicode.char(ch)
+                    shopSearch = searchInput
+                    redrawSearchField()
+                    drawBuyItemsList()
+                end
+                goto continue
+            elseif currentScreen == "feedback_input" and feedbackEditMode then
+                local ch = ev[3]
+                if ch == 13 then
+                    if feedbackInput ~= "" and currentToken then
+                        modem.send(serverAddress, 0xffef, serialization.serialize({
+                            op = "add_feedback",
+                            name = currentPlayer,
+                            token = currentToken,
+                            text = feedbackInput,
+                            time = getRealTimeString()
+                        }))
+                        showTempMessage("✅ Отзыв отправлен! Спасибо!", 10)
+                    end
+                    feedbackEditMode = false
+                    feedbackInput = ""
+                    currentScreen = "feedbacks"
+                    drawFeedbacksList()
+                elseif ch == 8 then
+                    feedbackInput = unicode.sub(feedbackInput, 1, -2)
+                    drawFeedbackInputScreen()
+                elseif ch >= 32 then
+                    if unicode.len(feedbackInput) < 200 then
+                        feedbackInput = feedbackInput .. unicode.char(ch)
+                        drawFeedbackInputScreen()
+                    end
+                end
+                goto continue
+            end
+        elseif e == "player_on" or e == "pim" or e == "pim_player_enter" then
+            local playerName = ev[2] or "Игрок"
+            -- Запоминаем, кто встал на PIM
+            if not pimOwner then
+                pimOwner = playerName
+            end
+            currentPlayer = playerName:match("^%s*(.-)%s*$") or playerName
+            if alreadyAuthorized then
                 if currentScreen == "auth" or currentScreen == "account_loading" then
                     currentScreen = "menu"
                     drawMainMenu()
-                    gpu.setBackground(colors.bg_main)
-                    gpu.fill(1, 25, 80, 1, " ")
-                    gpu.setForeground(colors.success)
-                    local msgText = "✅ Добро пожаловать обратно, " .. currentPlayer .. "!"
-                    local x = math.floor((80 - unicode.len(msgText)) / 2) + 1
-                    gpu.set(x, 25, msgText)
-                    event.timer(2, function()
-                        gpu.fill(1, 25, 80, 1, " ")
-                        drawLockStatus()
-                    end)
-                else
-                    drawMainMenu()
                 end
-            elseif alreadyAuthorized then
-                debugLog("alreadyAuthorized=true, но нет токена для " .. currentPlayer, "WARN")
+            elseif currentToken then
+                alreadyAuthorized = true
                 if currentScreen == "auth" or currentScreen == "account_loading" then
                     currentScreen = "menu"
                     drawMainMenu()
                 end
             else
-                -- Новая авторизация
-                debugLog("Новая авторизация для: " .. currentPlayer, "IMPORTANT")
                 coinBalance = 0.0
                 emaBalance = 0.0
                 playerAgreed = false
                 currentScreen = "auth"
                 authStartTime = os.clock()
-                authInProgress = true
                 drawAuthScreen()
-                
-                local msg = serialization.serialize({
-                    op = "enter", 
-                    name = currentPlayer
-                })
-                debugLog("Отправка enter для: " .. currentPlayer, "INFO")
-                modem.send(serverAddress, 0xffef, msg)
-                
-                gpu.setBackground(colors.bg_main)
-                gpu.fill(1, 25, 80, 1, " ")
-                gpu.setForeground(colors.accent_main)
-                local waitMsg = "⏳ Авторизация... ожидание ответа от сервера"
-                local x = math.floor((80 - unicode.len(waitMsg)) / 2) + 1
-                gpu.set(x, 25, waitMsg)
+                modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
             end
         elseif e == "player_off" or e == "pim_player_leave" then
             local playerName = ev[2] or "Игрок"
-            debugLog("=== СОБЫТИЕ ВЫХОДА ===", "IMPORTANT")
-            debugLog("Событие: " .. e, "INFO")
-            debugLog("Игрок: " .. playerName, "INFO")
-            debugLog("Текущий lockedPlayer: " .. tostring(lockedPlayer), "INFO")
-            
-            -- Разблокируем только если уходит именно владелец
-            if lockedPlayer == playerName then
-                debugLog("Разблокировка для: " .. playerName, "IMPORTANT")
-                unlockComputer()
+            -- Если ушел владелец PIM, очищаем
+            if playerName == pimOwner then
+                pimOwner = nil
             end
-            
             currentPlayer = nil
             currentToken = nil
             alreadyAuthorized = false
-            authInProgress = false
             currentScreen = "welcome"
             selectedItem = nil
             hoveredIndex = 0
@@ -2751,100 +2495,33 @@ local function main()
             pcall(selector.setSlot, 0, nil)
             pcall(selector.setSlot, 1, nil)
             drawWelcomeScreen()
-            
-            debugLog("Состояние сброшено", "INFO")
-            dumpState()
         elseif e == "modem_message" then
             local sender = ev[3]
             local data = ev[6]
             if sender == serverAddress then
                 local success, msg = pcall(serialization.unserialize, data)
                 if success and msg then
-                    debugLog("Получено сообщение: " .. (msg.op or "unknown"), "INFO")
-                    
-                    -- ОБРАБОТКА WELCOME - УСПЕШНАЯ АВТОРИЗАЦИЯ
-                    if msg.op == "welcome" and (msg.token or msg.status == "ok") then
-                        debugLog("=== УСПЕШНАЯ АВТОРИЗАЦИЯ ===", "SUCCESS")
-                        debugLog("Токен: " .. tostring(msg.token), "INFO")
-                        debugLog("Баланс: " .. tostring(msg.balance), "INFO")
-                        debugLog("agreed: " .. tostring(msg.agreed), "INFO")
-                        
-                        if currentScreen == "auth" and authInProgress then
-                            currentToken = msg.token
-                            coinBalance = msg.balance or 0.0
-                            emaBalance = msg.emaBalance or 0.0
-                            playerTransactions = msg.transactions or 0
-                            playerRegDate = msg.regDate or ""
-                            playerAgreed = msg.agreed or false
-                            alreadyAuthorized = true
-                            authInProgress = false
-                            
-                            if msg.shopPaused then
-                                debugLog("Магазин на паузе", "WARN")
-                                gpu.setBackground(colors.bg_main)
-                                gpu.fill(1, 25, 80, 1, " ")
-                                gpu.setForeground(colors.error)
-                                local pauseMsg = "⏸️ Магазин на паузе! Попробуйте позже."
-                                local x = math.floor((80 - unicode.len(pauseMsg)) / 2) + 1
-                                gpu.set(x, 25, pauseMsg)
-                                currentScreen = "welcome"
-                                drawWelcomeScreen()
-                                goto continue
-                            end
-                            
+                    if msg.op == "welcome" and msg.token then
+                        currentToken = msg.token
+                        coinBalance = msg.balance or 0.0
+                        emaBalance = msg.emaBalance or 0.0
+                        playerTransactions = msg.transactions or 0
+                        playerRegDate = msg.regDate or ""
+                        playerAgreed = msg.agreed or false
+                        alreadyAuthorized = true
+                        if selector then
+                            modem.send(serverAddress, 0xffef, serialization.serialize({
+                                op = "selector_status",
+                                name = currentPlayer,
+                                token = currentToken,
+                                available = true
+                            }))
+                        end
+                        if currentScreen == "auth" or currentScreen == "account_loading" then
                             currentScreen = "menu"
                             drawMainMenu()
-                            
-                            gpu.setBackground(colors.bg_main)
-                            gpu.fill(1, 25, 80, 1, " ")
-                            gpu.setForeground(colors.success)
-                            local welcomeMsg = "✅ Добро пожаловать, " .. currentPlayer .. "!"
-                            local x = math.floor((80 - unicode.len(welcomeMsg)) / 2) + 1
-                            gpu.set(x, 25, welcomeMsg)
-                            
-                            event.timer(3, function()
-                                gpu.fill(1, 25, 80, 1, " ")
-                                drawLockStatus()
-                            end)
-                            
-                            if selector then
-                                modem.send(serverAddress, 0xffef, serialization.serialize({
-                                    op = "selector_status",
-                                    name = currentPlayer,
-                                    token = currentToken,
-                                    available = true
-                                }))
-                            end
-                            
-                            debugLog("Авторизация завершена успешно для: " .. currentPlayer, "SUCCESS")
-                            dumpState()
-                        else
-                            debugLog("Ошибка: welcome получен, но состояние не auth или authInProgress=false", "ERROR")
-                            debugLog("currentScreen: " .. currentScreen, "INFO")
-                            debugLog("authInProgress: " .. tostring(authInProgress), "INFO")
                         end
-                        goto continue
-                    end
-                    
-                    if msg.op == "error" then
-                        debugLog("Ошибка от сервера: " .. (msg.message or "неизвестная"), "ERROR")
-                        authInProgress = false
-                        gpu.setBackground(colors.bg_main)
-                        gpu.fill(1, 25, 80, 1, " ")
-                        gpu.setForeground(colors.error)
-                        local errorMsg = "❌ " .. (msg.message or "Ошибка сервера")
-                        local x = math.floor((80 - unicode.len(errorMsg)) / 2) + 1
-                        gpu.set(x, 25, errorMsg)
-                        
-                        if currentScreen == "auth" then
-                            os.sleep(2)
-                            currentScreen = "welcome"
-                            drawWelcomeScreen()
-                        end
-                        goto continue
-                    end
-                    
-                    if msg.op == "accountData" then
+                    elseif msg.op == "accountData" then
                         if msg.error then
                             retryAccountAfterTokenRefresh()
                         else
@@ -2852,10 +2529,8 @@ local function main()
                                 currentScreen = "account"
                                 playerAgreed = msg.data.agreed or false
                                 drawAccount(msg.data)
-                                debugLog("Данные аккаунта получены для: " .. currentPlayer, "SUCCESS")
                             end
                         end
-                        goto continue
                     elseif msg.op == "agree" then
                         if msg.success then
                             playerAgreed = true
@@ -2864,9 +2539,7 @@ local function main()
                             os.sleep(0.8)
                             drawMainMenu()
                             currentScreen = "menu"
-                            debugLog("Соглашение принято для: " .. currentPlayer, "SUCCESS")
                         elseif msg.error and msg.message == "Токен устарел" then
-                            debugLog("Токен устарел, обновление", "WARN")
                             drawCenteredText(20, "Сессия устарела. Обновление...", colors.accent_secondary)
                             os.sleep(1)
                             modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
@@ -2884,7 +2557,6 @@ local function main()
                                             emaBalance = m.emaBalance or 0.0
                                             playerAgreed = m.agreed or false
                                             refreshed = true
-                                            debugLog("Токен обновлён", "SUCCESS")
                                             break
                                         end
                                     end
@@ -2911,7 +2583,6 @@ local function main()
                             drawMainMenu()
                             currentScreen = "menu"
                         end
-                        goto continue
                     elseif msg.op == "add_buy_item" then
                         local ok, err = pcall(function()
                             local buyItems = dofile("/home/buy_items.lua")
@@ -2942,7 +2613,6 @@ local function main()
                                 drawBuyItemsList()
                                 drawBuyButtons()
                             end
-                            debugLog("Предмет добавлен: " .. msg.displayName, "SUCCESS")
                         end)
                         if ok then
                             modem.send(sender, 0xffef, serialization.serialize({op = "add_buy_item_response", success = true}))
@@ -2950,18 +2620,14 @@ local function main()
                         else
                             modem.send(sender, 0xffef, serialization.serialize({op = "add_buy_item_response", success = false, error = tostring(err)}))
                             showTempMessage("❌ Ошибка добавления: " .. tostring(err), 10)
-                            debugLog("Ошибка добавления предмета: " .. tostring(err), "ERROR")
                         end
                         goto continue
                     elseif msg.op == "add_buy_item_response" then
                         if msg.success then
                             print("Предмет успешно добавлен на сервере")
-                            debugLog("Ответ: предмет добавлен", "SUCCESS")
                         else
                             print("Ошибка добавления предмета: " .. (msg.error or "неизвестная"))
-                            debugLog("Ошибка добавления: " .. (msg.error or "неизвестная"), "ERROR")
                         end
-                        goto continue
                     elseif msg.op == "reload_buy_items" then
                         buyItemsData = dofile("/home/buy_items.lua")
                         buyItemMap = {}
@@ -2976,7 +2642,6 @@ local function main()
                             drawBuyItemsList()
                             drawBuyButtons()
                         end
-                        debugLog("Перезагрузка списка покупок", "INFO")
                         goto continue
                     elseif msg.op == "feedbacks_list" then
                         feedbacks = msg.feedbacks or {}
@@ -2985,20 +2650,16 @@ local function main()
                         if currentScreen == "feedbacks" then
                             drawFeedbacksList()
                         end
-                        debugLog("Получено отзывов: " .. #feedbacks, "INFO")
                         goto continue
                     elseif msg.op == "add_feedback_response" then
                         if msg.success then
                             showTempMessage("✅ Отзыв добавлен!", 10)
                             loadFeedbacksFromServer()
-                            debugLog("Отзыв добавлен для: " .. currentPlayer, "SUCCESS")
                         else
                             showTempMessage("❌ Ошибка: " .. (msg.error or "неизвестная"), 10)
-                            debugLog("Ошибка добавления отзыва: " .. (msg.error or "неизвестная"), "ERROR")
                         end
                         goto continue
                     elseif msg.op == "update_market" then
-                        debugLog("Получена команда обновления", "IMPORTANT")
                         if tempMessageTimer then event.cancel(tempMessageTimer) end
                         tempMessage = "Обновление по команде сервера! Запуск установщика..."
                         drawTempMessage()
@@ -3011,11 +2672,9 @@ local function main()
                             os.exit(0)
                         else
                             showTempMessage("Установщик не найден: " .. installerPath, 3)
-                            debugLog("Установщик не найден: " .. installerPath, "ERROR")
                         end
                         goto continue
                      elseif msg.op == "kill_market" then
-                        debugLog("Получена команда завершения", "IMPORTANT")
                         if tempMessageTimer then event.cancel(tempMessageTimer) end
                         tempMessage = "⚠️ Получена команда завершения от сервера! Отключаем автозапуск и перезагружаемся..."
                         drawTempMessage()
@@ -3025,7 +2684,6 @@ local function main()
                             tempMessage = "✅ Автозапуск отключён. Перезагрузка..."
                             drawTempMessage()
                             os.sleep(1)
-                            debugLog("Автозапуск отключён", "INFO")
                         end
                         pcall(modem.close, 0xffef)
                         pcall(modem.close, 0xfffe)
@@ -3041,6 +2699,7 @@ local function main()
     end
 end
 
+-- Бесконечный цикл защиты от завершения
 while true do
     pcall(main)
     os.sleep(0.5)
