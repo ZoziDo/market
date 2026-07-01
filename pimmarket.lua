@@ -1964,10 +1964,52 @@ local function main()
 
             -- ПРОВЕРКА: только владелец PIM может управлять
             if not isPimOwner(playerName) then
-                -- Если это не владелец PIM, игнорируем его действия
                 goto continue
             end
 
+            -- === ОБРАБОТКА МЕНЮ (ПЕРВЫЙ ПРИОРИТЕТ) ===
+            if currentScreen == "menu" then
+                -- Проверяем кнопки магазина и аккаунта
+                for name, btn in pairs(menuButtons) do
+                    if x >= btn.x and x < btn.x + btn.xs and y >= btn.y and y < btn.y + btn.ys then
+                        if name == "shop" then
+                            if playerAgreed then
+                                goToShop()
+                            else
+                                showShopDenied = true
+                                drawMainMenu()
+                            end
+                        elseif name == "util" then
+                            showShopDenied = false
+                            goToUtility()
+                        elseif name == "account" then
+                            showShopDenied = false
+                            goToAccount()
+                        end
+                        goto continue
+                    end
+                end
+                -- Проверяем нижнюю панель (Поддержка, Соглашение, Отзывы)
+                if y == 24 then
+                    if x >= 4 and x <= 25 then
+                        showShopDenied = false
+                        goToReport()
+                        goto continue
+                    elseif x >= 35 and x <= 47 then
+                        showShopDenied = false
+                        goToHelp()
+                        goto continue
+                    elseif x >= 68 and x <= 78 then
+                        currentScreen = "feedbacks"
+                        loadFeedbacksFromServer()
+                        drawFeedbacksList()
+                        goto continue
+                    end
+                end
+                goto continue
+            end
+
+            -- === ОБРАБОТКА ПОПАПОВ ===
             if showSellPopup and currentScreen == "sell_scan" then
                 local popupWidth = 40
                 local popupHeight = 10
@@ -2048,6 +2090,8 @@ local function main()
                     drawBuyButtons()
                 end
                 goto continue
+
+            -- === ОБРАБОТКА МАГАЗИНА ===
             elseif currentScreen == "shop_buy" or currentScreen == "shop_sell" then
                 if y >= 7 and y <= 21 and x >= 2 and x <= 77 then
                     local relativeRow = y - 6
@@ -2141,6 +2185,8 @@ local function main()
                     drawBuyButtons()
                     goto continue
                 end
+
+            -- === ОБРАБОТКА ЭКРАНА ПОКУПКИ ===
             elseif currentScreen == "purchase" then
                 if (y >= 24 and y <= 24) and (x >= 19 and x <= 28) then
                     if currentShopMode == "buy" then
@@ -2178,6 +2224,8 @@ local function main()
                         end
                     end
                 end
+
+            -- === ОБРАБОТКА ЭКРАНА ПРОДАЖИ ===
             elseif currentScreen == "sell_scan" then
                 if isButtonClicked(backButton, x, y) then
                     currentScreen = "shop_sell"
@@ -2198,53 +2246,8 @@ local function main()
                         drawSellScanScreen()
                     end
                 end
-            elseif currentScreen == "menu" then
-                for name, btn in pairs(menuButtons) do
-                    if x >= btn.x and x < btn.x + btn.xs and y >= btn.y and y < btn.y + btn.ys then
-                        if name == "shop" then
-                            if playerAgreed then
-                                goToShop()
-                            else
-                                showShopDenied = true
-                                drawMainMenu()
-                            end
-                        elseif name == "util" then
-                            showShopDenied = false
-                            goToUtility()
-                        elseif name == "account" then
-                            showShopDenied = false
-                            goToAccount()
-                        end
-                        break
-                    end
-                end
-                if y == 24 then
-                    if x >= 4 and x <= 25 then
-                        showShopDenied = false
-                        goToReport()
-                    elseif x >= 35 and x <= 47 then
-                        showShopDenied = false
-                        goToHelp()
-                    elseif x >= 68 and x <= 78 then
-                        currentScreen = "feedbacks"
-                        loadFeedbacksFromServer()
-                        drawFeedbacksList()
-                    end
-                end
-            elseif currentScreen == "agreement" then
-                local btnText = "[ ПОНЯТНО ]"
-                local btnW = unicode.len(btnText) + 4
-                local btnX = math.floor((80 - btnW)/2) + 2
-                if y == 22 and x >= btnX and x <= btnX + btnW then
-                    refreshAndAgree()
-                end
-                if isButtonClicked(backButton, x, y) then
-                    goBackToMenu()
-                end
-            elseif currentScreen == "account" or currentScreen == "account_loading" then
-                if isButtonClicked(backButton, x, y) then
-                    goBackToMenu()
-                end
+
+            -- === ОБРАБОТКА ЭКРАНА МАГАЗИНА (МЕНЮ) ===
             elseif currentScreen == "shop" then
                 for name, btn in pairs(shopMenuButtons) do
                     if x >= btn.x and x < btn.x + btn.xs and y >= btn.y and y < btn.y + btn.ys then
@@ -2259,12 +2262,14 @@ local function main()
                             drawFlexButton(backButton)
                             drawTempMessage()
                         end
-                        break
+                        goto continue
                     end
                 end
                 if isButtonClicked(backButton, x, y) then
                     goBackToMenu()
                 end
+
+            -- === ОБРАБОТКА ОСТАЛЬНЫХ ЭКРАНОВ ===
             elseif currentScreen == "shop_bundle" then
                 if isButtonClicked(backButton, x, y) then
                     currentScreen = "shop"
@@ -2346,7 +2351,22 @@ local function main()
                     drawFeedbacksList()
                     goto continue
                 end
+            elseif currentScreen == "agreement" then
+                local btnText = "[ ПОНЯТНО ]"
+                local btnW = unicode.len(btnText) + 4
+                local btnX = math.floor((80 - btnW)/2) + 2
+                if y == 22 and x >= btnX and x <= btnX + btnW then
+                    refreshAndAgree()
+                end
+                if isButtonClicked(backButton, x, y) then
+                    goBackToMenu()
+                end
+            elseif currentScreen == "account" or currentScreen == "account_loading" then
+                if isButtonClicked(backButton, x, y) then
+                    goBackToMenu()
+                end
             end
+
         elseif e == "scroll" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
             -- Проверяем, кто скроллит (для scroll события имя игрока в ev[5])
             local playerName = ev[5]
