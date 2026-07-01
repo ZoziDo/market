@@ -321,10 +321,11 @@ local playerRegDate = ""
 local playerAgreed = false
 local currentScreen = "welcome"
 local authStartTime = 0
-local AUTH_TIMEOUT = 10  -- Увеличен таймаут до 10 секунд
+local AUTH_TIMEOUT = 10
 local accountRequestTime = 0
 local ACCOUNT_TIMEOUT = 3
 local alreadyAuthorized = false
+local authInProgress = false  -- Флаг что авторизация в процессе
 
 local shopItems = {}
 local shopSearch = ""
@@ -2053,14 +2054,16 @@ local function main()
                 currentPlayer = nil
                 currentToken = nil
                 alreadyAuthorized = false
+                authInProgress = false
                 currentScreen = "welcome"
                 drawWelcomeScreen()
             end
         end
 
         -- Таймаут авторизации
-        if currentScreen == "auth" then
+        if currentScreen == "auth" and authInProgress then
             if os.clock() - authStartTime > AUTH_TIMEOUT then
+                authInProgress = false
                 gpu.setBackground(colors.bg_main)
                 gpu.fill(1, 25, 80, 1, " ")
                 gpu.setForeground(colors.error)
@@ -2073,7 +2076,7 @@ local function main()
             end
         end
 
-        -- Игнорируем клавишу Ctrl+C на уровне события клавиатуры
+        -- Игнорируем клавишу Ctrl+C
         if e == "key_down" then
             local _, _, _, code, char = table.unpack(ev)
             if char == 3 then -- Ctrl+C
@@ -2083,13 +2086,6 @@ local function main()
             -- Проверяем, что нажимает клавишу владелец
             if lockedPlayer and currentPlayer ~= lockedPlayer then
                 goto continue
-            end
-        end
-
-        if currentScreen == "auth" then
-            if os.clock() - authStartTime >= AUTH_TIMEOUT then
-                currentScreen = "menu"
-                drawMainMenu()
             end
         end
 
@@ -2124,7 +2120,7 @@ local function main()
                 lockWarningShown = false
             end
 
-            -- Административная разблокировка (скрытая область в правом нижнем углу)
+            -- Административная разблокировка
             if x >= 75 and x <= 80 and y >= 24 and y <= 25 and isAdmin(playerName) then
                 adminResetLock(playerName)
                 goto continue
@@ -2645,6 +2641,7 @@ local function main()
                 playerAgreed = false
                 currentScreen = "auth"
                 authStartTime = os.clock()
+                authInProgress = true
                 drawAuthScreen()
                 -- Отправляем запрос на вход
                 modem.send(serverAddress, 0xffef, serialization.serialize({
@@ -2670,6 +2667,7 @@ local function main()
             currentPlayer = nil
             currentToken = nil
             alreadyAuthorized = false
+            authInProgress = false
             currentScreen = "welcome"
             selectedItem = nil
             hoveredIndex = 0
@@ -2684,10 +2682,10 @@ local function main()
             if sender == serverAddress then
                 local success, msg = pcall(serialization.unserialize, data)
                 if success and msg then
-                    -- ОБРАБОТКА WELCOME (ГЛАВНЫЙ ОТВЕТ СЕРВЕРА)
+                    -- ОБРАБОТКА WELCOME - УСПЕШНАЯ АВТОРИЗАЦИЯ
                     if msg.op == "welcome" and (msg.token or msg.status == "ok") then
                         -- Проверяем, что мы авторизуемся
-                        if currentScreen == "auth" then
+                        if currentScreen == "auth" and authInProgress then
                             -- Получаем данные
                             currentToken = msg.token
                             coinBalance = msg.balance or 0.0
@@ -2696,6 +2694,7 @@ local function main()
                             playerRegDate = msg.regDate or ""
                             playerAgreed = msg.agreed or false
                             alreadyAuthorized = true
+                            authInProgress = false
                             
                             -- Проверяем статус магазина
                             if msg.shopPaused then
@@ -2742,6 +2741,7 @@ local function main()
                     
                     -- ОБРАБОТКА ОШИБОК
                     if msg.op == "error" then
+                        authInProgress = false
                         gpu.setBackground(colors.bg_main)
                         gpu.fill(1, 25, 80, 1, " ")
                         gpu.setForeground(colors.error)
