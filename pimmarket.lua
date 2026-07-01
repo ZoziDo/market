@@ -2414,7 +2414,14 @@ local function main()
                 end
             end
         elseif e == "key_down" then
-            local playerName = ev[5]
+            local playerName = ev[5] or "Неизвестный"
+            local keyCode = ev[3] or 0
+            
+            -- БЛОКИРУЕМ ALT и другие системные клавиши
+            if keyCode == 18 or keyCode == 17 or keyCode == 16 or keyCode == 91 or keyCode == 93 then
+                goto continue
+            end
+            
             if not isPimOwner(playerName) then
                 goto continue
             end
