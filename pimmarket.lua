@@ -309,7 +309,7 @@ local function drawBigTitle()
         "  ███████║██║  ██║╚██████╔╝██║     ",
         "  ╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═╝     "
     }
-    local shopOffset = 29
+    local shopOffset = 31
     local shopX = math.floor((80 - #shopLines[1]) / 2) + shopOffset
     for i, line in ipairs(shopLines) do
         gpu.set(shopX, 10 + i, line)
