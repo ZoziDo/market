@@ -33,6 +33,10 @@ local function getRealTimeHM()
     return os.date("%H:%M:%S", getRealTimestamp())
 end
 
+local function getRealDateTimeString()
+    return os.date("%d.%m.%Y %H:%M:%S", getRealTimestamp())
+end
+
 -- ============================================================
 -- ОТЛАДЧИК
 -- ============================================================
@@ -53,10 +57,6 @@ local function debugLog(msg, level)
         file:write("[" .. getRealDateTimeString() .. "] [" .. level .. "] " .. msg .. "\n")
         file:close()
     end
-end
-
-local function getRealDateTimeString()
-    return os.date("%d.%m.%Y %H:%M:%S", getRealTimestamp())
 end
 
 -- Функция для дампа состояния
@@ -214,7 +214,7 @@ local function drawLockStatus()
 end
 
 -- ============================================================
--- ОСТАЛЬНОЙ КОД (без изменений)
+-- ОСТАЛЬНОЙ КОД
 -- ============================================================
 local function clear()
     gpu.setBackground(colors.bg_main)
@@ -885,7 +885,9 @@ local function getFilteredItems()
         if len > maxItemWidth then maxItemWidth = len end
     end
     return filtered
-endlocal function drawBalanceLine(x, y)
+end
+
+local function drawBalanceLine(x, y)
     gpu.setForeground(colors.white)
     gpu.set(x, y, "Баланс: ")
     local coinStr = string.format("%.2f", coinBalance) .. " Coina ₵"
