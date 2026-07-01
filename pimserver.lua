@@ -379,8 +379,17 @@ local function drawAdminPanel()
     resetColor()
 
     setColor(ansi.bg_blue, ansi.white)
-    fill(2, 1, screenW-2, 1, " ")
-    gotoxy(2,1) io.write(" АДМИН-ПАНЕЛЬ (нажмите A для выхода) ")
+    fill(1, 2, screenW, 1, " ")
+    gotoxy(1, 2)
+    local title = " PIM MARKET SERVER – СТАТУС: " .. (marketConnected and "АКТИВЕН" or "ОЖИДАНИЕ MARKET")
+    if shopPaused then title = title .. " [ПАУЗА]" end
+    io.write(title .. string.rep(" ", screenW - #title))
+    resetColor()
+    
+    -- Линия под заголовком (из =)
+    setColor(ansi.cyan)
+    gotoxy(1, 3)
+    io.write(string.rep("=", screenW))
     resetColor()
 
     local startIdx = adminScroll + 1
@@ -668,8 +677,9 @@ function drawInterface()
     io.write("R - обновить | P - Пауза | A - Админ-панель")
     resetColor()
     
-    setColor(ansi.white)
-    fill(1, logStartY-1, screenW, 1, "─")
+    setColor(ansi.cyan)
+    gotoxy(1, logStartY-1)
+    io.write(string.rep("=", screenW))
     resetColor()
     for i=1, maxLogLines do
         local entry = logBuffer[#logBuffer - maxLogLines + i]
