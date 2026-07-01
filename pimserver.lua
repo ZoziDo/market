@@ -44,6 +44,12 @@ local ansi = {
     white   = "\27[37m",
     bg_black   = "\27[40m",
     bg_blue    = "\27[44m",
+    bg_red     = "\27[41m",
+    bg_green   = "\27[42m",
+    bg_yellow  = "\27[43m",
+    bg_magenta = "\27[45m",
+    bg_cyan    = "\27[46m",
+    bg_white   = "\27[47m",
     clear   = "\27[2J\27[H",
     hide_cursor = "\27[?25l",
     show_cursor = "\27[?25h"
@@ -413,36 +419,44 @@ local function drawAdminPanel()
         resetColor()
     end
 
-    -- Кнопки внизу (админ-панель)
+    -- Кнопки внизу (админ-панель) с подсказками
     local btnY = screenH - 2
-    local btnColor = ansi.bg_blue
-    local textColor = ansi.white
+    local hintsY = screenH - 1
     
+    -- Строка с кнопками
     local adminButtons = {
-        {text = " ОБНОВИТЬ ", key = "R", x = 2},
-        {text = " ИЗМЕНИТЬ ", key = "E", x = 14},
-        {text = " УДАЛИТЬ ", key = "D", x = 24},
-        {text = " ОБМЕННИК ", key = "B", x = 34},
-        {text = " БЭКАП КУ ", key = "U", x = 44},
-        {text = " ЦЕНЫ->БД ", key = "K", x = 54},
+        {text = " ОБНОВИТЬ ", key = "R", x = 2, bg = ansi.bg_yellow, fg = ansi.black},
+        {text = " ИЗМЕНИТЬ ", key = "E", x = 14, bg = ansi.bg_blue, fg = ansi.white},
+        {text = " УДАЛИТЬ ", key = "D", x = 24, bg = ansi.bg_red, fg = ansi.white},
+        {text = " ОБМЕННИК ", key = "B", x = 34, bg = ansi.bg_green, fg = ansi.black},
+        {text = " БЭКАП КУ ", key = "U", x = 44, bg = ansi.bg_magenta, fg = ansi.white},
+        {text = " ЦЕНЫ->БД ", key = "K", x = 54, bg = ansi.bg_cyan, fg = ansi.black},
     }
     
     for _, btn in ipairs(adminButtons) do
-        setColor(textColor, btnColor)
+        setColor(btn.fg, btn.bg)
         gotoxy(btn.x, btnY)
         io.write(btn.text)
         resetColor()
     end
     
-    -- Дополнительные кнопки админов
-    setColor(textColor, btnColor)
+    -- Кнопки админов
+    setColor(ansi.white, ansi.bg_cyan)
     gotoxy(65, btnY)
     io.write(" +АДМИН ")
     resetColor()
     
-    setColor(textColor, btnColor)
+    setColor(ansi.white, ansi.bg_red)
     gotoxy(73, btnY)
     io.write(" -АДМИН ")
+    resetColor()
+    
+    -- Строка с подсказками (клавиши)
+    setColor(ansi.yellow)
+    gotoxy(2, hintsY)
+    local hints = "R-Обновить  E-Изменить  D-Удалить  B-Обменник  U-Бэкап  K-Цены->БД  +-Добавить админа  --Удалить админа"
+    if #hints > screenW - 4 then hints = hints:sub(1, screenW-4) end
+    io.write(hints)
     resetColor()
     
     io.flush()
@@ -697,23 +711,31 @@ function drawInterface()
     io.write("Продаж: " .. globalStats.totalSells)
     resetColor()
     
-    -- Кнопки внизу главного экрана
+    -- Кнопки внизу главного экрана с подсказками
     local btnY = screenH - 1
-    local btnColor = ansi.bg_blue
-    local textColor = ansi.white
+    local hintsY = screenH - 1
     
+    -- Кнопки
     local mainButtons = {
-        {text = " ОБНОВИТЬ ", key = "R", x = 2},
-        {text = " ПАУЗА ", key = "P", x = 14},
-        {text = " АДМИН-ПАНЕЛЬ ", key = "A", x = 24},
+        {text = " ОБНОВИТЬ ", key = "R", x = 2, bg = ansi.bg_yellow, fg = ansi.black},
+        {text = " ПАУЗА ", key = "P", x = 14, bg = ansi.bg_magenta, fg = ansi.white},
+        {text = " АДМИН-ПАНЕЛЬ ", key = "A", x = 24, bg = ansi.bg_cyan, fg = ansi.black},
     }
     
     for _, btn in ipairs(mainButtons) do
-        setColor(textColor, btnColor)
+        setColor(btn.fg, btn.bg)
         gotoxy(btn.x, btnY)
         io.write(btn.text)
         resetColor()
     end
+    
+    -- Подсказки (клавиши) - правее кнопок
+    setColor(ansi.yellow)
+    gotoxy(42, hintsY)
+    local hints = "R-Обновить  P-Пауза  A-Админ-панель"
+    if #hints > screenW - 44 then hints = hints:sub(1, screenW-44) end
+    io.write(hints)
+    resetColor()
     
     setColor(ansi.white)
     fill(1, logStartY-1, screenW, 1, "─")
