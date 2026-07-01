@@ -33,7 +33,7 @@ local function getRealTimeHM()
     return os.date("%H:%M:%S", getRealTimestamp())
 end
 
-local serverAddress = "2458698e-068d-4138-9f75-a6c5ac1b1c42"
+local serverAddress = "1ffb2253-b1b6-4df5-b33a-b627ec9bb4fe"
 local ACCESS_PASSWORD = "secret"
 
 local colors = {
