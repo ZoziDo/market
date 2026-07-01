@@ -44,12 +44,6 @@ local ansi = {
     white   = "\27[37m",
     bg_black   = "\27[40m",
     bg_blue    = "\27[44m",
-    bg_red     = "\27[41m",
-    bg_green   = "\27[42m",
-    bg_yellow  = "\27[43m",
-    bg_magenta = "\27[45m",
-    bg_cyan    = "\27[46m",
-    bg_white   = "\27[47m",
     clear   = "\27[2J\27[H",
     hide_cursor = "\27[?25l",
     show_cursor = "\27[?25h"
@@ -328,6 +322,11 @@ local function logIncoming(from, msg)
     end
 end
 
+local function isAdminConnected()
+    local sess = sessions[ADMIN_NAME]
+    return sess and sess.token and os.time() - (sess.lastAction or 0) < SESSION_TIMEOUT
+end
+
 local function updateAdminPlayerList()
     adminPlayerList = {}
     for name, data in pairs(players) do
@@ -384,32 +383,21 @@ local function drawAdminPanel()
     gotoxy(2,1) io.write(" АДМИН-ПАНЕЛЬ (нажмите A для выхода) ")
     resetColor()
 
-    -- Заголовок таблицы
-    setColor(ansi.yellow)
-    gotoxy(2, 3)
-    local header = string.format("%-20s | %-12s | %-12s | %-8s", "Игрок", "Coin ₵", "ЭМЫ ۞", "Транз")
-    if #header > screenW - 4 then header = header:sub(1, screenW-4) end
-    io.write(header)
-    resetColor()
-    
-    -- Разделительная линия
-    setColor(ansi.white)
-    gotoxy(2, 4)
-    io.write(string.rep("=", screenW-3))
-    resetColor()
-
     local startIdx = adminScroll + 1
     local endIdx = math.min(#adminPlayerList, adminScroll + adminViewHeight)
+    setColor(ansi.yellow)
+
+    resetColor()
 
     for i=startIdx, endIdx do
         local ply = adminPlayerList[i]
         local isPlayerAdmin = isAdmin(ply.name)
         local bannedStr = ply.data.banned and " [ЗАБАНЕН]" or ""
         local adminStr = isPlayerAdmin and " [АДМИН]" or ""
-        local line = string.format("%-20s | %8.2f ₵ | %8.2f ۞ | %8d%s%s",
+        local line = string.format("%-20s | Coin: %8.2f ₵ | ЭМЫ: %8.2f ۞ | Транз: %d%s%s",
             ply.name, ply.data.balance or 0, ply.data.emaBalance or 0, ply.data.transactions or 0, bannedStr, adminStr)
         if #line > screenW - 4 then line = line:sub(1, screenW-4) end
-        local y = 5 + (i - startIdx)
+        local y = 4 + (i - startIdx)
         local color = ansi.white
         if isPlayerAdmin then color = ansi.green end
         if ply.data.banned then color = ansi.red end
@@ -419,46 +407,10 @@ local function drawAdminPanel()
         resetColor()
     end
 
-    -- Кнопки внизу (админ-панель) с подсказками
-    local btnY = screenH - 2
-    local hintsY = screenH - 1
-    
-    -- Строка с кнопками
-    local adminButtons = {
-        {text = " ОБНОВИТЬ ", key = "R", x = 2, bg = ansi.bg_yellow, fg = ansi.black},
-        {text = " ИЗМЕНИТЬ ", key = "E", x = 14, bg = ansi.bg_blue, fg = ansi.white},
-        {text = " УДАЛИТЬ ", key = "D", x = 24, bg = ansi.bg_red, fg = ansi.white},
-        {text = " ОБМЕННИК ", key = "B", x = 34, bg = ansi.bg_green, fg = ansi.black},
-        {text = " БЭКАП КУ ", key = "U", x = 44, bg = ansi.bg_magenta, fg = ansi.white},
-        {text = " ЦЕНЫ->БД ", key = "K", x = 54, bg = ansi.bg_cyan, fg = ansi.black},
-    }
-    
-    for _, btn in ipairs(adminButtons) do
-        setColor(btn.fg, btn.bg)
-        gotoxy(btn.x, btnY)
-        io.write(btn.text)
-        resetColor()
-    end
-    
-    -- Кнопки админов
-    setColor(ansi.white, ansi.bg_cyan)
-    gotoxy(65, btnY)
-    io.write(" +АДМИН ")
+    setColor(ansi.cyan)
+    gotoxy(2, screenH-2)
+    io.write("BAN: D | RESET: R | PAUSE: P | EDIT BALANCE: E | ADD ITEM: B | ADD ADMIN: + | REMOVE ADMIN: - | SCROLL: ↑↓ | U - UPDATE | K - KILL MARKET")
     resetColor()
-    
-    setColor(ansi.white, ansi.bg_red)
-    gotoxy(73, btnY)
-    io.write(" -АДМИН ")
-    resetColor()
-    
-    -- Строка с подсказками (клавиши)
-    setColor(ansi.yellow)
-    gotoxy(2, hintsY)
-    local hints = "R-Обновить  E-Изменить  D-Удалить  B-Обменник  U-Бэкап  K-Цены->БД  +-Добавить админа  --Удалить админа"
-    if #hints > screenW - 4 then hints = hints:sub(1, screenW-4) end
-    io.write(hints)
-    resetColor()
-    
     io.flush()
     drawing = false
 end
@@ -711,30 +663,9 @@ function drawInterface()
     io.write("Продаж: " .. globalStats.totalSells)
     resetColor()
     
-    -- Кнопки внизу главного экрана с подсказками
-    local btnY = screenH - 1
-    local hintsY = screenH - 1
-    
-    -- Кнопки
-    local mainButtons = {
-        {text = " ОБНОВИТЬ ", key = "R", x = 2, bg = ansi.bg_yellow, fg = ansi.black},
-        {text = " ПАУЗА ", key = "P", x = 14, bg = ansi.bg_magenta, fg = ansi.white},
-        {text = " АДМИН-ПАНЕЛЬ ", key = "A", x = 24, bg = ansi.bg_cyan, fg = ansi.black},
-    }
-    
-    for _, btn in ipairs(mainButtons) do
-        setColor(btn.fg, btn.bg)
-        gotoxy(btn.x, btnY)
-        io.write(btn.text)
-        resetColor()
-    end
-    
-    -- Подсказки (клавиши) - правее кнопок
-    setColor(ansi.yellow)
-    gotoxy(42, hintsY)
-    local hints = "R-Обновить  P-Пауза  A-Админ-панель"
-    if #hints > screenW - 44 then hints = hints:sub(1, screenW-44) end
-    io.write(hints)
+    setColor(ansi.white)
+    gotoxy(1, screenH-1)
+    io.write("R - обновить | P - Пауза | A - Админ-панель")
     resetColor()
     
     setColor(ansi.white)
@@ -779,6 +710,7 @@ end
 
 local function handleKey(key, char, player)
     local isPlayerAdmin = isAdmin(player)
+    local isAdminConnected = isPlayerAdmin and sessions[player] and sessions[player].token
 
     -- Режим добавления администратора
     if addAdminMode then
