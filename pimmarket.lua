@@ -53,18 +53,132 @@ local colors = {
     white = 0xFFFFFF
 }
 
--- ========== СИСТЕМА БЛОКИРОВКИ КОМПЬЮТЕРА ==========
-local lockedPlayer = nil        -- Игрок, который сейчас владеет компьютером
-local lockTimeout = 60          -- Максимальное время блокировки (секунды)
-local lastActivityTime = 0      -- Время последней активности владельца
-local lockWarningShown = false  -- Флаг показа предупреждения
+-- ========== СИСТЕМНАЯ БЛОКИРОВКА ЧЕРЕЗ USERADD/USERDEL ==========
+local function isAdmin(user)
+    for _, adminUser in pairs(table.pack(computer.users())) do
+        if adminUser == user then return true end
+    end
+    return false
+end
+
+-- Функция для создания пользователя в системе (блокировка)
+local function lockComputerViaUser(playerName)
+    if not playerName or playerName == "" then return false end
+    
+    -- Проверяем, что игрок не админ (админа не блокируем)
+    if isAdmin(playerName) then
+        return true
+    end
+    
+    -- Проверяем, существует ли уже пользователь
+    local checkCmd = "id " .. playerName .. " 2>/dev/null"
+    local handle = io.popen(checkCmd)
+    local result = handle:read("*a")
+    handle:close()
+    
+    if result == "" then
+        -- Пользователь не существует, создаём
+        local cmd = "useradd -M -s /bin/false " .. playerName .. " 2>/dev/null"
+        os.execute(cmd)
+        
+        -- Блокируем пользователя (запрещаем вход)
+        local lockCmd = "passwd -l " .. playerName .. " 2>/dev/null"
+        os.execute(lockCmd)
+        
+        -- Логируем в файл
+        local logFile = io.open("/home/lock_log.txt", "a")
+        if logFile then
+            logFile:write("[" .. getRealTimeString() .. "] 🔒 Система заблокирована для игрока: " .. playerName .. "\n")
+            logFile:close()
+        end
+        
+        return true
+    end
+    return false
+end
+
+-- Функция для удаления пользователя из системы (разблокировка)
+local function unlockComputerViaUser(playerName)
+    if not playerName or playerName == "" then return false end
+    
+    -- Проверяем, что игрок не админ
+    if isAdmin(playerName) then
+        return true
+    end
+    
+    -- Удаляем пользователя
+    local cmd = "userdel -f " .. playerName .. " 2>/dev/null"
+    os.execute(cmd)
+    
+    -- Логируем в файл
+    local logFile = io.open("/home/lock_log.txt", "a")
+    if logFile then
+        logFile:write("[" .. getRealTimeString() .. "] 🔓 Система разблокирована для игрока: " .. playerName .. "\n")
+        logFile:close()
+    end
+    
+    return true
+end
+
+-- Функция проверки, заблокирован ли компьютер для игрока
+local function isSystemLockedForPlayer(playerName)
+    if not playerName or playerName == "" then return false end
+    
+    -- Админа не блокируем
+    if isAdmin(playerName) then
+        return false
+    end
+    
+    -- Проверяем, существует ли пользователь с таким именем
+    local cmd = "id " .. playerName .. " 2>/dev/null"
+    local handle = io.popen(cmd)
+    local result = handle:read("*a")
+    handle:close()
+    
+    return result ~= ""
+end
+
+-- Функция проверки, является ли текущий пользователь владельцем системы
+local function isSystemOwner(playerName)
+    local handle = io.popen("whoami")
+    local currentUser = handle:read("*a"):gsub("\n", "")
+    handle:close()
+    return currentUser == playerName
+end
+
+-- При старте программы очищаем "зависших" пользователей
+local function cleanupStaleUsers()
+    local logFile = io.open("/home/lock_log.txt", "a")
+    if logFile then
+        logFile:write("[" .. getRealTimeString() .. "] 🧹 Очистка старых пользователей...\n")
+        logFile:close()
+    end
+    -- Здесь можно добавить список пользователей для очистки
+    -- Но лучше оставить автоматическую очистку при выходе
+end
+cleanupStaleUsers()
+
+-- Переменные блокировки
+local lockedPlayer = nil
+local lockTimeout = 300  -- 5 минут таймаут
+local lastActivityTime = 0
+local lockWarningShown = false
 
 -- Функция проверки блокировки
 local function isLockedForPlayer(playerName)
-    if not lockedPlayer then return false end
+    if not lockedPlayer then 
+        -- Проверяем системную блокировку
+        if isSystemLockedForPlayer(playerName) then
+            -- Если есть системный пользователь, но lockedPlayer нет - восстанавливаем
+            lockedPlayer = playerName
+            lastActivityTime = os.clock()
+            return false
+        end
+        return false 
+    end
     if lockedPlayer == playerName then return false end
     
-    -- Проверяем таймаут (если игрок ушёл, но блокировка висит)
+    -- Проверяем таймаут
     if os.clock() - lastActivityTime > lockTimeout then
         unlockComputer()
         return false
@@ -78,10 +192,14 @@ local function lockForPlayer(playerName)
         lockedPlayer = playerName
         lastActivityTime = os.clock()
         lockWarningShown = false
+        
+        -- Блокируем через систему
+        lockComputerViaUser(playerName)
+        
         gpu.setBackground(colors.bg_main)
         gpu.fill(1, 25, 80, 1, " ")
         gpu.setForeground(colors.accent_secondary)
-        local msg = "🔒 Компьютер заблокирован для игрока: " .. playerName
+        local msg = "🔒 Система заблокирована для игрока: " .. playerName
         local x = math.floor((80 - unicode.len(msg)) / 2) + 1
         gpu.set(x, 25, msg)
         return true
@@ -91,6 +209,10 @@ end
 
 -- Функция разблокировки
 local function unlockComputer()
+    if lockedPlayer then
+        unlockComputerViaUser(lockedPlayer)
+    end
+    
     lockedPlayer = nil
     lastActivityTime = 0
     lockWarningShown = false
@@ -100,16 +222,6 @@ local function unlockComputer()
     local msg = "🔓 Компьютер разблокирован"
     local x = math.floor((80 - unicode.len(msg)) / 2) + 1
     gpu.set(x, 25, msg)
-end
-
--- Функция проверки, является ли игрок текущим владельцем
-local function isCurrentOwner(playerName)
-    if not lockedPlayer then
-        -- Если компьютер не заблокирован, блокируем для первого вошедшего
-        lockForPlayer(playerName)
-        return true
-    end
-    return lockedPlayer == playerName
 end
 
 -- Функция проверки присутствия на PIM
@@ -131,13 +243,6 @@ local function checkPlayerOnPIM(playerName)
 end
 
 -- Функция для административного сброса блокировки
-local function isAdmin(user)
-    for _, adminUser in pairs(table.pack(computer.users())) do
-        if adminUser == user then return true end
-    end
-    return false
-end
-
 local function adminResetLock(playerName)
     if isAdmin(playerName) then
         unlockComputer()
@@ -325,7 +430,7 @@ local AUTH_TIMEOUT = 10
 local accountRequestTime = 0
 local ACCOUNT_TIMEOUT = 3
 local alreadyAuthorized = false
-local authInProgress = false  -- Флаг что авторизация в процессе
+local authInProgress = false
 
 local shopItems = {}
 local shopSearch = ""
@@ -2594,23 +2699,25 @@ local function main()
             local playerName = ev[2] or "Игрок"
             currentPlayer = playerName:match("^%s*(.-)%s*$") or playerName
             
-            -- Проверяем блокировку
-            if isLockedForPlayer(currentPlayer) then
-                gpu.setBackground(colors.bg_main)
-                gpu.fill(1, 1, 80, 25, " ")
-                drawScreenBorder()
-                drawCenteredText(10, "❌ Компьютер занят другим игроком!", colors.error)
-                drawCenteredText(11, "Владелец: " .. lockedPlayer, colors.error)
-                drawCenteredText(12, "Подождите освобождения или свяжитесь с админом", colors.text_main)
-                drawCenteredText(14, "Для разблокировки администратор может", colors.text_main)
-                drawCenteredText(15, "нажать правый нижний угол экрана", colors.text_main)
-                drawTempMessage()
-                currentScreen = "welcome"
-                goto continue
+            -- Проверяем системную блокировку
+            if isSystemLockedForPlayer(currentPlayer) then
+                if lockedPlayer and lockedPlayer ~= currentPlayer then
+                    gpu.setBackground(colors.bg_main)
+                    gpu.fill(1, 1, 80, 25, " ")
+                    drawScreenBorder()
+                    drawCenteredText(10, "❌ Компьютер занят другим игроком!", colors.error)
+                    drawCenteredText(11, "Владелец: " .. lockedPlayer, colors.error)
+                    drawCenteredText(12, "Подождите освобождения", colors.text_main)
+                    drawTempMessage()
+                    currentScreen = "welcome"
+                    goto continue
+                end
             end
             
             -- Блокируем компьютер для этого игрока
-            lockForPlayer(currentPlayer)
+            if not lockForPlayer(currentPlayer) then
+                goto continue
+            end
             
             -- Если уже есть токен, сразу переходим в меню
             if currentToken then
@@ -2643,12 +2750,10 @@ local function main()
                 authStartTime = os.clock()
                 authInProgress = true
                 drawAuthScreen()
-                -- Отправляем запрос на вход
                 modem.send(serverAddress, 0xffef, serialization.serialize({
                     op = "enter", 
                     name = currentPlayer
                 }))
-                -- Показываем ожидание
                 gpu.setBackground(colors.bg_main)
                 gpu.fill(1, 25, 80, 1, " ")
                 gpu.setForeground(colors.accent_main)
@@ -2684,9 +2789,7 @@ local function main()
                 if success and msg then
                     -- ОБРАБОТКА WELCOME - УСПЕШНАЯ АВТОРИЗАЦИЯ
                     if msg.op == "welcome" and (msg.token or msg.status == "ok") then
-                        -- Проверяем, что мы авторизуемся
                         if currentScreen == "auth" and authInProgress then
-                            -- Получаем данные
                             currentToken = msg.token
                             coinBalance = msg.balance or 0.0
                             emaBalance = msg.emaBalance or 0.0
@@ -2696,7 +2799,6 @@ local function main()
                             alreadyAuthorized = true
                             authInProgress = false
                             
-                            -- Проверяем статус магазина
                             if msg.shopPaused then
                                 gpu.setBackground(colors.bg_main)
                                 gpu.fill(1, 25, 80, 1, " ")
@@ -2709,11 +2811,9 @@ local function main()
                                 goto continue
                             end
                             
-                            -- ПЕРЕХОДИМ В ГЛАВНОЕ МЕНЮ
                             currentScreen = "menu"
                             drawMainMenu()
                             
-                            -- Показываем сообщение об успешном входе
                             gpu.setBackground(colors.bg_main)
                             gpu.fill(1, 25, 80, 1, " ")
                             gpu.setForeground(colors.success)
@@ -2721,7 +2821,6 @@ local function main()
                             local x = math.floor((80 - unicode.len(welcomeMsg)) / 2) + 1
                             gpu.set(x, 25, welcomeMsg)
                             
-                            -- Скрываем сообщение через 3 секунды
                             event.timer(3, function()
                                 gpu.fill(1, 25, 80, 1, " ")
                                 drawLockStatus()
@@ -2739,7 +2838,6 @@ local function main()
                         goto continue
                     end
                     
-                    -- ОБРАБОТКА ОШИБОК
                     if msg.op == "error" then
                         authInProgress = false
                         gpu.setBackground(colors.bg_main)
@@ -2938,7 +3036,6 @@ local function main()
     end
 end
 
--- Бесконечный цикл защиты от завершения
 while true do
     pcall(main)
     os.sleep(0.5)
