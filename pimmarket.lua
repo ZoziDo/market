@@ -1995,18 +1995,20 @@ local function main()
 
         if e == "touch" then
             -- Правильная структура для вашего PIM:
-            -- ev[2] = UUID игрока
-            -- ev[3] = x координата
-            -- ev[4] = y координата
-            -- ev[5] = имя игрока
+            -- ev[2] = UUID игрока (строка)
+            -- ev[3] = x координата (число)
+            -- ev[4] = y координата (число)
+            -- ev[5] = кнопка мыши (число: 0 или 1)
+            -- ev[6] = имя игрока (строка)
             
             local playerUUID = ev[2] or "unknown"
             local x = tonumber(ev[3]) or 0
             local y = tonumber(ev[4]) or 0
-            local playerName = ev[5] or "Неизвестный"
+            local button = ev[5] or 0
+            local playerName = ev[6] or "Неизвестный"
             
             debugLog("=== TOUCH ===")
-            debugLog("  UUID=" .. tostring(playerUUID) .. ", x=" .. tostring(x) .. ", y=" .. tostring(y) .. ", player=" .. tostring(playerName) .. ", screen=" .. currentScreen)
+            debugLog("  UUID=" .. tostring(playerUUID) .. ", x=" .. tostring(x) .. ", y=" .. tostring(y) .. ", button=" .. tostring(button) .. ", player=" .. tostring(playerName) .. ", screen=" .. currentScreen)
             debugLog("  pimOwner=" .. tostring(pimOwner) .. ", isOwner=" .. tostring(isPimOwner(playerName)))
             
             if not isPimOwner(playerName) then
@@ -2491,6 +2493,7 @@ local function main()
             
             debugLog("  🏁 Конец обработки TOUCH, screen=" .. currentScreen)
             goto continue
+
 
         elseif e == "scroll" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
             local playerName = ev[5]
