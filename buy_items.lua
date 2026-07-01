@@ -270,7 +270,7 @@ return {
   { internalName = "IC2:blockMachine2", displayName = "Металлоформовочный механизм", price = 27.00, currency = "res", damage = 4 },
   { internalName = "dwcity:Machine_seal2", displayName = "Механическая печать", price = 33.68, currency = "res" },
   { internalName = "DraconicEvolution:wyvernSword", displayName = "Меч Виверны", price = 498.65, currency = "res" },
-  { internalName = "metadrive:module_fortune_luck_changer_tier_3", displayName = "Модуль удачи IV", price = 1265.0, currency = "res" },
+  { internalName = "metadrive:module_fortune_luck_changer_tier_3", displayName = "Модуль удачи IV", price_coin = 1265.0, price_ema = 100, currency = "res" },
   { internalName = "dwcity:Module_seal", displayName = "Модульная печать", price = 16.8, currency = "res" },
   { internalName = "metadrive:block_molecular_transformer", displayName = "Молекулярный преобразователь", price = 403.50, currency = "res" },
   { internalName = "luxinfineitems:AEAdvMolecularAssembler", displayName = "Квантовый молекулярный сборщик", price_coin = 168.76, price_ema = 0.34, damage = 2 },
