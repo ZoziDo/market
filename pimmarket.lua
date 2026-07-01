@@ -9,6 +9,28 @@ local fs = require("filesystem")
 local shell = require("shell")  
 local TIMEZONE_OFFSET = 3 * 3600
 
+-- ===== ЛОГИ =====
+local function debugLog(...)
+    local args = {...}
+    local msg = ""
+    for i, v in ipairs(args) do
+        msg = msg .. tostring(v) .. " "
+    end
+    local f = io.open("/home/debug_log.txt", "a")
+    if f then
+        f:write(os.date("%H:%M:%S") .. " | " .. msg .. "\n")
+        f:close()
+    end
+end
+
+-- Очищаем лог при запуске
+local f = io.open("/home/debug_log.txt", "w")
+if f then
+    f:write("===== ЛОГ ЗАПУЩЕН " .. os.date("%d.%m.%Y %H:%M:%S") .. " =====\n")
+    f:close()
+end
+-- ===== КОНЕЦ ЛОГОВ =====
+
 event.ignore("interrupted", function() end)
 event.ignore("terminate", function() end)
 
@@ -1622,6 +1644,7 @@ local function drawReportScreen()
 end
 
 local function goToBuy()
+    debugLog("goToBuy() вызвана")
     if not playerAgreed then
         drawCenteredText(12, "Вы не приняли пользовательское соглашение!", colors.error)
         drawCenteredText(13, "Нажмите [Помощь] и ознакомьтесь с условиями.", colors.text_main)
@@ -1643,9 +1666,11 @@ local function goToBuy()
     drawBuyStatic()
     drawBuyItemsList()
     drawBuyButtons()
+    debugLog("goToBuy() завершена, screen=" .. currentScreen)
 end
 
 local function goToSell()
+    debugLog("goToSell() вызвана")
     if not playerAgreed then
         drawCenteredText(12, "Вы не приняли пользовательское соглашение!", colors.error)
         drawCenteredText(13, "Нажмите [Помощь] и ознакомьтесь с условиями.", colors.text_main)
@@ -1669,6 +1694,7 @@ local function goToSell()
     drawBuyStatic()
     drawBuyItemsList()
     drawBuyButtons()
+    debugLog("goToSell() завершена, screen=" .. currentScreen)
 end
 
 local function drawShopMenu()
@@ -1715,6 +1741,7 @@ local function drawAuthScreen()
 end
 
 local function drawMainMenu()
+    debugLog("drawMainMenu() вызвана, currentPlayer=" .. tostring(currentPlayer))
     clear()
     drawScreenBorder()
     if currentPlayer then
@@ -1755,9 +1782,11 @@ local function drawMainMenu()
         drawWelcomeScreen()
     end
     drawTempMessage()
+    debugLog("drawMainMenu() завершена")
 end
 
 local function drawAccount(data)
+    debugLog("drawAccount() вызвана")
     clear()
     drawScreenBorder()
     drawCenteredText(10, currentPlayer .. ":", colors.text_bright)
@@ -1804,6 +1833,7 @@ local function drawAccount(data)
 
     drawFlexButton(backButton)
     drawTempMessage()
+    debugLog("drawAccount() завершена")
 end
 
 local function drawAccountLoading()
@@ -1854,6 +1884,7 @@ local function retryAccountAfterTokenRefresh()
 end
 
 local function goToAccount()
+    debugLog("goToAccount() вызвана")
     if not currentToken then
         drawCenteredText(12, "Ошибка: нет авторизации", colors.error)
         return
@@ -1864,20 +1895,25 @@ local function goToAccount()
     modem.send(serverAddress, 0xffef, serialization.serialize({
         op = "getAccount", name = currentPlayer, token = currentToken
     }))
+    debugLog("goToAccount() завершена, screen=" .. currentScreen)
 end
 
 local function goToReport()
+    debugLog("goToReport() вызвана")
     currentScreen = "report"
     reportInput = ""
     drawReportScreen()
 end
 
 local function goToShop()
+    debugLog("goToShop() вызвана, currentScreen=" .. currentScreen)
     currentScreen = "shop"
     drawShopMenu()
+    debugLog("goToShop() завершена, screen=" .. currentScreen)
 end
 
 local function goToUtility()
+    debugLog("goToUtility() вызвана")
     currentScreen = "utility"
     clear()
     drawCenteredText(8, "Полезности (в разработке)", colors.success)
@@ -1885,12 +1921,14 @@ local function goToUtility()
 end
 
 local function goBackToMenu()
+    debugLog("goBackToMenu() вызвана, currentScreen=" .. currentScreen)
     showShopDenied = false
     currentScreen = "menu"
     drawMainMenu()
     updateSelectorDisplay(nil)
     pcall(selector.setSlot, 0, nil)
     pcall(selector.setSlot, 1, nil)
+    debugLog("goBackToMenu() завершена, screen=" .. currentScreen)
 end
 
 local function clearSelectorState()
@@ -1903,11 +1941,13 @@ local function clearSelectorState()
 end
 
 local function goToHelp()
+    debugLog("goToHelp() вызвана")
     currentScreen = "agreement"
     drawAgreementScreen()
 end
 
 local function refreshAndAgree()
+    debugLog("refreshAndAgree() вызвана")
     if playerAgreed then
         goBackToMenu()
         return
@@ -1925,6 +1965,7 @@ local function refreshAndAgree()
 end
 
 local function main()
+    debugLog("=== MAIN START ===")
     drawWelcomeScreen()
     modem.send(serverAddress, 0xffef, serialization.serialize({op="register", password=ACCESS_PASSWORD}))
 
@@ -2444,7 +2485,6 @@ local function main()
             debugLog("  🏁 Конец обработки TOUCH, screen=" .. currentScreen)
             goto continue
 
-
         elseif e == "scroll" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
             local playerName = ev[5]
             if not isPimOwner(playerName) then
@@ -2548,8 +2588,10 @@ local function main()
             end
         elseif e == "player_on" or e == "pim" or e == "pim_player_enter" then
             local playerName = ev[2] or "Игрок"
+            debugLog("👤 player_on: " .. playerName .. ", текущий pimOwner: " .. tostring(pimOwner))
             if not pimOwner then
                 pimOwner = playerName
+                debugLog("  ✅ Установлен pimOwner: " .. pimOwner)
             end
             currentPlayer = playerName:match("^%s*(.-)%s*$") or playerName
             if alreadyAuthorized then
@@ -2574,8 +2616,10 @@ local function main()
             end
         elseif e == "player_off" or e == "pim_player_leave" then
             local playerName = ev[2] or "Игрок"
+            debugLog("👤 player_off: " .. playerName .. ", текущий pimOwner: " .. tostring(pimOwner))
             if playerName == pimOwner then
                 pimOwner = nil
+                debugLog("  ✅ Очищен pimOwner")
             end
             currentPlayer = nil
             currentToken = nil
