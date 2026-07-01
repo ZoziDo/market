@@ -303,7 +303,7 @@ local function drawBigTitle()
         "  ███████║██║  ██║╚██████╔╝██║     ",
         "  ╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═╝     "
     }
-    local shopOffset = 28
+    local shopOffset = 29
     local shopX = math.floor((80 - #shopLines[1]) / 2) + shopOffset
     for i, line in ipairs(shopLines) do
         gpu.set(shopX, 10 + i, line)
@@ -1706,7 +1706,7 @@ local function drawAuthScreen()
     gpu.setForeground(colors.text_bright)
     drawCenteredText(18, "Авторизация....", colors.text_bright)
     gpu.setForeground(colors.text_main)
-    drawCenteredText(22, "--===============|VIP SHOP|===============--", colors.text_main)
+    drawCenteredText(22, "--===============|VIP SHOP|===============--", colors.accent_secondary)
     gpu.setBackground(colors.bg_main)
     drawTempMessage()
 end
