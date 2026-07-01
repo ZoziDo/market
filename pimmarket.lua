@@ -289,7 +289,7 @@ local function drawBigTitle()
         "   ╚████╔╝ ██║██║",
         "    ╚═══╝  ╚═╝╚═╝",
     }
-    local darkonOffset = 8
+    local darkonOffset = 1
     local darkonX = math.floor((80 - #darkonLines[1]) / 2) + darkonOffset
     for i, line in ipairs(darkonLines) do
         gpu.set(darkonX, 4 + i, line)
@@ -1694,7 +1694,7 @@ local function drawWelcomeScreen()
     drawCenteredText(18, "↓   Встаньте на PIM   ↓", colors.accent_main)
     drawCenteredText(19, "━━━━━━━━━━━━━━━━━━━", colors.accent_main)
     gpu.setForeground(colors.text_main)
-    drawCenteredText(22, "По любым вопросам пишите в Telegram: f0rb4ik", colors.text_main)
+    drawCenteredText(22, "--===============|VIP SHOP|===============--", colors.text_main)
     gpu.setBackground(colors.bg_main)
     drawTempMessage()
 end
@@ -1706,7 +1706,7 @@ local function drawAuthScreen()
     gpu.setForeground(colors.text_bright)
     drawCenteredText(18, "Авторизация....", colors.text_bright)
     gpu.setForeground(colors.text_main)
-    drawCenteredText(22, "По любым вопросам пишите в Telegram: f0rb4ik", colors.text_main)
+    drawCenteredText(22, "--===============|VIP SHOP|===============--", colors.text_main)
     gpu.setBackground(colors.bg_main)
     drawTempMessage()
 end
