@@ -395,7 +395,7 @@ local function drawAdminPanel()
     -- Разделительная линия
     setColor(ansi.white)
     gotoxy(2, 4)
-    io.write(string.rep("─", screenW-3))
+    io.write(string.rep("=", screenW-3))
     resetColor()
 
     local startIdx = adminScroll + 1
