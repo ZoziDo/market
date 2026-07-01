@@ -321,7 +321,7 @@ local playerRegDate = ""
 local playerAgreed = false
 local currentScreen = "welcome"
 local authStartTime = 0
-local AUTH_TIMEOUT = 3
+local AUTH_TIMEOUT = 10  -- Увеличен таймаут до 10 секунд
 local accountRequestTime = 0
 local ACCOUNT_TIMEOUT = 3
 local alreadyAuthorized = false
@@ -2058,6 +2058,21 @@ local function main()
             end
         end
 
+        -- Таймаут авторизации
+        if currentScreen == "auth" then
+            if os.clock() - authStartTime > AUTH_TIMEOUT then
+                gpu.setBackground(colors.bg_main)
+                gpu.fill(1, 25, 80, 1, " ")
+                gpu.setForeground(colors.error)
+                local errMsg = "❌ Ошибка: сервер не отвечает. Попробуйте заново."
+                local x = math.floor((80 - unicode.len(errMsg)) / 2) + 1
+                gpu.set(x, 25, errMsg)
+                os.sleep(2)
+                currentScreen = "welcome"
+                drawWelcomeScreen()
+            end
+        end
+
         -- Игнорируем клавишу Ctrl+C на уровне события клавиатуры
         if e == "key_down" then
             local _, _, _, code, char = table.unpack(ev)
@@ -2594,7 +2609,6 @@ local function main()
                 drawCenteredText(14, "Для разблокировки администратор может", colors.text_main)
                 drawCenteredText(15, "нажать правый нижний угол экрана", colors.text_main)
                 drawTempMessage()
-                -- Не даём авторизоваться
                 currentScreen = "welcome"
                 goto continue
             end
@@ -2602,25 +2616,48 @@ local function main()
             -- Блокируем компьютер для этого игрока
             lockForPlayer(currentPlayer)
             
-            if alreadyAuthorized then
+            -- Если уже есть токен, сразу переходим в меню
+            if currentToken then
+                alreadyAuthorized = true
                 if currentScreen == "auth" or currentScreen == "account_loading" then
                     currentScreen = "menu"
                     drawMainMenu()
+                    gpu.setBackground(colors.bg_main)
+                    gpu.fill(1, 25, 80, 1, " ")
+                    gpu.setForeground(colors.success)
+                    local msgText = "✅ Добро пожаловать обратно, " .. currentPlayer .. "!"
+                    local x = math.floor((80 - unicode.len(msgText)) / 2) + 1
+                    gpu.set(x, 25, msgText)
+                    event.timer(2, function()
+                        gpu.fill(1, 25, 80, 1, " ")
+                        drawLockStatus()
+                    end)
                 end
-            elseif currentToken then
-                alreadyAuthorized = true
+            elseif alreadyAuthorized then
                 if currentScreen == "auth" or currentScreen == "account_loading" then
                     currentScreen = "menu"
                     drawMainMenu()
                 end
             else
+                -- Новая авторизация
                 coinBalance = 0.0
                 emaBalance = 0.0
                 playerAgreed = false
                 currentScreen = "auth"
                 authStartTime = os.clock()
                 drawAuthScreen()
-                modem.send(serverAddress, 0xffef, serialization.serialize({op="enter", name=currentPlayer}))
+                -- Отправляем запрос на вход
+                modem.send(serverAddress, 0xffef, serialization.serialize({
+                    op = "enter", 
+                    name = currentPlayer
+                }))
+                -- Показываем ожидание
+                gpu.setBackground(colors.bg_main)
+                gpu.fill(1, 25, 80, 1, " ")
+                gpu.setForeground(colors.accent_main)
+                local waitMsg = "⏳ Авторизация... ожидание ответа от сервера"
+                local x = math.floor((80 - unicode.len(waitMsg)) / 2) + 1
+                gpu.set(x, 25, waitMsg)
             end
         elseif e == "player_off" or e == "pim_player_leave" then
             local playerName = ev[2] or "Игрок"
@@ -2647,27 +2684,80 @@ local function main()
             if sender == serverAddress then
                 local success, msg = pcall(serialization.unserialize, data)
                 if success and msg then
-                    if msg.op == "welcome" and msg.token then
-                        currentToken = msg.token
-                        coinBalance = msg.balance or 0.0
-                        emaBalance = msg.emaBalance or 0.0
-                        playerTransactions = msg.transactions or 0
-                        playerRegDate = msg.regDate or ""
-                        playerAgreed = msg.agreed or false
-                        alreadyAuthorized = true
-                        if selector then
-                            modem.send(serverAddress, 0xffef, serialization.serialize({
-                                op = "selector_status",
-                                name = currentPlayer,
-                                token = currentToken,
-                                available = true
-                            }))
-                        end
-                        if currentScreen == "auth" or currentScreen == "account_loading" then
+                    -- ОБРАБОТКА WELCOME (ГЛАВНЫЙ ОТВЕТ СЕРВЕРА)
+                    if msg.op == "welcome" and (msg.token or msg.status == "ok") then
+                        -- Проверяем, что мы авторизуемся
+                        if currentScreen == "auth" then
+                            -- Получаем данные
+                            currentToken = msg.token
+                            coinBalance = msg.balance or 0.0
+                            emaBalance = msg.emaBalance or 0.0
+                            playerTransactions = msg.transactions or 0
+                            playerRegDate = msg.regDate or ""
+                            playerAgreed = msg.agreed or false
+                            alreadyAuthorized = true
+                            
+                            -- Проверяем статус магазина
+                            if msg.shopPaused then
+                                gpu.setBackground(colors.bg_main)
+                                gpu.fill(1, 25, 80, 1, " ")
+                                gpu.setForeground(colors.error)
+                                local pauseMsg = "⏸️ Магазин на паузе! Попробуйте позже."
+                                local x = math.floor((80 - unicode.len(pauseMsg)) / 2) + 1
+                                gpu.set(x, 25, pauseMsg)
+                                currentScreen = "welcome"
+                                drawWelcomeScreen()
+                                goto continue
+                            end
+                            
+                            -- ПЕРЕХОДИМ В ГЛАВНОЕ МЕНЮ
                             currentScreen = "menu"
                             drawMainMenu()
+                            
+                            -- Показываем сообщение об успешном входе
+                            gpu.setBackground(colors.bg_main)
+                            gpu.fill(1, 25, 80, 1, " ")
+                            gpu.setForeground(colors.success)
+                            local welcomeMsg = "✅ Добро пожаловать, " .. currentPlayer .. "!"
+                            local x = math.floor((80 - unicode.len(welcomeMsg)) / 2) + 1
+                            gpu.set(x, 25, welcomeMsg)
+                            
+                            -- Скрываем сообщение через 3 секунды
+                            event.timer(3, function()
+                                gpu.fill(1, 25, 80, 1, " ")
+                                drawLockStatus()
+                            end)
+                            
+                            if selector then
+                                modem.send(serverAddress, 0xffef, serialization.serialize({
+                                    op = "selector_status",
+                                    name = currentPlayer,
+                                    token = currentToken,
+                                    available = true
+                                }))
+                            end
                         end
-                    elseif msg.op == "accountData" then
+                        goto continue
+                    end
+                    
+                    -- ОБРАБОТКА ОШИБОК
+                    if msg.op == "error" then
+                        gpu.setBackground(colors.bg_main)
+                        gpu.fill(1, 25, 80, 1, " ")
+                        gpu.setForeground(colors.error)
+                        local errorMsg = "❌ " .. (msg.message or "Ошибка сервера")
+                        local x = math.floor((80 - unicode.len(errorMsg)) / 2) + 1
+                        gpu.set(x, 25, errorMsg)
+                        
+                        if currentScreen == "auth" then
+                            os.sleep(2)
+                            currentScreen = "welcome"
+                            drawWelcomeScreen()
+                        end
+                        goto continue
+                    end
+                    
+                    if msg.op == "accountData" then
                         if msg.error then
                             retryAccountAfterTokenRefresh()
                         else
@@ -2677,6 +2767,7 @@ local function main()
                                 drawAccount(msg.data)
                             end
                         end
+                        goto continue
                     elseif msg.op == "agree" then
                         if msg.success then
                             playerAgreed = true
@@ -2729,6 +2820,7 @@ local function main()
                             drawMainMenu()
                             currentScreen = "menu"
                         end
+                        goto continue
                     elseif msg.op == "add_buy_item" then
                         local ok, err = pcall(function()
                             local buyItems = dofile("/home/buy_items.lua")
@@ -2774,6 +2866,7 @@ local function main()
                         else
                             print("Ошибка добавления предмета: " .. (msg.error or "неизвестная"))
                         end
+                        goto continue
                     elseif msg.op == "reload_buy_items" then
                         buyItemsData = dofile("/home/buy_items.lua")
                         buyItemMap = {}
