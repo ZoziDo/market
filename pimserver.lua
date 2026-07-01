@@ -415,14 +415,15 @@ local function drawAdminPanel()
     drawing = false
 end
 
+-- Увеличенное окно для добавления администратора
 local function drawAddAdminWindow()
     if drawing then return end
     drawing = true
     io.write(ansi.hide_cursor .. ansi.clear)
     updateScreenSize()
 
-    local w = 50
-    local h = 6
+    local w = 60
+    local h = 10
     local x = math.floor((screenW - w) / 2)
     local y = math.floor((screenH - h) / 2)
 
@@ -442,27 +443,34 @@ local function drawAddAdminWindow()
 
     setColor(ansi.yellow)
     gotoxy(x+2, y+2) io.write("Текущие админы: " .. table.concat(admins, ", "))
+    gotoxy(x+2, y+3) io.write(string.rep("─", w-4))
     resetColor()
 
     setColor(ansi.cyan)
-    gotoxy(x+2, y+3) io.write("Введите ник игрока для добавления в админы: " .. addAdminInput .. "_")
+    gotoxy(x+2, y+4) io.write("Введите ник игрока для добавления в админы: ")
+    setColor(ansi.white)
+    gotoxy(x+2, y+5)
+    io.write(string.rep(" ", w-4))
+    gotoxy(x+2, y+5)
+    io.write(addAdminInput .. "_")
     resetColor()
 
     setColor(ansi.white)
-    gotoxy(x+2, y+4) io.write("Enter - добавить | Esc - отмена")
+    gotoxy(x+2, y+7) io.write("Enter - добавить | Esc - отмена | ] - выход")
     resetColor()
     io.flush()
     drawing = false
 end
 
+-- Увеличенное окно для редактирования баланса
 local function drawEditBalanceWindow()
     if drawing then return end
     drawing = true
     io.write(ansi.hide_cursor .. ansi.clear)
     updateScreenSize()
 
-    local w = 50
-    local h = 8
+    local w = 60
+    local h = 10
     local x = math.floor((screenW - w) / 2)
     local y = math.floor((screenH - h) / 2)
 
@@ -484,19 +492,26 @@ local function drawEditBalanceWindow()
     gotoxy(x+2, y+2) io.write("Игрок: " .. editingPlayer.name)
     gotoxy(x+2, y+3) io.write("Текущий баланс Coin: " .. string.format("%.2f", editingPlayer.data.balance) .. " ₵")
     gotoxy(x+2, y+4) io.write("Текущий баланс ЭМЫ: " .. string.format("%.2f", editingPlayer.data.emaBalance or 0) .. " ۞")
+    gotoxy(x+2, y+5) io.write(string.rep("─", w-4))
     resetColor()
 
     setColor(ansi.cyan)
-    gotoxy(x+2, y+6) io.write("Введите новую сумму (Coin + ЭМЫ через пробел, например \"100 50\"): " .. editInput .. "_")
+    gotoxy(x+2, y+6) io.write("Введите новую сумму (Coin + ЭМЫ через пробел, например \"100 50\"): ")
+    setColor(ansi.white)
+    gotoxy(x+2, y+7)
+    io.write(string.rep(" ", w-4))
+    gotoxy(x+2, y+7)
+    io.write(editInput .. "_")
     resetColor()
 
     setColor(ansi.white)
-    gotoxy(x+2, y+7) io.write("Enter - подтвердить | Esc - отмена")
+    gotoxy(x+2, y+8) io.write("Enter - подтвердить | Esc - отмена | ] - выход")
     resetColor()
     io.flush()
     drawing = false
 end
 
+-- Увеличенное окно для добавления предмета
 local function drawAddItemForm()
     if drawing then return end
     drawing = true
@@ -504,7 +519,7 @@ local function drawAddItemForm()
     updateScreenSize()
 
     local w = 70
-    local h = 13
+    local h = 15
     local x = math.floor((screenW - w) / 2)
     local y = math.floor((screenH - h) / 2)
 
@@ -536,7 +551,7 @@ local function drawAddItemForm()
     end
 
     setColor(ansi.white)
-    gotoxy(x+3, y+11)
+    gotoxy(x+3, y+13)
     io.write("Enter - далее / отправить | ] - отмена")
     io.flush()
     drawing = false
@@ -699,7 +714,7 @@ local function handleKey(key, char, player)
 
     -- Режим добавления администратора
     if addAdminMode then
-        if char == 27 then -- ESC
+        if char == 27 or char == 93 then -- ESC или ]
             addAdminMode = false
             addAdminInput = ""
             drawAdminPanel()
@@ -733,7 +748,7 @@ local function handleKey(key, char, player)
     end
 
     if addItemMode then
-        if char == 93 then -- ]
+        if char == 27 or char == 93 then -- ESC или ]
             addItemMode = false
             addItemResponse = nil
             if adminMode then drawAdminPanel() else drawInterface() end
@@ -827,7 +842,7 @@ local function handleKey(key, char, player)
     end
 
     if editBalanceMode then
-        if char == 27 then
+        if char == 27 or char == 93 then -- ESC или ]
             editBalanceMode = false
             editingPlayer = nil
             editInput = ""
