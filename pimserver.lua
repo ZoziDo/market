@@ -1,5 +1,3 @@
--- server_1.lua (полный код сервера с поддержкой двух валют: Coina и ЭМЫ)
--- Добавлены функции удалённого обновления (U) и завершения (K) маркетов
 local component = require("component")
 local event = require("event")
 local serialization = require("serialization")
@@ -9,7 +7,7 @@ local math = require("math")
 local os = require("os")
 local unicode = require("unicode")
 local computer = require("computer")
-local TIMEZONE_OFFSET = 3 * 3600   -- +3 часа для Москвы (UTC+3)
+local TIMEZONE_OFFSET = 3 * 3600 
 
 local modem = component.modem
 modem.open(0xffef)
@@ -18,7 +16,6 @@ modem.open(0xfffe)
 event.ignore("interrupted", function() end)
 event.ignore("terminate", function() end)
 
--- ========== РЕАЛЬНОЕ ВРЕМЯ ЧЕРЕЗ TMPFS ==========
 local tmpfs = component.proxy(computer.tmpAddress())
 local function getRealTimestamp()
     local handle = tmpfs.open("/time", "w")
@@ -35,7 +32,6 @@ local function getRealDateTimeString()
     return os.date("%d.%m.%Y %H:%M:%S", getRealTimestamp())
 end
 
--- ========== ANSI ЦВЕТА ==========
 local ansi = {
     reset   = "\27[0m",
     bold    = "\27[1m",
@@ -86,7 +82,6 @@ end
 
 local ACCESS_PASSWORD = "secret"
 
--- ========== БАЗА ДАННЫХ ИГРОКОВ ==========
 local DB_PATH = "/home/players.db"
 local players = {}
 if filesystem.exists(DB_PATH) then
@@ -105,7 +100,6 @@ local function saveDB()
     file:close()
 end
 
--- ========== ГЛОБАЛЬНАЯ СТАТИСТИКА ==========
 local STATS_PATH = "/home/global_stats.db"
 local globalStats = { totalReports = 0, totalBuys = 0, totalSells = 0 }
 if filesystem.exists(STATS_PATH) then
@@ -128,7 +122,6 @@ local function saveGlobalStats()
     file:close()
 end
 
--- ========== ПЕРЕМЕННЫЕ СЕРВЕРА ==========
 local owner = nil
 local sessions = {}
 local markets = {}
@@ -145,7 +138,6 @@ local editBalanceMode = false
 local editingPlayer = nil
 local editInput = ""
 
--- ========== РЕЖИМ ДОБАВЛЕНИЯ ПРЕДМЕТА ==========
 local addItemMode = false
 local addItemFields = { internal = "", display = "", price_coin = "", price_ema = "0", damage = "0" }
 local addItemCurrentField = 1
@@ -153,7 +145,6 @@ local addItemFieldNames = { "internal", "display", "price_coin", "price_ema", "d
 local addItemResponse = nil
 local addItemResponseTimer = nil
 
--- ========== ИСТОРИЯ ПРОДАЖ И АКТИВНОСТЬ ==========
 local sellHistory = {}
 local MAX_SELL_HISTORY = 20
 local ACTIVITY_SIZE = 60
@@ -222,7 +213,6 @@ local function updateAdminPlayerList()
     table.sort(adminPlayerList, function(a,b) return a.name < b.name end)
 end
 
--- ========== НОВЫЕ ФУНКЦИИ ДЛЯ ОБНОВЛЕНИЯ И ЗАВЕРШЕНИЯ ==========
 local function broadcastUpdate()
     if next(markets) == nil then
         addLog("Нет подключённых маркетов для обновления", ansi.red)
@@ -249,7 +239,6 @@ local function broadcastKill()
     addLog("Отправлена команда завершения " .. sent .. " маркетам", ansi.red)
 end
 
--- ========== ОТРИСОВКА АДМИН-ПАНЕЛИ ==========
 local function drawAdminPanel()
     if drawing then return end
     drawing = true
@@ -299,7 +288,6 @@ local function drawAdminPanel()
     drawing = false
 end
 
--- ========== ФОРМА РЕДАКТИРОВАНИЯ БАЛАНСА ==========
 local function drawEditBalanceWindow()
     if drawing then return end
     drawing = true
@@ -342,7 +330,6 @@ local function drawEditBalanceWindow()
     drawing = false
 end
 
--- ========== ФОРМА ДОБАВЛЕНИЯ ПРЕДМЕТА ==========
 local function drawAddItemForm()
     if drawing then return end
     drawing = true
@@ -388,7 +375,6 @@ local function drawAddItemForm()
     drawing = false
 end
 
--- ========== ОСНОВНОЙ ИНТЕРФЕЙС СЕРВЕРА ==========
 function drawInterface()
     if adminMode or editBalanceMode or addItemMode then return end
     if drawing then return end
@@ -513,7 +499,6 @@ function drawInterface()
     drawing = false
 end
 
--- ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 local function getOrCreatePlayer(name)
     if not players[name] then
         players[name] = {
@@ -536,7 +521,7 @@ local function validateSession(name, token)
     return s and s.token == token and os.time() - (s.lastAction or 0) < SESSION_TIMEOUT
 end
 
--- ========== ОБРАБОТЧИК КЛАВИШ ==========
+
 local function handleKey(key, char, player)
     local isAdmin = (player == ADMIN_NAME) and isAdminConnected()
 
@@ -809,7 +794,7 @@ local function handleTouch(x, y, player)
     end
 end
 
--- ========== ОСНОВНОЙ ЦИКЛ ==========
+
 local function main()
     log("INFO", "Сервер запущен. Ожидание терминалов...")
     drawInterface()
@@ -1111,7 +1096,6 @@ local function main()
     end
 end
 
--- ========== БЕСКОНЕЧНЫЙ ПЕРЕЗАПУСК ==========
 while true do
     local ok, err = pcall(main)
     if not ok then
