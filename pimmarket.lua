@@ -201,7 +201,7 @@ modem.open(0xffef)
 modem.open(0xfffe)
 
 local currentPlayer, currentToken = nil, nil
-local pimOwner = nil  -- Игрок, который стоит на PIM
+local pimOwner = nil
 local coinBalance = 0.0
 local emaBalance = 0.0
 local playerTransactions = 0
@@ -258,7 +258,6 @@ local showShopDenied = false
 local tempMessage = ""
 local tempMessageTimer = nil
 
--- Функция проверки, является ли игрок владельцем PIM
 local function isPimOwner(playerName)
     if not playerName or not pimOwner then return false end
     return playerName == pimOwner
@@ -751,7 +750,6 @@ local function drawBalanceLine(x, y)
     gpu.set(x + unicode.len("Баланс: ") + unicode.len(coinStr) + unicode.len(" | "), y, emaStr)
 end
 
--- Функция перерисовки только строки поиска (без очистки экрана)
 local function redrawSearchField()
     local searchX = 42
     local searchText = ""
@@ -1004,7 +1002,6 @@ local function drawPurchaseScreen()
     local totalCoin = (purchaseItem.priceCoin or 0) * purchaseQuantity
     local totalEma = (purchaseItem.priceEma or 0) * purchaseQuantity
 
-    -- На сумму (Coina и ЭМЫ на отдельных строках)
     gpu.setForeground(colors.success)
     gpu.set(3, 5, "На сумму: ")
     local sumY = 5
@@ -1018,7 +1015,6 @@ local function drawPurchaseScreen()
         gpu.set(14, sumY, string.format("%.2f", totalEma) .. " ۞")
     end
 
-    -- Цена за штуку (Coina и ЭМЫ на отдельных строках)
     gpu.setForeground(colors.success)
     gpu.set(55, 5, "Цена: ")
     local priceY = 5
@@ -1936,10 +1932,9 @@ local function main()
         local ev = {event.pull(0.5)}
         local e = ev[1]
 
-        -- Игнорируем клавишу Ctrl+C на уровне события клавиатуры
         if e == "key_down" then
             local _, _, _, code, char = table.unpack(ev)
-            if char == 3 then -- Ctrl+C
+            if char == 3 then
                 goto continue
             end
         end
@@ -1962,14 +1957,12 @@ local function main()
             local y = ev[3]
             local playerName = ev[6]
 
-            -- ПРОВЕРКА: только владелец PIM может управлять
             if not isPimOwner(playerName) then
                 goto continue
             end
 
-            -- === ОБРАБОТКА МЕНЮ (ПЕРВЫЙ ПРИОРИТЕТ) ===
+            -- === ОБРАБОТКА МЕНЮ ===
             if currentScreen == "menu" then
-                -- Проверяем кнопки магазина и аккаунта
                 for name, btn in pairs(menuButtons) do
                     if x >= btn.x and x < btn.x + btn.xs and y >= btn.y and y < btn.y + btn.ys then
                         if name == "shop" then
@@ -1989,7 +1982,6 @@ local function main()
                         goto continue
                     end
                 end
-                -- Проверяем нижнюю панель (Поддержка, Соглашение, Отзывы)
                 if y == 24 then
                     if x >= 4 and x <= 25 then
                         showShopDenied = false
@@ -2009,7 +2001,7 @@ local function main()
                 goto continue
             end
 
-            -- === ОБРАБОТКА ПОПАПОВ ===
+            -- === ПОПАПЫ ===
             if showSellPopup and currentScreen == "sell_scan" then
                 local popupWidth = 40
                 local popupHeight = 10
@@ -2090,9 +2082,10 @@ local function main()
                     drawBuyButtons()
                 end
                 goto continue
+            end
 
-            -- === ОБРАБОТКА МАГАЗИНА ===
-            elseif currentScreen == "shop_buy" or currentScreen == "shop_sell" then
+            -- === МАГАЗИН ===
+            if currentScreen == "shop_buy" or currentScreen == "shop_sell" then
                 if y >= 7 and y <= 21 and x >= 2 and x <= 77 then
                     local relativeRow = y - 6
                     local clickedIndex = listScroll + relativeRow - 1
@@ -2118,7 +2111,6 @@ local function main()
                     goto continue
                 end
 
-                -- Клик на поле поиска
                 if y == 3 and x >= 42 and x <= 64 then
                     searchActive = true
                     searchInput = shopSearch
@@ -2126,7 +2118,7 @@ local function main()
                     drawBuyItemsList()
                     goto continue
                 end
-                -- Клик на кнопку "СТЕРЕТЬ"
+
                 if y == 3 and x >= 66 and x <= 78 then
                     shopSearch = ""
                     searchInput = ""
@@ -2186,7 +2178,7 @@ local function main()
                     goto continue
                 end
 
-            -- === ОБРАБОТКА ЭКРАНА ПОКУПКИ ===
+            -- === ПОКУПКА ===
             elseif currentScreen == "purchase" then
                 if (y >= 24 and y <= 24) and (x >= 19 and x <= 28) then
                     if currentShopMode == "buy" then
@@ -2200,9 +2192,12 @@ local function main()
                         drawBuyItemsList()
                         drawBuyButtons()
                     end
+                    goto continue
                 elseif (y >= 24 and y <= 24) and (x >= 51 and x <= 61) then
                     performBuy()
+                    goto continue
                 end
+
                 local startX = 34
                 local startY = 11
                 local btnW = 3
@@ -2220,12 +2215,12 @@ local function main()
                         local by = startY + (row-1)*(btnH + 1)
                         if x >= bx and x < bx+btnW and y >= by and y < by+btnH then
                             handleQuantityButtonClick(keys[row][col])
-                            break
+                            goto continue
                         end
                     end
                 end
 
-            -- === ОБРАБОТКА ЭКРАНА ПРОДАЖИ ===
+            -- === ПРОДАЖА ===
             elseif currentScreen == "sell_scan" then
                 if isButtonClicked(backButton, x, y) then
                     currentScreen = "shop_sell"
@@ -2233,6 +2228,7 @@ local function main()
                     drawBuyStatic()
                     drawBuyItemsList()
                     drawBuyButtons()
+                    goto continue
                 elseif y == 13 and x >= 30 and x <= 50 then
                     drawCenteredText(17, "Сканирование...", colors.accent_secondary)
                     os.sleep(0.6)
@@ -2245,9 +2241,10 @@ local function main()
                         os.sleep(0.8)
                         drawSellScanScreen()
                     end
+                    goto continue
                 end
 
-            -- === ОБРАБОТКА ЭКРАНА МАГАЗИНА (МЕНЮ) ===
+            -- === МЕНЮ МАГАЗИНА ===
             elseif currentScreen == "shop" then
                 for name, btn in pairs(shopMenuButtons) do
                     if x >= btn.x and x < btn.x + btn.xs and y >= btn.y and y < btn.y + btn.ys then
@@ -2267,21 +2264,25 @@ local function main()
                 end
                 if isButtonClicked(backButton, x, y) then
                     goBackToMenu()
+                    goto continue
                 end
 
-            -- === ОБРАБОТКА ОСТАЛЬНЫХ ЭКРАНОВ ===
+            -- === ОСТАЛЬНЫЕ ЭКРАНЫ ===
             elseif currentScreen == "shop_bundle" then
                 if isButtonClicked(backButton, x, y) then
                     currentScreen = "shop"
                     drawShopMenu()
+                    goto continue
                 end
             elseif currentScreen == "utility" then
                 if isButtonClicked(backButton, x, y) then
                     goBackToMenu()
+                    goto continue
                 end
             elseif currentScreen == "report" then
                 if isButtonClicked(backButton, x, y) then
                     goBackToMenu()
+                    goto continue
                 elseif canSendReport() then
                     local sendBtn = {x=20, y=14, xs=40, ys=1}
                     if isButtonClicked(sendBtn, x, y) and reportInput ~= "" then
@@ -2298,6 +2299,7 @@ local function main()
                         drawCenteredText(18, "Сообщение успешно отправлено! Ожидайте ответа.", colors.success)
                         os.sleep(0.8)
                         goBackToMenu()
+                        goto continue
                     end
                 end
             elseif currentScreen == "feedbacks" then
@@ -2357,18 +2359,21 @@ local function main()
                 local btnX = math.floor((80 - btnW)/2) + 2
                 if y == 22 and x >= btnX and x <= btnX + btnW then
                     refreshAndAgree()
+                    goto continue
                 end
                 if isButtonClicked(backButton, x, y) then
                     goBackToMenu()
+                    goto continue
                 end
             elseif currentScreen == "account" or currentScreen == "account_loading" then
                 if isButtonClicked(backButton, x, y) then
                     goBackToMenu()
+                    goto continue
                 end
             end
+            goto continue
 
         elseif e == "scroll" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
-            -- Проверяем, кто скроллит (для scroll события имя игрока в ev[5])
             local playerName = ev[5]
             if not isPimOwner(playerName) then
                 goto continue
@@ -2384,7 +2389,6 @@ local function main()
                 end
             end
         elseif e == "mouse_move" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
-            -- mouse_move не содержит имени игрока, поэтому проверяем только если есть владелец
             if not pimOwner then
                 goto continue
             end
@@ -2404,7 +2408,6 @@ local function main()
             end
         elseif e == "key_down" then
             local playerName = ev[5]
-            -- Проверяем, только владелец PIM может использовать клавиатуру
             if not isPimOwner(playerName) then
                 goto continue
             end
@@ -2473,7 +2476,6 @@ local function main()
             end
         elseif e == "player_on" or e == "pim" or e == "pim_player_enter" then
             local playerName = ev[2] or "Игрок"
-            -- Запоминаем, кто встал на PIM
             if not pimOwner then
                 pimOwner = playerName
             end
@@ -2500,7 +2502,6 @@ local function main()
             end
         elseif e == "player_off" or e == "pim_player_leave" then
             local playerName = ev[2] or "Игрок"
-            -- Если ушел владелец PIM, очищаем
             if playerName == pimOwner then
                 pimOwner = nil
             end
@@ -2719,7 +2720,6 @@ local function main()
     end
 end
 
--- Бесконечный цикл защиты от завершения
 while true do
     pcall(main)
     os.sleep(0.5)
