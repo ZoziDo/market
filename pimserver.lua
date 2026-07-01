@@ -82,6 +82,79 @@ end
 
 local ACCESS_PASSWORD = "secret"
 
+-- ===== СИСТЕМА АДМИНИСТРАТОРОВ =====
+local ADMINS_PATH = "/home/admins.db"
+local admins = {}
+
+-- Загружаем список администраторов
+if filesystem.exists(ADMINS_PATH) then
+    local file = io.open(ADMINS_PATH, "r")
+    if file then
+        local raw = file:read("*a")
+        file:close()
+        if raw and #raw > 0 then
+            local success, data = pcall(serialization.unserialize, raw)
+            if success and type(data) == "table" then
+                admins = data
+            end
+        end
+    end
+end
+
+-- Если нет админов, добавляем ZoziDo по умолчанию
+if #admins == 0 then
+    admins = {"ZoziDo"}
+    local file = io.open(ADMINS_PATH, "w")
+    if file then
+        file:write(serialization.serialize(admins))
+        file:close()
+    end
+end
+
+-- Функция проверки, является ли игрок администратором
+local function isAdmin(playerName)
+    if not playerName then return false end
+    for _, name in ipairs(admins) do
+        if name == playerName then
+            return true
+        end
+    end
+    return false
+end
+
+-- Функция добавления администратора
+local function addAdmin(playerName)
+    if not playerName or playerName == "" then return false end
+    if isAdmin(playerName) then return false end
+    table.insert(admins, playerName)
+    local file = io.open(ADMINS_PATH, "w")
+    if file then
+        file:write(serialization.serialize(admins))
+        file:close()
+        return true
+    end
+    return false
+end
+
+-- Функция удаления администратора
+local function removeAdmin(playerName)
+    if not playerName or playerName == "" then return false end
+    if #admins <= 1 then return false end -- Нельзя удалить последнего админа
+    for i, name in ipairs(admins) do
+        if name == playerName then
+            table.remove(admins, i)
+            local file = io.open(ADMINS_PATH, "w")
+            if file then
+                file:write(serialization.serialize(admins))
+                file:close()
+                return true
+            end
+        end
+    end
+    return false
+end
+-- ===== КОНЕЦ СИСТЕМЫ АДМИНИСТРАТОРОВ =====
+
 local DB_PATH = "/home/players.db"
 local players = {}
 if filesystem.exists(DB_PATH) then
@@ -138,6 +211,10 @@ local editBalanceMode = false
 local editingPlayer = nil
 local editInput = ""
 
+-- Режим добавления администратора
+local addAdminMode = false
+local addAdminInput = ""
+
 local addItemMode = false
 local addItemFields = { internal = "", display = "", price_coin = "", price_ema = "0", damage = "0" }
 local addItemCurrentField = 1
@@ -156,7 +233,6 @@ local colX = {5, 30, 55, 80}
 local colWidth = 25
 local logStartY = 20
 local maxLogLines = 14
-local ADMIN_NAME = "ZoziDo"
 local drawing = false
 
 local function updateScreenSize()
@@ -192,7 +268,6 @@ function addLog(text, fg)
     while #logBuffer > 200 do table.remove(logBuffer, 1) end
 end
 
--- Улучшенная система логирования
 local function log(level, msg, emoji)
     local color = ansi.white
     if level == "INFO" then color = ansi.green
@@ -206,7 +281,6 @@ local function log(level, msg, emoji)
     
     addLog("[" .. getRealTimeString() .. "] " .. prefix .. msg, color)
     
-    -- Дублируем важные события в отдельный файл
     if level == "IMPORTANT" or level == "SUCCESS" or level == "WARN" then
         local logFile = io.open("/home/server_events.log", "a")
         if logFile then
@@ -216,9 +290,7 @@ local function log(level, msg, emoji)
     end
 end
 
--- Фильтр для входящих сообщений (убираем лишние логи)
 local function logIncoming(from, msg)
-    -- Логируем только важные операции
     local importantOps = {
         ["enter"] = true,
         ["sell"] = true,
@@ -230,7 +302,6 @@ local function logIncoming(from, msg)
     }
     
     if importantOps[msg.op] then
-        -- Для входа показываем только если это успешный вход
         if msg.op == "enter" then
             if msg.name and msg.name ~= "" then
                 log("INFO", "👤 Вход игрока: " .. msg.name)
@@ -315,17 +386,22 @@ local function drawAdminPanel()
     local startIdx = adminScroll + 1
     local endIdx = math.min(#adminPlayerList, adminScroll + adminViewHeight)
     setColor(ansi.yellow)
-    gotoxy(2, 3) io.write("Игроки (↑↓ выбор, клик мышкой, D - бан/разбан, R - сброс статистики, P - пауза, E - редактировать баланс, B - добавить предмет)")
+    gotoxy(2, 3) io.write("Игроки (↑↓ выбор, клик мышкой, D - бан/разбан, R - сброс статистики, P - пауза, E - редактировать баланс, B - добавить предмет, + - добавить админа, - - удалить админа)")
     resetColor()
 
     for i=startIdx, endIdx do
         local ply = adminPlayerList[i]
+        local isPlayerAdmin = isAdmin(ply.name)
         local bannedStr = ply.data.banned and " [ЗАБАНЕН]" or ""
-        local line = string.format("%-20s | Coin: %8.2f ₵ | ЭМЫ: %8.2f ۞ | Транз: %d%s",
-            ply.name, ply.data.balance or 0, ply.data.emaBalance or 0, ply.data.transactions or 0, bannedStr)
+        local adminStr = isPlayerAdmin and " [АДМИН]" or ""
+        local line = string.format("%-20s | Coin: %8.2f ₵ | ЭМЫ: %8.2f ۞ | Транз: %d%s%s",
+            ply.name, ply.data.balance or 0, ply.data.emaBalance or 0, ply.data.transactions or 0, bannedStr, adminStr)
         if #line > screenW - 4 then line = line:sub(1, screenW-4) end
         local y = 4 + (i - startIdx)
-        setColor((i == selectedAdminIndex) and ansi.bg_blue or ansi.white, (i == selectedAdminIndex) and ansi.white or nil)
+        local color = ansi.white
+        if isPlayerAdmin then color = ansi.green end
+        if ply.data.banned then color = ansi.red end
+        setColor((i == selectedAdminIndex) and ansi.bg_blue or color, (i == selectedAdminIndex) and ansi.white or nil)
         gotoxy(2, y)
         io.write(line)
         resetColor()
@@ -333,7 +409,47 @@ local function drawAdminPanel()
 
     setColor(ansi.cyan)
     gotoxy(2, screenH-2)
-    io.write("BAN/UNBAN: D | RESET STATS: R | PAUSE: P | EDIT BALANCE: E | ADD ITEM: B | SCROLL: ↑↓ | MOUSE CLICK | U - UPDATE | K - KILL MARKET")
+    io.write("BAN: D | RESET: R | PAUSE: P | EDIT BALANCE: E | ADD ITEM: B | ADD ADMIN: + | REMOVE ADMIN: - | SCROLL: ↑↓ | U - UPDATE | K - KILL MARKET")
+    resetColor()
+    io.flush()
+    drawing = false
+end
+
+local function drawAddAdminWindow()
+    if drawing then return end
+    drawing = true
+    io.write(ansi.hide_cursor .. ansi.clear)
+    updateScreenSize()
+
+    local w = 50
+    local h = 6
+    local x = math.floor((screenW - w) / 2)
+    local y = math.floor((screenH - h) / 2)
+
+    setColor(ansi.white)
+    fill(x, y, w, h, " ")
+    setColor(ansi.bg_black, ansi.white)
+    for i = 0, h-1 do
+        gotoxy(x, y+i) io.write("│")
+        gotoxy(x+w-1, y+i) io.write("│")
+    end
+    fill(x+1, y, w-2, 1, "─")
+    fill(x+1, y+h-1, w-2, 1, "─")
+    setColor(ansi.bg_blue, ansi.white)
+    fill(x+2, y, w-4, 1, " ")
+    gotoxy(x+2, y) io.write(" ДОБАВЛЕНИЕ АДМИНИСТРАТОРА ")
+    resetColor()
+
+    setColor(ansi.yellow)
+    gotoxy(x+2, y+2) io.write("Текущие админы: " .. table.concat(admins, ", "))
+    resetColor()
+
+    setColor(ansi.cyan)
+    gotoxy(x+2, y+3) io.write("Введите ник игрока для добавления в админы: " .. addAdminInput .. "_")
+    resetColor()
+
+    setColor(ansi.white)
+    gotoxy(x+2, y+4) io.write("Enter - добавить | Esc - отмена")
     resetColor()
     io.flush()
     drawing = false
@@ -427,7 +543,7 @@ local function drawAddItemForm()
 end
 
 function drawInterface()
-    if adminMode or editBalanceMode or addItemMode then return end
+    if adminMode or editBalanceMode or addItemMode or addAdminMode then return end
     if drawing then return end
     drawing = true
     io.write(ansi.hide_cursor .. ansi.clear)
@@ -474,7 +590,12 @@ function drawInterface()
         gotoxy(colX[1], 5+i)
         local name = playerList[i]
         if #name > colWidth then name = name:sub(1, colWidth) end
-        io.write(name .. string.rep(" ", colWidth - #name))
+        local isPlayerAdmin = isAdmin(name)
+        if isPlayerAdmin then
+            io.write(ansi.green .. "★ " .. name .. ansi.reset)
+        else
+            io.write(name .. string.rep(" ", colWidth - #name))
+        end
     end
     resetColor()
     
@@ -529,7 +650,7 @@ function drawInterface()
     
     setColor(ansi.white)
     gotoxy(1, screenH-1)
-    io.write("R - обновить | P - Пауза | A - Админ-панель (только для " .. ADMIN_NAME .. " на PIM)")
+    io.write("R - обновить | P - Пауза | A - Админ-панель")
     resetColor()
     
     setColor(ansi.white)
@@ -572,12 +693,47 @@ local function validateSession(name, token)
     return s and s.token == token and os.time() - (s.lastAction or 0) < SESSION_TIMEOUT
 end
 
-
 local function handleKey(key, char, player)
-    local isAdmin = (player == ADMIN_NAME) and isAdminConnected()
+    local isPlayerAdmin = isAdmin(player)
+    local isAdminConnected = isPlayerAdmin and sessions[player] and sessions[player].token
+
+    -- Режим добавления администратора
+    if addAdminMode then
+        if char == 27 then -- ESC
+            addAdminMode = false
+            addAdminInput = ""
+            drawAdminPanel()
+            return
+        elseif char == 13 then -- Enter
+            if addAdminInput ~= "" then
+                if addAdmin(addAdminInput) then
+                    log("SUCCESS", "👑 " .. addAdminInput .. " добавлен в администраторы")
+                    updateAdminPlayerList()
+                    drawAdminPanel()
+                else
+                    addLog("Ошибка: игрок уже является администратором", ansi.red)
+                end
+            end
+            addAdminMode = false
+            addAdminInput = ""
+            return
+        elseif char == 8 then -- Backspace
+            addAdminInput = addAdminInput:sub(1, -2)
+            drawAddAdminWindow()
+            return
+        elseif char >= 32 then
+            local c = unicode.char(char)
+            if c:match("[%w_]") then
+                addAdminInput = addAdminInput .. c
+                drawAddAdminWindow()
+            end
+            return
+        end
+        return
+    end
 
     if addItemMode then
-        if char == 93 then
+        if char == 93 then -- ]
             addItemMode = false
             addItemResponse = nil
             if adminMode then drawAdminPanel() else drawInterface() end
@@ -715,14 +871,14 @@ local function handleKey(key, char, player)
     end
 
     if adminMode then
-        if not isAdmin then
+        if not isPlayerAdmin then
             adminMode = false
             drawInterface()
             log("WARN", "Сессия администратора истекла, выход из панели")
             return
         end
 
-        if key == 200 then
+        if key == 200 then -- Вверх
             if selectedAdminIndex > 1 then
                 selectedAdminIndex = selectedAdminIndex - 1
                 if selectedAdminIndex < adminScroll + 1 then
@@ -731,7 +887,7 @@ local function handleKey(key, char, player)
                 drawAdminPanel()
             end
             return
-        elseif key == 208 then
+        elseif key == 208 then -- Вниз
             if selectedAdminIndex < #adminPlayerList then
                 selectedAdminIndex = selectedAdminIndex + 1
                 if selectedAdminIndex > adminScroll + adminViewHeight then
@@ -750,7 +906,7 @@ local function handleKey(key, char, player)
 
     if not adminMode then
         if pressed == "a" then
-            if isAdmin then
+            if isPlayerAdmin then
                 adminMode = true
                 adminScroll = 0
                 selectedAdminIndex = 1
@@ -762,7 +918,7 @@ local function handleKey(key, char, player)
             end
             return
         elseif pressed == "p" then
-            if isAdmin then
+            if isPlayerAdmin then
                 shopPaused = not shopPaused
                 log("IMPORTANT", "⏸️ Магазин " .. (shopPaused and "приостановлен" or "возобновлён"))
                 drawInterface()
@@ -815,13 +971,26 @@ local function handleKey(key, char, player)
             end
             return
         elseif pressed == "b" then
-            if isAdmin then
-                addItemMode = true
-                addItemFields = { internal = "", display = "", price_coin = "", price_ema = "0", damage = "0" }
-                addItemCurrentField = 1
-                drawAddItemForm()
-            else
-                log("WARN", "⚠️ Попытка добавления предмета не админом: " .. tostring(player))
+            addItemMode = true
+            addItemFields = { internal = "", display = "", price_coin = "", price_ema = "0", damage = "0" }
+            addItemCurrentField = 1
+            drawAddItemForm()
+            return
+        elseif pressed == "+" then
+            addAdminMode = true
+            addAdminInput = ""
+            drawAddAdminWindow()
+            return
+        elseif pressed == "-" then
+            local ply = adminPlayerList[selectedAdminIndex]
+            if ply then
+                if removeAdmin(ply.name) then
+                    log("SUCCESS", "👑 " .. ply.name .. " удалён из администраторов")
+                    updateAdminPlayerList()
+                    drawAdminPanel()
+                else
+                    addLog("Нельзя удалить последнего администратора!", ansi.red)
+                end
             end
             return
         elseif pressed == "u" then
@@ -835,8 +1004,8 @@ local function handleKey(key, char, player)
 end
 
 local function handleTouch(x, y, player)
-    if not adminMode or editBalanceMode or addItemMode then return end
-    if player ~= ADMIN_NAME or not isAdminConnected() then return end
+    if not adminMode or editBalanceMode or addItemMode or addAdminMode then return end
+    if not isAdmin(player) then return end
     if y >= 4 and y <= 3 + adminViewHeight then
         local lineIndex = y - 4
         local realIndex = adminScroll + lineIndex + 1
@@ -847,9 +1016,8 @@ local function handleTouch(x, y, player)
     end
 end
 
-
 local function main()
-    log("SUCCESS", "🚀 Сервер запущен. Ожидание терминалов...")
+    log("SUCCESS", "🚀 Сервер запущен. Администраторы: " .. table.concat(admins, ", "))
     drawInterface()
 
     while true do
@@ -874,7 +1042,6 @@ local function main()
                 goto continue
             end
 
-            -- Проверка на спам
             local last = sessions["__modem_"..from] or 0
             if os.time() - last < 0.5 then
                 log("WARN", "Спам от " .. from)
@@ -882,7 +1049,6 @@ local function main()
             end
             sessions["__modem_"..from] = os.time()
 
-            -- Логируем только важные события
             logIncoming(from, msg)
 
             if msg.op == "register" then
