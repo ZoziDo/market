@@ -2381,13 +2381,13 @@ local function main()
             goto continue
 
         elseif e == "scroll" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
-            local playerName = ev[5]
+            local playerName = ev[6] or "Неизвестный"
             if not isPimOwner(playerName) then
                 goto continue
             end
-            local direction = ev[6]
-            local x = ev[3]
-            local y = ev[4]
+            local direction = ev[5] or 0
+            local x = ev[3] or 0
+            local y = ev[4] or 0
             if x >= 2 and x <= 78 and y >= 7 and y <= 21 then
                 if direction == -1 then
                     smoothScroll(1)
