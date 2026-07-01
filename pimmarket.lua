@@ -2444,8 +2444,6 @@ local function main()
             debugLog("  🏁 Конец обработки TOUCH, screen=" .. currentScreen)
             goto continue
         end
-            end
-            goto continue
 
         elseif e == "scroll" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
             local playerName = ev[5]
