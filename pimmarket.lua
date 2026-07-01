@@ -289,7 +289,7 @@ local function drawBigTitle()
         "   ╚████╔╝ ██║██║",
         "    ╚═══╝  ╚═╝╚═╝",
     }
-    local darkonOffset = 8
+    local darkonOffset = 18
     local darkonX = math.floor((80 - #darkonLines[1]) / 2) + darkonOffset
     for i, line in ipairs(darkonLines) do
         gpu.set(darkonX, 4 + i, line)
