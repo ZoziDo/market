@@ -9,8 +9,8 @@ items.sellItems = {
     {displayName = "Железная руда",           internalName = "minecraft:iron_ore",     qty = 1294724, price = 0.25},
     {displayName = "Железный блок",           internalName = "minecraft:iron_block",     qty = 1309081, price = 0.95},
     {displayName = "Железный слиток",         internalName = "minecraft:iron_ingot",     qty = 1294724, price = 0.11},
-    {displayName = "Медный слиток",        internalName = "IC2:itemIngot",      qty = 1310720, price = 0.25},
-    {displayName = "Медная руда",          internalName = "IC2:blockOreCopper",     qty = 1310709, price = 0.95},
+    {displayName = "Медный слиток",           internalName = "IC2:itemIngot",      qty = 1310720, price = 0.25},
+    {displayName = "Медная руда",             internalName = "IC2:blockOreCopper",     qty = 1310709, price = 0.95},
     {displayName = "Палладий-106",            internalName = "dwcity:X32",     qty = 1310709, price = 157.9}
 
 }
