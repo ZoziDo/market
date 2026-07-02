@@ -1,6 +1,5 @@
 -- ============================================
 -- TELEGRAM БОТ ДЛЯ PIM MARKET
--- Отдельный файл, работает параллельно с pimserver.lua
 -- ============================================
 
 local component = require("component")
@@ -11,18 +10,12 @@ local internet = require("internet")
 local filesystem = require("filesystem")
 local computer = require("computer")
 
--- ============================================
--- НАСТРОЙКИ (ЗАМЕНИ НА СВОИ!)
--- ============================================
+
 local TELEGRAM_TOKEN = "8780133006:AAF2Zg7Dv_mr-E1-bgVuGDVsKYvyuwizuaE"
 local TELEGRAM_CHAT_ID = "492178371"
 
--- АДРЕС ТВОЕГО PIMSERVER (УЗНАЙ КОМАНДОЙ: lua -e 'local m=require("component").modem; print(m.address)')
 local PIM_SERVER = "9aae30d7-90cc-4da0-9789-7c8636e4fddc"
 
--- ============================================
--- ИНИЦИАЛИЗАЦИЯ
--- ============================================
 modem.open(0xffef)
 local lastUpdateId = 0
 local botRunning = true
@@ -39,14 +32,9 @@ print("")
 print("✅ Бот запущен! Жду команды...")
 print("")
 
--- ============================================
--- ФУНКЦИИ ОТПРАВКИ В TELEGRAM
--- ============================================
-
 local function sendTelegram(text, keyboard)
     if not text then return false end
     
-    -- Экранируем текст для URL
     local encodedText = text:gsub(" ", "%%20")
     encodedText = encodedText:gsub("\n", "%%0A")
     encodedText = encodedText:gsub("#", "%%23")
@@ -73,16 +61,10 @@ local function sendTelegram(text, keyboard)
     end
 end
 
--- ============================================
--- КЛАВИАТУРЫ
--- ============================================
-
--- Главное меню
 local function getMainKeyboard()
     return '{"keyboard": [["👥 Игроки", "📊 Статистика"], ["💰 Баланс", "👑 Админы"], ["📦 Добавить предмет", "🔄 Обновить"], ["⏸️ Пауза", "🚫 Закрыть"]], "resize_keyboard": true}'
 end
 
--- Клавиатура с игроками
 local function getPlayersKeyboard(playersList)
     local keyboard = '{"keyboard": ['
     local row = {}
@@ -106,10 +88,6 @@ local function getPlayersKeyboard(playersList)
     return keyboard
 end
 
--- ============================================
--- ОТПРАВКА КОМАНД В PIMSERVER
--- ============================================
-
 local function sendToPimServer(command, data, callback)
     local msg = {
         op = "web_command",
@@ -125,7 +103,6 @@ local function sendToPimServer(command, data, callback)
     
     modem.send(PIM_SERVER, 0xffef, serialization.serialize(msg))
     
-    -- Ждем ответ
     local start = os.clock()
     while os.clock() - start < 5 do
         local ev = {event.pull(0.2)}
@@ -144,22 +121,16 @@ local function sendToPimServer(command, data, callback)
     return nil
 end
 
--- ============================================
--- ОБРАБОТЧИК КОМАНД
--- ============================================
-
 local function handleCommand(text)
     if not text or text == "" then return end
     
     print("📥 Команда: " .. text)
     
-    -- ========== ГЛАВНОЕ МЕНЮ ==========
     if text == "/start" or text == "🔙 Назад" then
         sendTelegram("🛒 **PIM Market Admin**\n\nВыберите действие:", getMainKeyboard())
         return
     end
     
-    -- ========== ИГРОКИ ==========
     if text == "👥 Игроки" then
         local response = sendToPimServer("get_players")
         if response and response.players then
@@ -186,7 +157,6 @@ local function handleCommand(text)
         return
     end
     
-    -- ========== СТАТИСТИКА ==========
     if text == "📊 Статистика" then
         local response = sendToPimServer("get_stats")
         if response then
@@ -204,7 +174,6 @@ local function handleCommand(text)
         return
     end
     
-    -- ========== АДМИНЫ ==========
     if text == "👑 Админы" then
         local response = sendToPimServer("get_admins")
         if response and response.admins then
@@ -223,7 +192,6 @@ local function handleCommand(text)
         return
     end
     
-    -- ========== ПАУЗА ==========
     if text == "⏸️ Пауза" then
         local response = sendToPimServer("toggle_pause")
         if response and response.success then
@@ -235,7 +203,6 @@ local function handleCommand(text)
         return
     end
     
-    -- ========== ОБНОВИТЬ ==========
     if text == "🔄 Обновить" then
         sendTelegram("🔄 **Отправка обновления** всем терминалам...", getMainKeyboard())
         -- Отправляем обновление через pimserver
@@ -244,7 +211,6 @@ local function handleCommand(text)
         return
     end
     
-    -- ========== ЗАКРЫТЬ ==========
     if text == "🚫 Закрыть" then
         sendTelegram("🚫 **Закрытие магазина...**", getMainKeyboard())
         local response = sendToPimServer("kill_market")
@@ -252,7 +218,6 @@ local function handleCommand(text)
         return
     end
     
-    -- ========== ДОБАВИТЬ ПРЕДМЕТ ==========
     if text == "📦 Добавить предмет" then
         local msg = "📦 **Добавление предмета**\n\n"
         msg = msg .. "Отправьте команду:\n"
@@ -268,7 +233,6 @@ local function handleCommand(text)
         return
     end
     
-    -- ========== ДОБАВЛЕНИЕ ПРЕДМЕТА (КОМАНДА) ==========
     if text:match("^/additem") then
         local parts = {}
         for part in text:gmatch("%S+") do
@@ -319,13 +283,11 @@ local function handleCommand(text)
         return
     end
     
-    -- ========== БАЛАНС ИГРОКА ==========
     if text == "💰 Баланс" then
         sendTelegram("💰 **Баланс игрока**\n\nВведите имя игрока:", '{"keyboard": [["🔙 Назад"]], "resize_keyboard": true}')
         return
     end
     
-    -- ========== ПРОВЕРКА: ВВЕДЕНО ИМЯ ИГРОКА ==========
     -- Если текст не команда и не кнопка - пробуем найти игрока
     if not text:match("^/") and text ~= "🔙 Назад" and text ~= "👥 Игроки" and text ~= "📊 Статистика" and text ~= "👑 Админы" and text ~= "⏸️ Пауза" and text ~= "🔄 Обновить" and text ~= "🚫 Закрыть" and text ~= "📦 Добавить предмет" and text ~= "💰 Баланс" then
         -- Проверяем, есть ли такой игрок
@@ -349,10 +311,6 @@ local function handleCommand(text)
         return
     end
 end
-
--- ============================================
--- ПРОВЕРКА НОВЫХ СООБЩЕНИЙ
--- ============================================
 
 local function checkUpdates()
     local url = "https://api.telegram.org/bot" .. TELEGRAM_TOKEN .. "/getUpdates?offset=" .. (lastUpdateId + 1) .. "&timeout=10"
@@ -388,11 +346,6 @@ local function checkUpdates()
     end
 end
 
--- ============================================
--- ОСНОВНОЙ ЦИКЛ
--- ============================================
-
--- Отправляем приветственное сообщение
 sendTelegram("🤖 **PIM Market Бот запущен!**\n\nНажмите /start для начала работы.", getMainKeyboard())
 
 while botRunning do
