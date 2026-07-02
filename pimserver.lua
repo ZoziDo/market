@@ -1,4 +1,3 @@
-
 local component = require("component")
 local event = require("event")
 local serialization = require("serialization")
