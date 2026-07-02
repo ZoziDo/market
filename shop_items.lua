@@ -2,7 +2,6 @@ local items = {}
 items.sellItems = {
     {displayName = "Деньги",                  internalName = "customnpcs:npcMoney",       qty = 1308586, price = 1.00},
     {displayName = "Малахит",                 internalName = "dwcity:Malahit", qty = 1310720, price = 500},
-    {displayName = "Древние обломки",         internalName = "etfuturum:ancient_debris", qty = 1310720, price = 30.00},
     {displayName = "Упакованный трофей",      internalName = "dwcity:TrophyBox",  qty = 1310718, price = 150},
     {displayName = "Камень воскрешения",      internalName = "DraconicEvolution:draconium",     qty = 1294724, price = 978.00, damage = 1 },
     {displayName = "Солнечная пыль",          internalName = "dwcity:Splitter_dust",  qty = 1310718, price = 75},
