@@ -10,7 +10,7 @@ local PORT = 8080
 
 -- АДРЕС ТВОЕГО PIMSERVER (ЗАМЕНИ НА СВОЙ!)
 -- Узнай командой: lua -e 'local m=require("component").modem; print(m.address)'
-local SERVER_ADDRESS = "9aae30d7-90cc-4da0-9789-7c8636e4fddc"
+local SERVER_ADDRESS = "2a904dc5-cbac-47de-be90-6f407fa91ecc"
 
 print("")
 print("═══════════════════════════════════════════")
