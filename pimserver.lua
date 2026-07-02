@@ -1,3 +1,4 @@
+
 local component = require("component")
 local event = require("event")
 local serialization = require("serialization")
@@ -7,7 +8,6 @@ local math = require("math")
 local os = require("os")
 local unicode = require("unicode")
 local computer = require("computer")
-local internet = require("internet")
 local TIMEZONE_OFFSET = 3 * 3600 
 
 local modem = component.modem
@@ -16,12 +16,6 @@ modem.open(0xfffe)
 
 event.ignore("interrupted", function() end)
 event.ignore("terminate", function() end)
-
--- ============================================
--- TELEGRAM НАСТРОЙКИ (ЗАМЕНИ НА СВОИ!)
--- ============================================
-local TELEGRAM_TOKEN = "8780133006:AAF2Zg7Dv_mr-E1-bgVuGDVsKYvyuwizuaE"
-local TELEGRAM_CHAT_ID = "492178371"
 
 local tmpfs = component.proxy(computer.tmpAddress())
 local function getRealTimestamp()
@@ -93,6 +87,7 @@ local ACCESS_PASSWORD = "secret"
 local ADMINS_PATH = "/home/admins.db"
 local admins = {}
 
+-- Загружаем список администраторов
 if filesystem.exists(ADMINS_PATH) then
     local file = io.open(ADMINS_PATH, "r")
     if file then
@@ -107,6 +102,7 @@ if filesystem.exists(ADMINS_PATH) then
     end
 end
 
+-- Если нет админов, добавляем ZoziDo по умолчанию
 if #admins == 0 then
     admins = {"ZoziDo"}
     local file = io.open(ADMINS_PATH, "w")
@@ -116,6 +112,7 @@ if #admins == 0 then
     end
 end
 
+-- Функция проверки, является ли игрок администратором
 local function isAdmin(playerName)
     if not playerName then return false end
     for _, name in ipairs(admins) do
@@ -126,8 +123,10 @@ local function isAdmin(playerName)
     return false
 end
 
+-- Функция добавления администратора
 local function addAdmin(playerName)
-    if not playerName or playerName == "" or isAdmin(playerName) then return false end
+    if not playerName or playerName == "" then return false end
+    if isAdmin(playerName) then return false end
     table.insert(admins, playerName)
     local file = io.open(ADMINS_PATH, "w")
     if file then
@@ -138,8 +137,10 @@ local function addAdmin(playerName)
     return false
 end
 
+-- Функция удаления администратора
 local function removeAdmin(playerName)
-    if not playerName or #admins <= 1 then return false end
+    if not playerName or playerName == "" then return false end
+    if #admins <= 1 then return false end -- Нельзя удалить последнего админа
     for i, name in ipairs(admins) do
         if name == playerName then
             table.remove(admins, i)
@@ -153,8 +154,8 @@ local function removeAdmin(playerName)
     end
     return false
 end
+-- ===== КОНЕЦ СИСТЕМЫ АДМИНИСТРАТОРОВ =====
 
--- ===== ДАННЫЕ =====
 local DB_PATH = "/home/players.db"
 local players = {}
 if filesystem.exists(DB_PATH) then
@@ -195,7 +196,6 @@ local function saveGlobalStats()
     file:close()
 end
 
--- ===== ПЕРЕМЕННЫЕ =====
 local owner = nil
 local sessions = {}
 local markets = {}
@@ -211,14 +211,18 @@ local adminViewHeight = 20
 local editBalanceMode = false
 local editingPlayer = nil
 local editInput = ""
+
+-- Режим добавления администратора
 local addAdminMode = false
 local addAdminInput = ""
+
 local addItemMode = false
 local addItemFields = { internal = "", display = "", price_coin = "", price_ema = "0", damage = "0" }
 local addItemCurrentField = 1
 local addItemFieldNames = { "internal", "display", "price_coin", "price_ema", "damage" }
 local addItemResponse = nil
 local addItemResponseTimer = nil
+
 local sellHistory = {}
 local MAX_SELL_HISTORY = 20
 local ACTIVITY_SIZE = 60
@@ -231,7 +235,6 @@ local colWidth = 25
 local logStartY = 20
 local maxLogLines = 14
 local drawing = false
-local lastUpdateId = 0
 
 local function updateScreenSize()
     local w, h = gpu.getResolution()
@@ -320,6 +323,11 @@ local function logIncoming(from, msg)
     end
 end
 
+local function isAdminConnected()
+    local sess = sessions[ADMIN_NAME]
+    return sess and sess.token and os.time() - (sess.lastAction or 0) < SESSION_TIMEOUT
+end
+
 local function updateAdminPlayerList()
     adminPlayerList = {}
     for name, data in pairs(players) do
@@ -331,7 +339,7 @@ end
 local function broadcastUpdate()
     if next(markets) == nil then
         addLog("Нет подключённых маркетов для обновления", ansi.red)
-        return 0
+        return
     end
     local sent = 0
     for addr, _ in pairs(markets) do
@@ -339,13 +347,12 @@ local function broadcastUpdate()
         sent = sent + 1
     end
     log("SUCCESS", "Обновление отправлено " .. sent .. " терминалам")
-    return sent
 end
 
 local function broadcastKill()
     if next(markets) == nil then
         addLog("Нет подключённых маркетов для завершения", ansi.red)
-        return 0
+        return
     end
     local sent = 0
     for addr, _ in pairs(markets) do
@@ -353,7 +360,6 @@ local function broadcastKill()
         sent = sent + 1
     end
     log("WARN", "Команда завершения отправлена " .. sent .. " терминалам")
-    return sent
 end
 
 local function drawAdminPanel()
@@ -381,6 +387,7 @@ local function drawAdminPanel()
     io.write(title .. string.rep(" ", screenW - #title))
     resetColor()
     
+    -- Линия под заголовком (из =)
     setColor(ansi.cyan)
     gotoxy(1, 3)
     io.write(string.rep("=", screenW))
@@ -418,6 +425,7 @@ local function drawAdminPanel()
     drawing = false
 end
 
+-- Увеличенное окно для добавления администратора
 local function drawAddAdminWindow()
     if drawing then return end
     drawing = true
@@ -464,6 +472,7 @@ local function drawAddAdminWindow()
     drawing = false
 end
 
+-- Увеличенное окно для редактирования баланса
 local function drawEditBalanceWindow()
     if drawing then return end
     drawing = true
@@ -512,6 +521,7 @@ local function drawEditBalanceWindow()
     drawing = false
 end
 
+-- Увеличенное окно для добавления предмета
 local function drawAddItemForm()
     if drawing then return end
     drawing = true
@@ -700,7 +710,6 @@ local function getOrCreatePlayer(name)
         }
         saveDB()
         log("SUCCESS", "🎮 Новый игрок: " .. name)
-        sendTelegram("🆕 **Новый игрок!**\n👤 " .. name .. "\n📅 " .. getRealDateTimeString())
     end
     return players[name]
 end
@@ -710,330 +719,18 @@ local function validateSession(name, token)
     return s and s.token == token and os.time() - (s.lastAction or 0) < SESSION_TIMEOUT
 end
 
--- ============================================
--- TELEGRAM ФУНКЦИИ
--- ============================================
-
-local function sendTelegram(text, keyboard)
-    if not text then return false end
-    local encodedText = text:gsub(" ", "%%20"):gsub("\n", "%%0A"):gsub("#", "%%23"):gsub("&", "%%26")
-    local url = "https://api.telegram.org/bot" .. TELEGRAM_TOKEN .. "/sendMessage"
-    local postData = "chat_id=" .. TELEGRAM_CHAT_ID .. "&text=" .. encodedText
-    if keyboard then postData = postData .. "&reply_markup=" .. keyboard end
-    
-    local success = pcall(function()
-        internet.request(url, postData, {["Content-Type"] = "application/x-www-form-urlencoded"})
-    end)
-    return success
-end
-
-local function getMainKeyboard()
-    return '{"keyboard": [["👥 Игроки", "📊 Статистика"], ["💰 Баланс", "👑 Админы"], ["📦 Добавить предмет", "🔄 Обновить"], ["⏸️ Пауза", "🚫 Закрыть"]], "resize_keyboard": true}'
-end
-
-local function getPlayersKeyboard(playersList)
-    local keyboard = '{"keyboard": ['
-    local row = {}
-    local count = 0
-    for i, name in ipairs(playersList) do
-        table.insert(row, '"' .. name .. '"')
-        count = count + 1
-        if #row == 2 then
-            keyboard = keyboard .. '[' .. table.concat(row, ",") .. '],'
-            row = {}
-        end
-        if count >= 10 then break end
-    end
-    if #row > 0 then
-        keyboard = keyboard .. '[' .. table.concat(row, ",") .. '],'
-    end
-    keyboard = keyboard .. '["🔙 Назад"]], "resize_keyboard": true}'
-    return keyboard
-end
-
-local function handleTelegramCommand(text)
-    if not text or text == "" then return end
-    
-    if text == "/start" or text == "🔙 Назад" then
-        sendTelegram("🛒 **PIM Market Admin**\n\nВыберите действие:", getMainKeyboard())
-        return
-    end
-    
-    if text == "👥 Игроки" then
-        local msg = "👥 **Список игроков:**\n═══════════════════\n"
-        local playersKeys = {}
-        for name, data in pairs(players) do
-            msg = msg .. (#playersKeys + 1) .. ". " .. name
-            if data.banned then msg = msg .. " 🚫" end
-            msg = msg .. "\n"
-            table.insert(playersKeys, name)
-            if #playersKeys >= 10 then
-                msg = msg .. "\n... и ещё " .. (#players - 10) .. " игроков"
-                break
-            end
-        end
-        if #playersKeys == 0 then msg = msg .. "Нет игроков" end
-        sendTelegram(msg, getPlayersKeyboard(playersKeys))
-        return
-    end
-    
-    if text == "📊 Статистика" then
-        local totalPlayers = 0
-        local totalTransactions = 0
-        local bannedCount = 0
-        for _, p in pairs(players) do
-            totalPlayers = totalPlayers + 1
-            totalTransactions = totalTransactions + (p.transactions or 0)
-            if p.banned then bannedCount = bannedCount + 1 end
-        end
-        local msg = "📊 **Статистика магазина**\n═══════════════════\n"
-        msg = msg .. "👥 Игроков: " .. totalPlayers .. "\n"
-        msg = msg .. "💰 Транзакций: " .. totalTransactions .. "\n"
-        msg = msg .. "🚫 Забанов: " .. bannedCount .. "\n"
-        msg = msg .. "👑 Админов: " .. #admins .. "\n"
-        msg = msg .. "⏸️ Пауза: " .. (shopPaused and "🔴 Включена" or "🟢 Выключена") .. "\n"
-        sendTelegram(msg, getMainKeyboard())
-        return
-    end
-    
-    if text == "👑 Админы" then
-        local msg = "👑 **Администраторы:**\n═══════════════════\n"
-        for i, name in ipairs(admins) do
-            msg = msg .. i .. ". " .. name .. "\n"
-        end
-        if #admins == 0 then msg = msg .. "Нет администраторов" end
-        sendTelegram(msg, getMainKeyboard())
-        return
-    end
-    
-    if text == "⏸️ Пауза" then
-        shopPaused = not shopPaused
-        for addr in pairs(markets) do
-            modem.send(addr, 0xffef, serialization.serialize({op="shop_paused", paused=shopPaused}))
-        end
-        sendTelegram("⏸️ Магазин **" .. (shopPaused and "🔴 ПРИОСТАНОВЛЕН" or "🟢 ВОЗОБНОВЛЕН") .. "**", getMainKeyboard())
-        return
-    end
-    
-    if text == "🔄 Обновить" then
-        local sent = broadcastUpdate()
-        sendTelegram("✅ **Обновление отправлено** " .. sent .. " терминалам!", getMainKeyboard())
-        return
-    end
-    
-    if text == "🚫 Закрыть" then
-        local sent = broadcastKill()
-        sendTelegram("🚫 **Магазин закрыт!** " .. sent .. " терминалов отключены.", getMainKeyboard())
-        return
-    end
-    
-    if text == "📦 Добавить предмет" then
-        local msg = "📦 **Добавление предмета**\n\n"
-        msg = msg .. "Отправьте команду:\n"
-        msg = msg .. "`/additem internalName displayName цена_coin цена_ema`\n\n"
-        msg = msg .. "📌 **Пример:**\n"
-        msg = msg .. "`/additem minecraft:diamond Алмаз 10 5`"
-        sendTelegram(msg, getMainKeyboard())
-        return
-    end
-    
-    if text:match("^/additem") then
-        local parts = {}
-        for part in text:gmatch("%S+") do table.insert(parts, part) end
-        if #parts >= 4 then
-            local internal = parts[2]
-            local display = parts[3]
-            local coin = tonumber(parts[4]) or 0
-            local ema = tonumber(parts[5]) or 0
-            if coin < 0 then coin = 0 end
-            if ema < 0 then ema = 0 end
-            if coin == 0 and ema == 0 then
-                sendTelegram("❌ **Ошибка!**\nЦена не может быть нулевой", getMainKeyboard())
-                return
-            end
-            local buyItems = {}
-            if filesystem.exists("/home/buy_items.lua") then
-                buyItems = dofile("/home/buy_items.lua") or {}
-            end
-            table.insert(buyItems, { internalName = internal, displayName = display, price_coin = coin, price_ema = ema, damage = 0 })
-            local file = io.open("/home/buy_items.lua", "w")
-            file:write("return " .. serialization.serialize(buyItems))
-            file:close()
-            broadcastUpdate()
-            local msg = "✅ **Предмет добавлен!**\n📦 " .. display .. "\n💰 " .. coin .. " ₵\n💚 " .. ema .. " ۞"
-            sendTelegram(msg, getMainKeyboard())
-        else
-            sendTelegram("❌ **Ошибка!**\nФормат: `/additem internalName displayName цена_coin цена_ema`", getMainKeyboard())
-        end
-        return
-    end
-    
-    if text == "💰 Баланс" then
-        sendTelegram("💰 **Баланс игрока**\n\nВведите имя игрока:", '{"keyboard": [["🔙 Назад"]], "resize_keyboard": true}')
-        return
-    end
-    
-    -- Проверка имени игрока
-    if not text:match("^/") and text ~= "🔙 Назад" and text ~= "👥 Игроки" and text ~= "📊 Статистика" and text ~= "👑 Админы" and text ~= "⏸️ Пауза" and text ~= "🔄 Обновить" and text ~= "🚫 Закрыть" and text ~= "📦 Добавить предмет" and text ~= "💰 Баланс" then
-        local found = false
-        for name, data in pairs(players) do
-            if name:lower() == text:lower() then
-                local msg = "👤 **" .. name .. "**\n═══════════════════\n"
-                msg = msg .. "💰 Coina: " .. string.format("%.2f", data.balance or 0) .. " ₵\n"
-                msg = msg .. "💚 ЭМЫ: " .. string.format("%.2f", data.emaBalance or 0) .. " ۞\n"
-                msg = msg .. "📊 Транзакций: " .. (data.transactions or 0) .. "\n"
-                if data.banned then msg = msg .. "🚫 **Забанен**" else msg = msg .. "✅ **Активен**" end
-                sendTelegram(msg, getMainKeyboard())
-                found = true
-                break
-            end
-        end
-        if not found then
-            sendTelegram("❌ Игрок **" .. text .. "** не найден!", getMainKeyboard())
-        end
-        return
-    end
-end
-
-local function checkTelegramUpdates()
-    local url = "https://api.telegram.org/bot" .. TELEGRAM_TOKEN .. "/getUpdates?offset=" .. (lastUpdateId + 1) .. "&timeout=5"
-    local success, response = pcall(function() return internet.request(url) end)
-    if not success then return end
-    if type(response) == "table" then
-        local responseData = ""
-        while true do
-            local chunk = response()
-            if not chunk then break end
-            responseData = responseData .. chunk
-        end
-        local ok, parsed = pcall(serialization.unserialize, responseData)
-        if ok and parsed and parsed.result then
-            for _, update in ipairs(parsed.result) do
-                if update.update_id then lastUpdateId = update.update_id end
-                if update.message and update.message.text then
-                    handleTelegramCommand(update.message.text)
-                end
-            end
-        end
-    end
-end
-
--- ===== ВЕБ-АДМИН ОБРАБОТЧИК =====
-local function handleWebCommand(msg, from)
-    if not isAdmin(msg.admin_name) then
-        modem.send(from, 0xffef, serialization.serialize({op="web_response", error="Доступ запрещен"}))
-        return
-    end
-    
-    if msg.command == "get_players" then
-        local playerList = {}
-        for name, data in pairs(players) do
-            table.insert(playerList, { name = name, balance = data.balance or 0, emaBalance = data.emaBalance or 0, transactions = data.transactions or 0, banned = data.banned or false, agreed = data.agreed or false })
-        end
-        modem.send(from, 0xffef, serialization.serialize({op="web_response", command="players", players=playerList, admins=admins, total=#playerList}))
-        
-    elseif msg.command == "set_balance" then
-        local player = players[msg.name]
-        if player then
-            if msg.coin ~= nil then player.balance = msg.coin end
-            if msg.ema ~= nil then player.emaBalance = msg.ema end
-            saveDB()
-            modem.send(from, 0xffef, serialization.serialize({op="web_response", command="balance", success=true}))
-        end
-        
-    elseif msg.command == "toggle_ban" then
-        local player = players[msg.name]
-        if player then
-            player.banned = not player.banned
-            saveDB()
-            modem.send(from, 0xffef, serialization.serialize({op="web_response", command="ban", success=true, banned=player.banned}))
-        end
-        
-    elseif msg.command == "reset_player" then
-        local player = players[msg.name]
-        if player then
-            player.balance = 0
-            player.emaBalance = 0
-            player.transactions = 0
-            saveDB()
-            modem.send(from, 0xffef, serialization.serialize({op="web_response", command="reset", success=true}))
-        end
-        
-    elseif msg.command == "add_item" then
-        if msg.internal and msg.display then
-            local buyItems = {}
-            if filesystem.exists("/home/buy_items.lua") then
-                buyItems = dofile("/home/buy_items.lua") or {}
-            end
-            table.insert(buyItems, { internalName = msg.internal, displayName = msg.display, price_coin = msg.price_coin or 0, price_ema = msg.price_ema or 0, damage = msg.damage or 0 })
-            local file = io.open("/home/buy_items.lua", "w")
-            file:write("return " .. serialization.serialize(buyItems))
-            file:close()
-            broadcastUpdate()
-            modem.send(from, 0xffef, serialization.serialize({op="web_response", command="add_item", success=true}))
-        end
-        
-    elseif msg.command == "get_admins" then
-        modem.send(from, 0xffef, serialization.serialize({op="web_response", command="admins", admins=admins}))
-        
-    elseif msg.command == "add_admin" then
-        if msg.name and not isAdmin(msg.name) then
-            addAdmin(msg.name)
-            modem.send(from, 0xffef, serialization.serialize({op="web_response", command="add_admin", success=true}))
-        end
-        
-    elseif msg.command == "remove_admin" then
-        if msg.name and #admins > 1 then
-            removeAdmin(msg.name)
-            modem.send(from, 0xffef, serialization.serialize({op="web_response", command="remove_admin", success=true}))
-        end
-        
-    elseif msg.command == "toggle_pause" then
-        shopPaused = not shopPaused
-        for addr in pairs(markets) do
-            modem.send(addr, 0xffef, serialization.serialize({op="shop_paused", paused=shopPaused}))
-        end
-        modem.send(from, 0xffef, serialization.serialize({op="web_response", command="pause", success=true, paused=shopPaused}))
-        
-    elseif msg.command == "get_stats" then
-        local totalPlayers = 0
-        local totalTransactions = 0
-        local bannedCount = 0
-        for _, p in pairs(players) do
-            totalPlayers = totalPlayers + 1
-            totalTransactions = totalTransactions + (p.transactions or 0)
-            if p.banned then bannedCount = bannedCount + 1 end
-        end
-        modem.send(from, 0xffef, serialization.serialize({op="web_response", command="stats", totalPlayers=totalPlayers, totalTransactions=totalTransactions, bannedCount=bannedCount, adminsCount=#admins, shopPaused=shopPaused}))
-        
-    elseif msg.command == "update_market" then
-        broadcastUpdate()
-        modem.send(from, 0xffef, serialization.serialize({op="web_response", command="update", success=true}))
-        
-    elseif msg.command == "kill_market" then
-        broadcastKill()
-        modem.send(from, 0xffef, serialization.serialize({op="web_response", command="kill", success=true}))
-        
-    elseif msg.command == "get_logs" then
-        local logs = {}
-        for i = math.max(1, #logBuffer - 50), #logBuffer do
-            table.insert(logs, logBuffer[i])
-        end
-        modem.send(from, 0xffef, serialization.serialize({op="web_response", command="logs", logs=logs}))
-    end
-end
-
--- ===== ОСНОВНЫЕ ОБРАБОТЧИКИ =====
 local function handleKey(key, char, player)
     local isPlayerAdmin = isAdmin(player)
+    local isAdminConnected = isPlayerAdmin and sessions[player] and sessions[player].token
 
+    -- Режим добавления администратора
     if addAdminMode then
-        if char == 27 or char == 93 then
+        if char == 27 or char == 93 then -- ESC или ]
             addAdminMode = false
             addAdminInput = ""
             drawAdminPanel()
             return
-        elseif char == 13 then
+        elseif char == 13 then -- Enter
             if addAdminInput ~= "" then
                 if addAdmin(addAdminInput) then
                     log("SUCCESS", "👑 " .. addAdminInput .. " добавлен в администраторы")
@@ -1046,7 +743,7 @@ local function handleKey(key, char, player)
             addAdminMode = false
             addAdminInput = ""
             return
-        elseif char == 8 then
+        elseif char == 8 then -- Backspace
             addAdminInput = addAdminInput:sub(1, -2)
             drawAddAdminWindow()
             return
@@ -1062,7 +759,7 @@ local function handleKey(key, char, player)
     end
 
     if addItemMode then
-        if char == 27 or char == 93 then
+        if char == 27 or char == 93 then -- ESC или ]
             addItemMode = false
             addItemResponse = nil
             if adminMode then drawAdminPanel() else drawInterface() end
@@ -1156,7 +853,7 @@ local function handleKey(key, char, player)
     end
 
     if editBalanceMode then
-        if char == 27 or char == 93 then
+        if char == 27 or char == 93 then -- ESC или ]
             editBalanceMode = false
             editingPlayer = nil
             editInput = ""
@@ -1207,7 +904,7 @@ local function handleKey(key, char, player)
             return
         end
 
-        if key == 200 then
+        if key == 200 then -- Вверх
             if selectedAdminIndex > 1 then
                 selectedAdminIndex = selectedAdminIndex - 1
                 if selectedAdminIndex < adminScroll + 1 then
@@ -1216,7 +913,7 @@ local function handleKey(key, char, player)
                 drawAdminPanel()
             end
             return
-        elseif key == 208 then
+        elseif key == 208 then -- Вниз
             if selectedAdminIndex < #adminPlayerList then
                 selectedAdminIndex = selectedAdminIndex + 1
                 if selectedAdminIndex > adminScroll + adminViewHeight then
@@ -1345,24 +1042,13 @@ local function handleTouch(x, y, player)
     end
 end
 
--- ===== ОСНОВНОЙ ЦИКЛ =====
 local function main()
     log("SUCCESS", "🚀 Сервер запущен. Администраторы: " .. table.concat(admins, ", "))
-    sendTelegram("🤖 **PIM Market Бот запущен!**\n\nНажмите /start для начала работы.", getMainKeyboard())
     drawInterface()
-
-    local lastTelegramCheck = 0
-    local telegramCheckInterval = 2
 
     while true do
         local ev = {event.pull(0.5)}
         local etype = ev[1]
-
-        -- Проверка Telegram каждые 2 секунды
-        if os.time() - lastTelegramCheck > telegramCheckInterval then
-            lastTelegramCheck = os.time()
-            pcall(checkTelegramUpdates)
-        end
 
         if etype == "key_down" then
             local key = ev[4]
@@ -1495,14 +1181,13 @@ local function main()
                 if internalName == "customnpcs:npcMoney" then
                     player.emaBalance = (player.emaBalance or 0) + value
                     log("SUCCESS", "💚 " .. msg.name .. " пополнил ЭМЫ: " .. (msg.item or "?") .. " x" .. qty .. " на " .. string.format("%.2f", value) .. " ۞")
-                    sendTelegram("💰 **Пополнение!**\n👤 " .. msg.name .. "\n📦 " .. (msg.item or "?") .. " x" .. qty .. "\n💚 +" .. string.format("%.2f", value) .. " ۞")
                 else
                     player.balance = (player.balance or 0) + value
                     log("SUCCESS", "💰 " .. msg.name .. " пополнил Coina: " .. (msg.item or "?") .. " x" .. qty .. " на " .. string.format("%.2f", value) .. " ₵")
-                    sendTelegram("💰 **Пополнение!**\n👤 " .. msg.name .. "\n📦 " .. (msg.item or "?") .. " x" .. qty .. "\n💰 +" .. string.format("%.2f", value) .. " ₵")
                 end
                 player.transactions = (player.transactions or 0) + 1
                 sessions[msg.name].lastAction = os.time()
+
                 globalStats.totalSells = (globalStats.totalSells or 0) + 1
                 saveGlobalStats()
                 saveDB()
@@ -1537,19 +1222,18 @@ local function main()
                 player.emaBalance = player.emaBalance - value_ema
                 player.transactions = (player.transactions or 0) + 1
                 sessions[msg.name].lastAction = os.time()
+
                 globalStats.totalBuys = (globalStats.totalBuys or 0) + 1
                 saveGlobalStats()
                 saveDB()
                 recordTransaction()
-                
                 local priceStr = ""
                 if value_coin > 0 then priceStr = priceStr .. string.format("%.2f", value_coin) .. "₵" end
                 if value_ema > 0 then
-                    if priceStr ~= "" then priceStr = priceStr .. " + "
+                    if priceStr ~= "" then priceStr = priceStr .. " + " end
                     priceStr = priceStr .. string.format("%.2f", value_ema) .. "۞"
                 end
                 log("SUCCESS", "🛒 " .. msg.name .. " купил " .. (msg.item or "?") .. " x" .. (msg.qty or 0) .. " за " .. priceStr)
-                sendTelegram("🛒 **Покупка!**\n👤 " .. msg.name .. "\n📦 " .. (msg.item or "?") .. " x" .. (msg.qty or 0) .. "\n💳 " .. priceStr)
                 if not adminMode and not editBalanceMode and not addItemMode then drawInterface() end
                 goto continue
             elseif msg.op == "report" then
@@ -1562,7 +1246,6 @@ local function main()
                 saveGlobalStats()
                 log("IMPORTANT", "📩 Репорт от " .. msg.name .. " (" .. msg.time .. ")")
                 log("INFO", "   Текст: " .. (msg.text or ""))
-                sendTelegram("📩 **Репорт!**\n👤 " .. msg.name .. "\n📝 " .. (msg.text or ""))
                 local file = io.open("/home/reports.log", "a")
                 if file then
                     file:write("[" .. msg.time .. "] " .. msg.name .. ": " .. msg.text .. "\n")
@@ -1585,7 +1268,6 @@ local function main()
                     saveDB()
                     sessions[msg.name].lastAction = os.time()
                     log("IMPORTANT", "📝 " .. msg.name .. " принял пользовательское соглашение")
-                    sendTelegram("📝 **Соглашение принято!**\n👤 " .. msg.name)
                     modem.send(from, 0xffef, serialization.serialize({ op = "agree", success = true, agreed = true }))
                 else
                     modem.send(from, 0xffef, serialization.serialize({ op = "agree", error = true, message = "Игрок не найден" }))
@@ -1654,8 +1336,6 @@ local function main()
                 modem.send(from, 0xffef, serialization.serialize({op="add_feedback_response", success=true}))
                 log("INFO", "📝 Новый отзыв от " .. msg.name)
                 goto continue
-            elseif msg.op == "web_command" then
-                handleWebCommand(msg, from)
             end
         end
         ::continue::
