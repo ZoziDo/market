@@ -8,8 +8,6 @@ local computer = require("computer")
 local modem = component.modem
 local PORT = 8080
 
--- АДРЕС ТВОЕГО PIMSERVER (ЗАМЕНИ НА СВОЙ!)
--- Узнай командой: lua -e 'local m=require("component").modem; print(m.address)'
 local SERVER_ADDRESS = "2a904dc5-cbac-47de-be90-6f407fa91ecc"
 
 print("")
@@ -21,7 +19,7 @@ print("🔍 Сервер ищет pimserver по адресу: " .. SERVER_ADDRE
 print("📡 Мой адрес модема: " .. modem.address)
 print("")
 
--- Чтение HTML файла
+
 local function readHTML()
     local path = "/home/web/static/index.html"
     if filesystem.exists(path) then
@@ -37,7 +35,7 @@ local function readHTML()
     return nil
 end
 
--- Отправка команды на сервер
+
 local function sendCommand(command, data, callback)
     local msg = {
         op = "web_command",
@@ -45,17 +43,17 @@ local function sendCommand(command, data, callback)
         admin_name = "ZoziDo"
     }
     
-    -- Добавляем данные
+
     for k, v in pairs(data or {}) do
         msg[k] = v
     end
     
     print("📤 Отправка команды: " .. command .. " на " .. SERVER_ADDRESS)
     
-    -- Отправляем на сервер
+
     modem.send(SERVER_ADDRESS, 0xffef, serialization.serialize(msg))
     
-    -- Ждем ответ
+
     local timeout = os.clock() + 3
     while os.clock() < timeout do
         local ev = {event.pull(0.1)}
@@ -126,7 +124,7 @@ local function parseRequest(data)
     }
 end
 
--- Отправка ответа
+
 local function sendResponse(socket, status, headers, body)
     local response = "HTTP/1.1 " .. status .. "\r\n"
     headers["Content-Length"] = tostring(#body)
@@ -140,7 +138,7 @@ local function sendResponse(socket, status, headers, body)
     socket.close()
 end
 
--- Обработка API запросов
+
 local function handleAPI(socket, request)
     local path = request.path
     local body = request.body ~= "" and serialization.unserialize(request.body) or {}
@@ -285,12 +283,12 @@ local function handleAPI(socket, request)
     end
 end
 
--- Запуск веб-сервера
+
 modem.open(PORT)
 print("✅ Веб-сервер запущен на порту " .. PORT)
 print("📱 Для доступа с телефона:")
 
--- Получаем IP
+
 local ip = "localhost"
 if component.isAvailable("internet") then
     local success, host = pcall(function()
@@ -309,7 +307,7 @@ print("")
 print("🔄 Сервер ожидает подключений...")
 print("")
 
--- Основной цикл с защитой от ошибок
+
 while true do
     local success, err = pcall(function()
         local ev = {event.pull(0.5)}
