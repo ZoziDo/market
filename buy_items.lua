@@ -1,5 +1,6 @@
 
 return {
+  { internalName = "IC2:itemCofeeBeans", displayName = "Кофейные зёрна", price_coin = 0.00, price_ema = 1.00 },
   { internalName = "metadrive:block_reactor_coolant_injector", displayName = "Впрыскиватель хладагента", price_coin = 480.00, price_ema = 0.00 },
   { internalName = "minecraft:dye", displayName = "Чернильный мешок", price_coin = 1.10, price_ema = 0.00 },
   { internalName = "BuildCraft|Silicon:laserTableBlock", displayName = "Сборочный стол", price_coin = 0.00, price_ema = 2.81 },
