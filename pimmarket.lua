@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА112345
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА1
 -- ============================================================
 
 local function setupAutoStart()
@@ -4247,91 +4247,63 @@ end
 function showAuthPopup()
     writeDebugLog("showAuthPopup()")
     currentScreen = "auth_popup"
-    authCodeInput = ""  -- ОЧИЩАЕМ ПРИ ОТКРЫТИИ
+    authCodeInput = ""  -- ★★★ ВАЖНО: ОЧИЩАЕМ ПРИ ОТКРЫТИИ ★★★
     
     local screenW, screenH = getScreenSize()
     
-    -- РАЗМЕРЫ ОКНА
+    -- ★★★ РАЗМЕРЫ ОКНА ★★★
     local winW = math.min(52, screenW - 6)
     local winH = math.min(20, screenH - 6)
     local winX = math.floor((screenW - winW) / 2) + 1
     local winY = math.floor((screenH - winH) / 2) + 1
     
-    -- ФУНКЦИЯ ДЛЯ ОТРИСОВКИ ВСЕГО ОКНА
-    local function drawAuthWindow()
-        gpu.setBackground(UI.COLORS.bg_main)
-        gpu.fill(1, 1, screenW, screenH, " ")
-        
-        gpu.setBackground(UI.COLORS.bg_card)
-        gpu.fill(winX, winY, winW, winH, " ")
-        
-        gpu.setForeground(UI.COLORS.accent)
-        gpu.fill(winX, winY, winW, 1, "═")
-        gpu.fill(winX, winY + winH - 1, winW, 1, "═")
-        for i = 1, winH - 2 do
-            gpu.set(winX, winY + i, "║")
-            gpu.set(winX + winW - 1, winY + i, "║")
-        end
-        gpu.set(winX, winY, "╔")
-        gpu.set(winX + winW - 1, winY, "╗")
-        gpu.set(winX, winY + winH - 1, "╚")
-        gpu.set(winX + winW - 1, winY + winH - 1, "╝")
-        
-        gpu.setForeground(UI.COLORS.accent_dim)
-        gpu.fill(winX + 4, winY + 2, winW - 8, 1, "─")
-        
-        local title = "🔐 АУТЕНТИФИКАЦИЯ"
-        gpu.setForeground(UI.COLORS.accent)
-        gpu.set(winX + math.floor((winW - unicode.len(title)) / 2), winY + 1, title)
-        
-        local playerLabel = "👤 Игрок: "
-        local playerName = currentPlayer or "Неизвестно"
-        local playerY = winY + 4
-        gpu.setForeground(UI.COLORS.text_main)
-        gpu.set(winX + math.floor((winW - unicode.len(playerLabel .. playerName)) / 2), playerY, playerLabel)
-        gpu.setForeground(UI.COLORS.accent)
-        gpu.set(winX + math.floor((winW - unicode.len(playerLabel .. playerName)) / 2) + unicode.len(playerLabel), playerY, playerName)
-        
-        -- ИНСТРУКЦИЯ
-        local instr1 = "📋 Введите код из браузера"
-        gpu.setForeground(UI.COLORS.text_main)
-        gpu.set(winX + math.floor((winW - unicode.len(instr1)) / 2), winY + 6, instr1)
-        
-        local instr2 = "(код отображается на сайте)"
-        gpu.setForeground(UI.COLORS.text_muted)
-        gpu.set(winX + math.floor((winW - unicode.len(instr2)) / 2), winY + 7, instr2)
-        
-        -- ПОЛЕ ВВОДА
-        drawAuthInputField(authCodeInput, winX, winY, winW, 9, true)
-        
-        -- КНОПКИ
-        local btnW = 14
-        local totalBtnsW = btnW * 2 + UI.SPACING.button_gap
-        local startX = winX + math.floor((winW - totalBtnsW) / 2)
-        local btnY = winY + winH - 3
-        
-        confirmBtn = drawAuthButton("[ ПОДТВЕРДИТЬ ]", startX, btnY, btnW, true)
-        closeBtn = drawAuthButton("[ ЗАКРЫТЬ ]", startX + btnW + UI.SPACING.button_gap, btnY, btnW, false)
-        
-        -- ОЧИЩАЕМ ОБЛАСТЬ ДЛЯ СООБЩЕНИЙ ОБ ОШИБКЕ
-        errorY = winY + 12
-        gpu.setBackground(UI.COLORS.bg_card)
-        gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
-    end
+    -- ★★★ ОЧИЩАЕМ ЭКРАН ★★★
+    gpu.setBackground(UI.COLORS.bg_main)
+    gpu.fill(1, 1, screenW, screenH, " ")
     
-    -- ПРОВЕРКА ПРИВЯЗКИ
+    -- ★★★ РИСУЕМ ОКНО ★★★
+    gpu.setBackground(UI.COLORS.bg_card)
+    gpu.fill(winX, winY, winW, winH, " ")
+    
+    -- Рамка
+    gpu.setForeground(UI.COLORS.accent)
+    gpu.fill(winX, winY, winW, 1, "═")
+    gpu.fill(winX, winY + winH - 1, winW, 1, "═")
+    for i = 1, winH - 2 do
+        gpu.set(winX, winY + i, "║")
+        gpu.set(winX + winW - 1, winY + i, "║")
+    end
+    gpu.set(winX, winY, "╔")
+    gpu.set(winX + winW - 1, winY, "╗")
+    gpu.set(winX, winY + winH - 1, "╚")
+    gpu.set(winX + winW - 1, winY + winH - 1, "╝")
+    
+    -- Декоративная линия
+    gpu.setForeground(UI.COLORS.accent_dim)
+    gpu.fill(winX + 4, winY + 2, winW - 8, 1, "─")
+    
+    -- ★★★ ЗАГОЛОВОК ★★★
+    local title = "🔐 АУТЕНТИФИКАЦИЯ"
+    gpu.setForeground(UI.COLORS.accent)
+    gpu.set(winX + math.floor((winW - unicode.len(title)) / 2), winY + 1, title)
+    
+    -- ★★★ ИГРОК ★★★
+    local playerLabel = "👤 Игрок: "
+    local playerName = currentPlayer or "Неизвестно"
+    local playerY = winY + 4
+    gpu.setForeground(UI.COLORS.text_main)
+    gpu.set(winX + math.floor((winW - unicode.len(playerLabel .. playerName)) / 2), playerY, playerLabel)
+    gpu.setForeground(UI.COLORS.accent)
+    gpu.set(winX + math.floor((winW - unicode.len(playerLabel .. playerName)) / 2) + unicode.len(playerLabel), playerY, playerName)
+    
+    -- ★★★ ПРОВЕРКА ПРИВЯЗКИ ★★★
     local savedBound = loadBoundPlayer()
     local isBound = (boundPlayer and boundPlayer ~= "") or (savedBound and savedBound ~= "")
     
-    -- ★★★ ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ДЛЯ КНОПОК ★★★
-    confirmBtn = nil
-    closeBtn = nil
-    errorY = 0
-    
     if isBound then
-        drawAuthWindow()
         local displayName = boundPlayer or savedBound
         
+        -- Сообщение о привязке
         local boundMsg = "✅ Аккаунт ПРИВЯЗАН"
         gpu.setForeground(UI.COLORS.success)
         gpu.set(winX + math.floor((winW - unicode.len(boundMsg)) / 2), winY + 6, boundMsg)
@@ -4340,6 +4312,7 @@ function showAuthPopup()
         gpu.setForeground(UI.COLORS.text_muted)
         gpu.set(winX + math.floor((winW - unicode.len(boundTo)) / 2), winY + 7, boundTo)
         
+        -- ★★★ КНОПКИ (СИММЕТРИЧНЫЕ) ★★★
         local btnW = 14
         local totalBtnsW = btnW * 2 + UI.SPACING.button_gap
         local startX = winX + math.floor((winW - totalBtnsW) / 2)
@@ -4348,6 +4321,7 @@ function showAuthPopup()
         local unbindBtn = drawAuthButton("[ ОТВЯЗАТЬ ]", startX, btnY, btnW, false)
         local closeBtn = drawAuthButton("[ ЗАКРЫТЬ ]", startX + btnW + UI.SPACING.button_gap, btnY, btnW, true)
         
+        -- ★★★ ЦИКЛ ОЖИДАНИЯ ★★★
         while currentScreen == "auth_popup" do
             local ev = {event.pull(0.5)}
             
@@ -4376,15 +4350,38 @@ function showAuthPopup()
         end
         
     else
-        -- ОТРИСОВЫВАЕМ ОКНО
-        drawAuthWindow()
+        -- ★★★ ИНСТРУКЦИЯ ★★★
+        local instr1 = "📋 Введите код из браузера"
+        gpu.setForeground(UI.COLORS.text_main)
+        gpu.set(winX + math.floor((winW - unicode.len(instr1)) / 2), winY + 6, instr1)
         
-        -- ★★★ ПЕРЕМЕННАЯ ДЛЯ ОТСЛЕЖИВАНИЯ СОСТОЯНИЯ ★★★
-        local isProcessing = false
+        local instr2 = "(код отображается на сайте)"
+        gpu.setForeground(UI.COLORS.text_muted)
+        gpu.set(winX + math.floor((winW - unicode.len(instr2)) / 2), winY + 7, instr2)
+        
+        -- ★★★ ПОЛЕ ВВОДА ★★★
+        drawAuthInputField(authCodeInput, winX, winY, winW, 9, true)
+        
+        -- ★★★ КНОПКИ (СИММЕТРИЧНЫЕ) ★★★
+        local btnW = 14
+        local totalBtnsW = btnW * 2 + UI.SPACING.button_gap
+        local startX = winX + math.floor((winW - totalBtnsW) / 2)
+        local btnY = winY + winH - 3
+        
+        local confirmBtn = drawAuthButton("[ ПОДТВЕРДИТЬ ]", startX, btnY, btnW, true)
+        local closeBtn = drawAuthButton("[ ЗАКРЫТЬ ]", startX + btnW + UI.SPACING.button_gap, btnY, btnW, false)
+        
+        -- ★★★ СООБЩЕНИЕ ОБ ОШИБКЕ ★★★
         local errorMsg = ""
+        local errorY = winY + 12
         
-        -- ★★★ ОСНОВНОЙ ЦИКЛ ★★★
-        while currentScreen == "auth_popup" do
+        -- ★★★ ЦИКЛ ОЖИДАНИЯ ★★★
+        local isEditing = true
+        
+        -- ★★★ ФЛАГ ДЛЯ ОТСЛЕЖИВАНИЯ, БЫЛА ЛИ ОШИБКА ★★★
+        local hadError = false
+
+        while currentScreen == "auth_popup" and isEditing do
             local ev = {event.pull(0.5)}
             
             if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
@@ -4394,31 +4391,38 @@ function showAuthPopup()
                 break
             end
             
-            -- ★★★ ОБРАБОТКА КАСАНИЙ ★★★
             if ev[1] == "touch" then
                 local x, y = ev[3], ev[4]
                 
                 if isButtonClicked(closeBtn, x, y) then
+                    isEditing = false
                     goBackToMenu()
                     break
                 end
                 
-                if isButtonClicked(confirmBtn, x, y) and not isProcessing then
+                if isButtonClicked(confirmBtn, x, y) then
+                    -- ★★★ ОЧИЩАЕМ СООБЩЕНИЕ ОБ ОШИБКЕ ★★★
+                    errorMsg = ""
+                    gpu.setBackground(UI.COLORS.bg_card)
+                    gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
+                    
+                    -- ★★★ ПРОВЕРЯЕМ ДЛИНУ КОДА ★★★
                     if authCodeInput and #authCodeInput == 6 then
-                        isProcessing = true
-                        errorMsg = ""
-                        gpu.setBackground(UI.COLORS.bg_card)
-                        gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
-                        
+                        -- ★★★ СОХРАНЯЕМ КОД ДЛЯ ПРОВЕРКИ ★★★
                         local codeToCheck = authCodeInput
-                        -- ★★★ НЕ ОЧИЩАЕМ ПОЛЕ ВВОДА! ★★★
-                        -- drawAuthInputField(authCodeInput, winX, winY, winW, 9, true)
                         
+                        -- ★★★ СБРАСЫВАЕМ ПОЛЕ ВВОДА ДЛЯ БЕЗОПАСНОСТИ ★★★
+                        authCodeInput = ""
+                        drawAuthInputField(authCodeInput, winX, winY, winW, 9, true)
+                        
+                        isEditing = false
                         local success = verifyAuthCode(codeToCheck)
-                        isProcessing = false
                         
                         if success then
+                            -- ★★★ УСПЕХ ★★★
                             forceSyncBinding()
+                            
+                            -- ★★★ ОЧИЩАЕМ ВСЁ ОКНО ДЛЯ СООБЩЕНИЯ ОБ УСПЕХЕ ★★★
                             gpu.setBackground(UI.COLORS.bg_card)
                             gpu.fill(winX + 2, winY + 9, winW - 4, 8, " ")
                             
@@ -4430,12 +4434,14 @@ function showAuthPopup()
                             gpu.setForeground(UI.COLORS.text_main)
                             gpu.set(winX + math.floor((winW - unicode.len(msg2)) / 2), winY + 12, msg2)
                             
+                            -- ★★★ УБИРАЕМ ПОЛЕ ВВОДА И КНОПКИ ★★★
                             gpu.setBackground(UI.COLORS.bg_card)
                             gpu.fill(winX + 2, winY + 9, winW - 4, 2, " ")
                             gpu.fill(winX + 2, winY + winH - 4, winW - 4, 3, " ")
                             
                             os.sleep(1.5)
                             
+                            -- ★★★ ПЕРЕХОДИМ В МЕНЮ ★★★
                             gpu.setBackground(UI.COLORS.bg_main)
                             gpu.fill(1, 1, screenW, screenH, " ")
                             currentScreen = "menu"
@@ -4443,12 +4449,122 @@ function showAuthPopup()
                             drawTempMessage()
                             break
                         else
+                            -- ★★★ ОШИБКА ★★★
+                            hadError = true
                             errorMsg = "❌ Неверный код или ошибка"
                             gpu.setBackground(UI.COLORS.bg_card)
                             gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
                             gpu.setForeground(UI.COLORS.error)
                             gpu.set(winX + math.floor((winW - unicode.len(errorMsg)) / 2), errorY, errorMsg)
-                            -- ★★★ НЕ ОЧИЩАЕМ ПОЛЕ ВВОДА! ★★★
+                            markDirty()
+                            isEditing = true
+                            -- ★★★ ПОЛЕ ВВОДА УЖЕ ОЧИЩЕНО ★★★
+                        end
+                    else
+                        errorMsg = "  Введите 6-значный код!"
+                        gpu.setBackground(UI.COLORS.bg_card)
+                        gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
+                        gpu.setForeground(UI.COLORS.warning)
+                        gpu.set(winX + math.floor((winW - unicode.len(errorMsg)) / 2), errorY, errorMsg)
+                        -- ★★★ ОЖИДАЕМ, НО НЕ БЛОКИРУЕМ ВВОД ★★★
+                        local startTime = os.clock()
+                        while os.clock() - startTime < 1.5 do
+                            local ev2 = {event.pull(0.05)}
+                            if ev2[1] == "player_off" or ev2[1] == "pim_player_leave" then
+                                currentScreen = "welcome"
+                                markDirty()
+                                break
+                            end
+                            if ev2[1] == "key_down" then
+                                local ch = ev2[3]
+                                if ch == 8 then
+                                    authCodeInput = unicode.sub(authCodeInput or "", 1, -2)
+                                    drawAuthInputField(authCodeInput, winX, winY, winW, 9, true)
+                                    gpu.setBackground(UI.COLORS.bg_card)
+                                    gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
+                                    errorMsg = ""
+                                    markDirty()
+                                elseif ch >= 48 and ch <= 57 then
+                                    if unicode.len(authCodeInput or "") < 6 then
+                                        authCodeInput = (authCodeInput or "") .. unicode.char(ch)
+                                        drawAuthInputField(authCodeInput, winX, winY, winW, 9, true)
+                                        gpu.setBackground(UI.COLORS.bg_card)
+                                        gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
+                                        errorMsg = ""
+                                        markDirty()
+                                    end
+                                end
+                            end
+                        end
+                        gpu.setBackground(UI.COLORS.bg_card)
+                        gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
+                        markDirty()
+                    end
+                    break
+                end
+                
+            elseif ev[1] == "key_down" then
+                local ch = ev[3]
+                
+                if ch == 13 then  -- Enter
+                    -- ★★★ ОЧИЩАЕМ СООБЩЕНИЕ ОБ ОШИБКЕ ★★★
+                    errorMsg = ""
+                    gpu.setBackground(UI.COLORS.bg_card)
+                    gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
+                    
+                    -- ★★★ ПРОВЕРЯЕМ ДЛИНУ КОДА ★★★
+                    if authCodeInput and #authCodeInput == 6 then
+                        -- ★★★ СОХРАНЯЕМ КОД ДЛЯ ПРОВЕРКИ ★★★
+                        local codeToCheck = authCodeInput
+                        
+                        -- ★★★ СБРАСЫВАЕМ ПОЛЕ ВВОДА ДЛЯ БЕЗОПАСНОСТИ ★★★
+                        authCodeInput = ""
+                        drawAuthInputField(authCodeInput, winX, winY, winW, 9, true)
+                        
+                        isEditing = false
+                        local success = verifyAuthCode(codeToCheck)
+                        
+                        if success then
+                            -- ★★★ УСПЕХ ★★★
+                            forceSyncBinding()
+                            
+                            -- ★★★ ОЧИЩАЕМ ВСЁ ОКНО ДЛЯ СООБЩЕНИЯ ОБ УСПЕХЕ ★★★
+                            gpu.setBackground(UI.COLORS.bg_card)
+                            gpu.fill(winX + 2, winY + 9, winW - 4, 8, " ")
+                            
+                            local msg1 = "✅ Аккаунт успешно привязан!"
+                            gpu.setForeground(UI.COLORS.success)
+                            gpu.set(winX + math.floor((winW - unicode.len(msg1)) / 2), winY + 11, msg1)
+                            
+                            local msg2 = "Теперь вы можете пользоваться магазином"
+                            gpu.setForeground(UI.COLORS.text_main)
+                            gpu.set(winX + math.floor((winW - unicode.len(msg2)) / 2), winY + 12, msg2)
+                            
+                            -- ★★★ УБИРАЕМ ПОЛЕ ВВОДА И КНОПКИ ★★★
+                            gpu.setBackground(UI.COLORS.bg_card)
+                            gpu.fill(winX + 2, winY + 9, winW - 4, 2, " ")
+                            gpu.fill(winX + 2, winY + winH - 4, winW - 4, 3, " ")
+                            
+                            os.sleep(1.5)
+                            
+                            -- ★★★ ПЕРЕХОДИМ В МЕНЮ ★★★
+                            gpu.setBackground(UI.COLORS.bg_main)
+                            gpu.fill(1, 1, screenW, screenH, " ")
+                            currentScreen = "menu"
+                            drawMainMenu()
+                            drawTempMessage()
+                            break
+                        else
+                            -- ★★★ ОШИБКА ★★★
+                            hadError = true
+                            errorMsg = "❌ Неверный код или ошибка"
+                            gpu.setBackground(UI.COLORS.bg_card)
+                            gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
+                            gpu.setForeground(UI.COLORS.error)
+                            gpu.set(winX + math.floor((winW - unicode.len(errorMsg)) / 2), errorY, errorMsg)
+                            markDirty()
+                            isEditing = true
+                            -- ★★★ ПОЛЕ ВВОДА УЖЕ ОЧИЩЕНО ★★★
                         end
                     else
                         errorMsg = "⚠️ Введите 6-значный код!"
@@ -4456,98 +4572,62 @@ function showAuthPopup()
                         gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
                         gpu.setForeground(UI.COLORS.warning)
                         gpu.set(winX + math.floor((winW - unicode.len(errorMsg)) / 2), errorY, errorMsg)
-                        os.sleep(1.5)
+                        local startTime = os.clock()
+                        while os.clock() - startTime < 1.5 do
+                            local ev2 = {event.pull(0.05)}
+                            if ev2[1] == "player_off" or ev2[1] == "pim_player_leave" then
+                                currentScreen = "welcome"
+                                markDirty()
+                                break
+                            end
+                            if ev2[1] == "key_down" then
+                                local ch2 = ev2[3]
+                                if ch2 == 8 then
+                                    authCodeInput = unicode.sub(authCodeInput or "", 1, -2)
+                                    drawAuthInputField(authCodeInput, winX, winY, winW, 9, true)
+                                    gpu.setBackground(UI.COLORS.bg_card)
+                                    gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
+                                    errorMsg = ""
+                                    markDirty()
+                                elseif ch2 >= 48 and ch2 <= 57 then
+                                    if unicode.len(authCodeInput or "") < 6 then
+                                        authCodeInput = (authCodeInput or "") .. unicode.char(ch2)
+                                        drawAuthInputField(authCodeInput, winX, winY, winW, 9, true)
+                                        gpu.setBackground(UI.COLORS.bg_card)
+                                        gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
+                                        errorMsg = ""
+                                        markDirty()
+                                    end
+                                end
+                            end
+                        end
                         gpu.setBackground(UI.COLORS.bg_card)
                         gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
+                        markDirty()
                     end
-                end
-            end
-            
-            -- ★★★ ОБРАБОТКА КЛАВИАТУРЫ ★★★
-            if ev[1] == "key_down" then
-                local ch = ev[3]
-                local playerName = ev[5] or "Неизвестный"
-                
-                if not isPimOwner(playerName) then
-                    goto continue_key
-                end
-                
-                if ch == 13 then  -- Enter
-                    if not isProcessing and authCodeInput and #authCodeInput == 6 then
-                        isProcessing = true
-                        errorMsg = ""
-                        gpu.setBackground(UI.COLORS.bg_card)
-                        gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
-                        
-                        local codeToCheck = authCodeInput
-                        
-                        local success = verifyAuthCode(codeToCheck)
-                        isProcessing = false
-                        
-                        if success then
-                            forceSyncBinding()
-                            gpu.setBackground(UI.COLORS.bg_card)
-                            gpu.fill(winX + 2, winY + 9, winW - 4, 8, " ")
-                            
-                            local msg1 = "✅ Аккаунт успешно привязан!"
-                            gpu.setForeground(UI.COLORS.success)
-                            gpu.set(winX + math.floor((winW - unicode.len(msg1)) / 2), winY + 11, msg1)
-                            
-                            local msg2 = "Теперь вы можете пользоваться магазином"
-                            gpu.setForeground(UI.COLORS.text_main)
-                            gpu.set(winX + math.floor((winW - unicode.len(msg2)) / 2), winY + 12, msg2)
-                            
-                            gpu.setBackground(UI.COLORS.bg_card)
-                            gpu.fill(winX + 2, winY + 9, winW - 4, 2, " ")
-                            gpu.fill(winX + 2, winY + winH - 4, winW - 4, 3, " ")
-                            
-                            os.sleep(1.5)
-                            
-                            gpu.setBackground(UI.COLORS.bg_main)
-                            gpu.fill(1, 1, screenW, screenH, " ")
-                            currentScreen = "menu"
-                            drawMainMenu()
-                            drawTempMessage()
-                            break
-                        else
-                            errorMsg = "❌ Неверный код или ошибка"
-                            gpu.setBackground(UI.COLORS.bg_card)
-                            gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
-                            gpu.setForeground(UI.COLORS.error)
-                            gpu.set(winX + math.floor((winW - unicode.len(errorMsg)) / 2), errorY, errorMsg)
-                        end
-                    else
-                        if not isProcessing then
-                            errorMsg = "⚠️ Введите 6-значный код!"
-                            gpu.setBackground(UI.COLORS.bg_card)
-                            gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
-                            gpu.setForeground(UI.COLORS.warning)
-                            gpu.set(winX + math.floor((winW - unicode.len(errorMsg)) / 2), errorY, errorMsg)
-                            os.sleep(1.5)
-                            gpu.setBackground(UI.COLORS.bg_card)
-                            gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
-                        end
-                    end
+                    break
                     
                 elseif ch == 8 then  -- Backspace
                     authCodeInput = unicode.sub(authCodeInput or "", 1, -2)
+                    -- ★★★ ОЧИЩАЕМ СООБЩЕНИЕ ОБ ОШИБКЕ ПРИ СТИРАНИИ ★★★
                     errorMsg = ""
                     gpu.setBackground(UI.COLORS.bg_card)
                     gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
                     drawAuthInputField(authCodeInput, winX, winY, winW, 9, true)
+                    markDirty()
                     
                 elseif ch >= 48 and ch <= 57 then  -- Цифры 0-9
                     if unicode.len(authCodeInput or "") < 6 then
                         authCodeInput = (authCodeInput or "") .. unicode.char(ch)
+                        -- ★★★ ОЧИЩАЕМ СООБЩЕНИЕ ОБ ОШИБКЕ ПРИ ВВОДЕ ★★★
                         errorMsg = ""
                         gpu.setBackground(UI.COLORS.bg_card)
                         gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
                         drawAuthInputField(authCodeInput, winX, winY, winW, 9, true)
+                        markDirty()
                     end
                 end
             end
-            
-            ::continue_key::
         end
     end
 end
@@ -4769,14 +4849,51 @@ function unbindAccount()
 end
 
 function verifyAuthCode(code)
-    writeDebugLog("🔍 verifyAuthCode: проверка кода " .. code .. " для " .. currentPlayer)
+    writeDebugLog("========================================")
+    writeDebugLog("🔍 verifyAuthCode: проверка кода " .. code)
+    writeDebugLog("🔍 currentPlayer = " .. tostring(currentPlayer))
     
+    -- ★★★ ИГРОК УЖЕ ДОЛЖЕН БЫТЬ В players (СОЗДАЁТСЯ ПРИ ВХОДЕ) ★★★
+    local player = players[currentPlayer]
+    if not player then
+        writeErrorLog("❌ Игрок НЕ НАЙДЕН в players! currentPlayer=" .. tostring(currentPlayer))
+        -- ПЫТАЕМСЯ СОЗДАТЬ (НА ВСЯКИЙ СЛУЧАЙ)
+        player = {
+            balance = 0,
+            emaBalance = 0,
+            transactions = 0,
+            banned = false,
+            agreed = false,
+            hasFeedback = false,
+            transactionsList = {},
+            regDate = getRealTimeString(),
+            site_user = nil
+        }
+        players[currentPlayer] = player
+        playersIndex[currentPlayer] = player
+        saveDB()
+        writeDebugLog("✅ Игрок создан принудительно: " .. currentPlayer)
+    end
+    
+    -- ★★★ ПРОВЕРЯЕМ ЛОКАЛЬНУЮ ПРИВЯЗКУ ★★★
+    if player.site_user and player.site_user ~= "" then
+        writeDebugLog("✅ Игрок УЖЕ привязан локально: " .. player.site_user)
+        boundPlayer = player.site_user
+        saveBoundPlayer(player.site_user)
+        bindingCache.isBound = true
+        bindingCache.lastCheck = os.time()
+        return true
+    end
+    
+    writeDebugLog("📤 Отправляем запрос на сервер...")
+    
+    -- ★★★ ОТПРАВЛЯЕМ ЗАПРОС НА СЕРВЕР ★★★
     local json_data = toJson({
         code = code,
         game_player = currentPlayer
     })
     
-    writeDebugLog("📤 Отправка: " .. json_data)
+    writeDebugLog("📤 JSON: " .. json_data)
     
     local success, response = pcall(function()
         return internet.request(WEB_URL .. "/api/verify_auth_code", json_data, {
@@ -4803,7 +4920,6 @@ function verifyAuthCode(code)
     
     writeDebugLog("📥 Ответ сервера: " .. body)
     
-    -- ★★★ ПРОВЕРЯЕМ, ЧТО ОТВЕТ НЕ ПУСТОЙ ★★★
     if not body or body == "" then
         writeErrorLog("❌ Пустой ответ от сервера")
         return false
@@ -4817,50 +4933,74 @@ function verifyAuthCode(code)
     
     writeDebugLog("📦 Распарсено: " .. serialization.serialize(data))
     
-    -- ★★★ ПРОВЕРЯЕМ УСПЕШНОСТЬ ★★★
-    if data.success == true then
-        writeDebugLog("✅ Код подтверждён!")
+    -- ★★★ ПРОВЕРЯЕМ УСПЕХ ★★★
+    if data and data.success == true then
+        writeDebugLog("✅ Сервер подтвердил привязку!")
         
-        if currentPlayer and playersIndex[currentPlayer] then
-            local player = playersIndex[currentPlayer]
+        -- ★★★ СОХРАНЯЕМ ПРИВЯЗКУ ★★★
+        if data.player then
+            player.site_user = data.player
+            saveDB()
+            playersIndex[currentPlayer] = player
             
-            -- ★★★ СОХРАНЯЕМ ПРИВЯЗКУ ★★★
-            if data.player then
-                player.site_user = data.player
-                saveDB()
-                
-                local change = {
-                    id = "bind_" .. os.time() .. "_" .. math.random(100000),
-                    type = "bind_player",
-                    data = {
-                        player = currentPlayer,
-                        site_user = data.player
-                    }
-                }
-                add_pending_change(change)
-                
-                boundPlayer = data.player
-                saveBoundPlayer(data.player)
-                bindingCache.isBound = true
-                bindingCache.lastCheck = os.time()
-                
-                addLog("🔗 Аккаунт привязан: " .. boundPlayer .. " -> " .. currentPlayer)
-                writeDebugLog("✅ Привязка сохранена для " .. currentPlayer .. " -> " .. data.player)
-                
-                syncCurrentPlayer()
-                return true
-            else
-                writeErrorLog("❌ Нет data.player в ответе")
-                return false
-            end
+            boundPlayer = data.player
+            saveBoundPlayer(data.player)
+            bindingCache.isBound = true
+            bindingCache.lastCheck = os.time()
+            
+            addLog("🔗 Аккаунт привязан: " .. currentPlayer .. " -> " .. data.player)
+            writeDebugLog("✅ Привязка сохранена: " .. data.player)
+            
+            return true
         else
-            writeErrorLog("❌ Игрок не найден: " .. tostring(currentPlayer))
+            writeErrorLog("❌ Нет data.player в ответе сервера!")
             return false
         end
     else
-        -- ★★★ ВЫВОДИМ ОШИБКУ С СЕРВЕРА ★★★
-        local errorMsg = data.error or "Неизвестная ошибка"
-        writeErrorLog("❌ Ошибка верификации: " .. errorMsg)
+        -- ★★★ ОШИБКА ОТ СЕРВЕРА ★★★
+        local errorMsg = data and data.error or "Неизвестная ошибка"
+        writeErrorLog("❌ Ошибка сервера: " .. errorMsg)
+        
+        -- ★★★ ПРОВЕРЯЕМ, МОЖЕТ ПРИВЯЗКА УЖЕ ЕСТЬ НА СЕРВЕРЕ? ★★★
+        if errorMsg:find("уже привязан") or errorMsg:find("already bound") or errorMsg:find("used") then
+            writeDebugLog("🔍 Сервер сказал что код использован/игрок привязан, проверяем...")
+            
+            -- ПРОВЕРЯЕМ ПРИВЯЗКУ НА СЕРВЕРЕ
+            local checkSuccess, checkResponse = pcall(function()
+                return internet.request(WEB_URL .. "/api/player_binding?game_player=" .. currentPlayer, nil, {
+                    ["Connection"] = "close",
+                    ["Timeout"] = "3"
+                })
+            end)
+            
+            if checkSuccess and checkResponse then
+                local checkBody = ""
+                for chunk in checkResponse do
+                    checkBody = checkBody .. chunk
+                end
+                local checkData = parseJSON(checkBody)
+                
+                if checkData and checkData.success and checkData.site_user then
+                    writeDebugLog("✅ На сервере есть привязка: " .. checkData.site_user)
+                    player.site_user = checkData.site_user
+                    saveDB()
+                    playersIndex[currentPlayer] = player
+                    
+                    boundPlayer = checkData.site_user
+                    saveBoundPlayer(checkData.site_user)
+                    bindingCache.isBound = true
+                    bindingCache.lastCheck = os.time()
+                    
+                    addLog("🔗 Привязка восстановлена с сервера: " .. currentPlayer .. " -> " .. checkData.site_user)
+                    return true
+                else
+                    writeDebugLog("❌ На сервере нет привязки")
+                end
+            else
+                writeDebugLog("⚠️ Не удалось проверить привязку на сервере")
+            end
+        end
+        
         return false
     end
 end
