@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333111
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА111
 -- ============================================================
 
 local function setupAutoStart()
@@ -4406,11 +4406,9 @@ function showAuthPopup()
                         forceSyncBinding()
                         
                         -- ★★★ ПОКАЗЫВАЕМ СООБЩЕНИЕ ОБ УСПЕХЕ В ТОМ ЖЕ ОКНЕ ★★★
-                        -- Очищаем область сообщений
                         gpu.setBackground(UI.COLORS.bg_card)
                         gpu.fill(winX + 2, winY + 11, winW - 4, 3, " ")
                         
-                        -- Сообщение об успехе (по центру)
                         local msg1 = "✅ Аккаунт успешно привязан!"
                         gpu.setForeground(UI.COLORS.success)
                         gpu.set(winX + math.floor((winW - unicode.len(msg1)) / 2), winY + 11, msg1)
@@ -4419,30 +4417,30 @@ function showAuthPopup()
                         gpu.setForeground(UI.COLORS.text_main)
                         gpu.set(winX + math.floor((winW - unicode.len(msg2)) / 2), winY + 12, msg2)
                         
-                        -- Убираем поле ввода и кнопки
                         gpu.setBackground(UI.COLORS.bg_card)
                         gpu.fill(winX + 2, winY + 9, winW - 4, 3, " ")
                         gpu.fill(winX + 2, winY + winH - 4, winW - 4, 3, " ")
                         
                         os.sleep(1.5)
+                        
+                        -- ★★★ ПОЛНОСТЬЮ ОЧИЩАЕМ ЭКРАН И ПЕРЕХОДИМ В МЕНЮ ★★★
+                        gpu.setBackground(UI.COLORS.bg_main)
+                        gpu.fill(1, 1, screenW, screenH, " ")
                         currentScreen = "menu"
                         goBackToMenu()
-                        markDirty()
+                        forceRender()
                         break
                     else
                         errorMsg = "❌ Неверный код или ошибка"
-                        -- ★★★ ОЧИЩАЕМ ОБЛАСТЬ СООБЩЕНИЯ ★★★
                         gpu.setBackground(UI.COLORS.bg_card)
                         gpu.fill(winX + 2, errorY, winW - 4, 1, " ")
                         gpu.setForeground(UI.COLORS.error)
                         gpu.set(winX + math.floor((winW - unicode.len(errorMsg)) / 2), errorY, errorMsg)
                         markDirty()
-                        -- ★★★ ВОЗВРАЩАЕМ РЕЖИМ РЕДАКТИРОВАНИЯ ★★★
                         isEditing = true
                     end
                 else
                     errorMsg = "⚠️ Введите 6-значный код!"
-                    -- ★★★ ОЧИЩАЕМ ОБЛАСТЬ СООБЩЕНИЯ ★★★
                     gpu.setBackground(UI.COLORS.bg_card)
                     gpu.fill(winX + 2, errorY, winW - 4, 1, " ")
                     gpu.setForeground(UI.COLORS.warning)
@@ -4456,14 +4454,13 @@ function showAuthPopup()
             elseif ev[1] == "key_down" then
                 local ch = ev[3]
                 
-                if ch == 13 then  -- Enter
+                if ch == 13 then
                     if authCodeInput and #authCodeInput == 6 then
                         isEditing = false
                         local success = verifyAuthCode(authCodeInput)
                         if success then
                             forceSyncBinding()
                             
-                            -- ★★★ ПОКАЗЫВАЕМ СООБЩЕНИЕ ОБ УСПЕХЕ В ТОМ ЖЕ ОКНЕ ★★★
                             gpu.setBackground(UI.COLORS.bg_card)
                             gpu.fill(winX + 2, winY + 11, winW - 4, 3, " ")
                             
@@ -4480,18 +4477,22 @@ function showAuthPopup()
                             gpu.fill(winX + 2, winY + winH - 4, winW - 4, 3, " ")
                             
                             os.sleep(1.5)
+                            
+                            -- ★★★ ПОЛНОСТЬЮ ОЧИЩАЕМ ЭКРАН И ПЕРЕХОДИМ В МЕНЮ ★★★
+                            gpu.setBackground(UI.COLORS.bg_main)
+                            gpu.fill(1, 1, screenW, screenH, " ")
                             currentScreen = "menu"
                             goBackToMenu()
-                            markDirty()
+                            forceRender()
                             break
                         else
-                            isEditing = true
                             errorMsg = "❌ Неверный код или ошибка"
                             gpu.setBackground(UI.COLORS.bg_card)
                             gpu.fill(winX + 2, errorY, winW - 4, 1, " ")
                             gpu.setForeground(UI.COLORS.error)
                             gpu.set(winX + math.floor((winW - unicode.len(errorMsg)) / 2), errorY, errorMsg)
                             markDirty()
+                            isEditing = true
                         end
                     else
                         errorMsg = "⚠️ Введите 6-значный код!"
@@ -4503,12 +4504,10 @@ function showAuthPopup()
                         markDirty()
                     end
                     break
-                    
-                elseif ch == 8 then  -- Backspace
+                elseif ch == 8 then
                     authCodeInput = unicode.sub(authCodeInput or "", 1, -2)
                     markDirty()
-                    
-                elseif ch >= 48 and ch <= 57 then  -- Цифры 0-9
+                elseif ch >= 48 and ch <= 57 then
                     if unicode.len(authCodeInput or "") < 6 then
                         authCodeInput = (authCodeInput or "") .. unicode.char(ch)
                         markDirty()
@@ -4709,7 +4708,7 @@ function unbindAccount()
                 
                 local msg2 = "Доступ к магазину ограничен"
                 gpu.setForeground(UI.COLORS.text_main)
-                gpu.set(winX + math.floor((winW - unicode.len(msg2)) / 2), winY + 5, msg2)
+                gpu.set(winX + math.floor((winW - unicode.len(msg2)) / 2) + 1, winY + 5, msg2)
                 
                 os.sleep(2)
                 goBackToMenu()
