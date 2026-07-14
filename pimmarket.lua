@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА1000
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА
 -- ============================================================
 
 local function setupAutoStart()
@@ -4130,46 +4130,30 @@ function handleQuantityButtonClick(btnText)
 end
 
 -- ============================================================
--- ★★★ НОВЫЙ ИНТЕРФЕЙС АУТЕНТИФИКАЦИИ ★★★
--- ============================================================
-
--- ============================================================
 -- КОНСТАНТЫ UI
 -- ============================================================
 
 UI = {
     COLORS = {
-        -- Основные
         bg_main = 0x0A0A0F,
         bg_secondary = 0x14141F,
         bg_card = 0x1A1A2E,
         bg_input = 0x0A0A1A,
         bg_button = 0x2A2A4A,
-        bg_button_hover = 0x3A3A6A,
-        
-        -- Акценты
         accent = 0x00E5C9,
         accent_dim = 0x1A3A3A,
         accent_glow = 0x00FFCC,
-        
-        -- Текст
         text_main = 0xD0D0E0,
         text_bright = 0xF0F0FF,
         text_muted = 0x6B7D93,
-        text_dim = 0x3A4A5A,
-        
-        -- Статусы
         success = 0x00FFAA,
         error = 0xFF4D7A,
         warning = 0xFFAA44,
-        
-        -- Рамка
         border = 0x00E5C9,
         border_dim = 0x1A3A3A,
     },
-    
     SPACING = {
-        button_gap = 4,       -- Между кнопками
+        button_gap = 4,
     }
 }
 
@@ -4204,7 +4188,6 @@ end
 -- КОМПОНЕНТЫ UI
 -- ============================================================
 
--- ★★★ РИСОВАТЬ КНОПКУ ★★★
 function drawAuthButton(text, x, y, width, isActive)
     local bg = isActive and UI.COLORS.accent or UI.COLORS.bg_button
     local fg = isActive and UI.COLORS.bg_main or UI.COLORS.text_bright
@@ -4230,7 +4213,6 @@ function drawAuthButton(text, x, y, width, isActive)
     return { x = x, y = y, xs = width, ys = 1, text = text }
 end
 
--- ★★★ РИСОВАТЬ ПОЛЕ ВВОДА ★★★
 function drawAuthInputField(text, winX, winY, winW, yOffset, isActive)
     local y = winY + (yOffset or 1)
     local inputW = winW - 10
@@ -4254,6 +4236,56 @@ function drawAuthInputField(text, winX, winY, winW, yOffset, isActive)
     return inputX, inputW
 end
 
+-- ============================================================ 
+-- ★★★ ПОКАЗ СООБЩЕНИЯ ОБ УСПЕХЕ ★★★
+-- ============================================================ 
+
+function showAuthSuccessMessage()
+    local screenW, screenH = getScreenSize()
+    
+    -- Очищаем экран
+    gpu.setBackground(UI.COLORS.bg_main)
+    gpu.fill(1, 1, screenW, screenH, " ")
+    
+    -- Рисуем рамку
+    local winW = math.min(48, screenW - 6)
+    local winH = 10
+    local winX = math.floor((screenW - winW) / 2) + 1
+    local winY = math.floor((screenH - winH) / 2) + 1
+    
+    gpu.setBackground(UI.COLORS.bg_card)
+    gpu.fill(winX, winY, winW, winH, " ")
+    
+    gpu.setForeground(UI.COLORS.accent)
+    gpu.fill(winX, winY, winW, 1, "═")
+    gpu.fill(winX, winY + winH - 1, winW, 1, "═")
+    for i = 1, winH - 2 do
+        gpu.set(winX, winY + i, "║")
+        gpu.set(winX + winW - 1, winY + i, "║")
+    end
+    gpu.set(winX, winY, "╔")
+    gpu.set(winX + winW - 1, winY, "╗")
+    gpu.set(winX, winY + winH - 1, "╚")
+    gpu.set(winX + winW - 1, winY + winH - 1, "╝")
+    
+    -- ★★★ ЗАГОЛОВОК ★★★
+    local title = "🔐 АУТЕНТИФИКАЦИЯ"
+    gpu.setForeground(UI.COLORS.accent)
+    gpu.set(winX + math.floor((winW - unicode.len(title)) / 2), winY + 1, title)
+    
+    -- ★★★ СООБЩЕНИЕ ОБ УСПЕХЕ (ЦЕНТРИРОВАННО) ★★★
+    local msg1 = "✅ Аккаунт успешно привязан!"
+    gpu.setForeground(UI.COLORS.success)
+    gpu.set(winX + math.floor((winW - unicode.len(msg1)) / 2), winY + 4, msg1)
+    
+    local msg2 = "Теперь вы можете пользоваться магазином"
+    gpu.setForeground(UI.COLORS.text_main)
+    gpu.set(winX + math.floor((winW - unicode.len(msg2)) / 2), winY + 5, msg2)
+    
+    -- Ждём 1.5 секунды
+    os.sleep(1.5)
+end
+
 -- ============================================================
 -- ★★★ ОСНОВНАЯ ФУНКЦИЯ ПОКАЗА ПОПАПА ★★★
 -- ============================================================
@@ -4265,7 +4297,7 @@ function showAuthPopup()
     
     local screenW, screenH = getScreenSize()
     
-    -- ★★★ РАЗМЕРЫ ОКНА (АДАПТИВНЫЕ) ★★★
+    -- ★★★ РАЗМЕРЫ ОКНА ★★★
     local winW = math.min(52, screenW - 6)
     local winH = math.min(20, screenH - 6)
     local winX = math.floor((screenW - winW) / 2) + 1
@@ -4355,6 +4387,9 @@ function showAuthPopup()
                 end
                 
                 if isButtonClicked(unbindBtn, x, y) then
+                    -- ★★★ ЗАКРЫВАЕМ ТЕКУЩЕЕ ОКНО И ОТКРЫВАЕМ ПОДТВЕРЖДЕНИЕ ★★★
+                    gpu.setBackground(UI.COLORS.bg_main)
+                    gpu.fill(1, 1, screenW, screenH, " ")
                     showUnbindConfirmPopup()
                     break
                 end
@@ -4372,7 +4407,6 @@ function showAuthPopup()
         gpu.set(winX + math.floor((winW - unicode.len(instr2)) / 2), winY + 7, instr2)
         
         -- ★★★ ПОЛЕ ВВОДА ★★★
-        local inputY = winY + 9
         drawAuthInputField(authCodeInput, winX, winY, winW, 9, true)
         
         -- ★★★ КНОПКИ (СИММЕТРИЧНЫЕ) ★★★
@@ -4416,19 +4450,9 @@ function showAuthPopup()
                         if success then
                             -- ★★★ УСПЕХ ★★★
                             forceSyncBinding()
-                            gpu.setBackground(UI.COLORS.bg_main)
-                            gpu.fill(1, 1, screenW, screenH, " ")
-                            
-                            -- Показываем сообщение об успехе
-                            local msg = "✅ Аккаунт успешно привязан!"
-                            gpu.setForeground(UI.COLORS.success)
-                            gpu.set(getCenteredX(msg), math.floor(screenH / 2) - 1, msg)
-                            
-                            local msg2 = "Теперь вы можете пользоваться магазином"
-                            gpu.setForeground(UI.COLORS.text_main)
-                            gpu.set(getCenteredX(msg2), math.floor(screenH / 2), msg2)
-                            
-                            os.sleep(1.5)
+                            -- ★★★ ПОКАЗЫВАЕМ СООБЩЕНИЕ ОБ УСПЕХЕ ★★★
+                            showAuthSuccessMessage()
+                            -- ★★★ ПЕРЕХОДИМ В МЕНЮ ★★★
                             currentScreen = "menu"
                             goBackToMenu()
                             markDirty()
@@ -4459,18 +4483,7 @@ function showAuthPopup()
                         local success = verifyAuthCode(authCodeInput)
                         if success then
                             forceSyncBinding()
-                            gpu.setBackground(UI.COLORS.bg_main)
-                            gpu.fill(1, 1, screenW, screenH, " ")
-                            
-                            local msg = "✅ Аккаунт успешно привязан!"
-                            gpu.setForeground(UI.COLORS.success)
-                            gpu.set(getCenteredX(msg), math.floor(screenH / 2) - 1, msg)
-                            
-                            local msg2 = "Теперь вы можете пользоваться магазином"
-                            gpu.setForeground(UI.COLORS.text_main)
-                            gpu.set(getCenteredX(msg2), math.floor(screenH / 2), msg2)
-                            
-                            os.sleep(1.5)
+                            showAuthSuccessMessage()
                             currentScreen = "menu"
                             goBackToMenu()
                             markDirty()
@@ -4507,7 +4520,7 @@ function showAuthPopup()
 end
 
 -- ============================================================
--- ★★★ ОБНОВЛЁННЫЙ ПОПАП ПОДТВЕРЖДЕНИЯ ОТВЯЗКИ ★★★
+-- ★★★ ПОПАП ПОДТВЕРЖДЕНИЯ ОТВЯЗКИ (ИСПРАВЛЕННЫЙ) ★★★
 -- ============================================================
 
 function showUnbindConfirmPopup()
@@ -4515,9 +4528,13 @@ function showUnbindConfirmPopup()
     
     local screenW, screenH = getScreenSize()
     
+    -- ★★★ ОЧИЩАЕМ ЭКРАН ПЕРЕД ОТРИСОВКОЙ ★★★
+    gpu.setBackground(UI.COLORS.bg_main)
+    gpu.fill(1, 1, screenW, screenH, " ")
+    
     -- Размеры окна
-    local winW = math.min(46, screenW - 6)
-    local winH = math.min(12, screenH - 6)
+    local winW = math.min(48, screenW - 6)
+    local winH = math.min(14, screenH - 6)
     local winX = math.floor((screenW - winW) / 2) + 1
     local winY = math.floor((screenH - winH) / 2) + 1
     
@@ -4538,12 +4555,18 @@ function showUnbindConfirmPopup()
     gpu.set(winX, winY + winH - 1, "╚")
     gpu.set(winX + winW - 1, winY + winH - 1, "╝")
     
-    -- Заголовок
+    -- ★★★ ЗАГОЛОВОК ★★★
     local title = "⚠️ ПОДТВЕРЖДЕНИЕ"
     gpu.setForeground(UI.COLORS.error)
     gpu.set(winX + math.floor((winW - unicode.len(title)) / 2), winY + 1, title)
     
-    -- Текст
+    -- ★★★ ТЕКСТ (КАЖДАЯ СТРОКА ПО ЦЕНТРУ, БЕЗ ФОНА) ★★★
+    -- Очищаем область текста (без фона)
+    for i = 3, 8 do
+        gpu.setBackground(UI.COLORS.bg_card)
+        gpu.fill(winX + 2, winY + i, winW - 4, 1, " ")
+    end
+    
     local text1 = "Вы действительно хотите"
     gpu.setForeground(UI.COLORS.text_main)
     gpu.set(winX + math.floor((winW - unicode.len(text1)) / 2), winY + 3, text1)
@@ -4560,7 +4583,7 @@ function showUnbindConfirmPopup()
     gpu.setForeground(UI.COLORS.text_muted)
     gpu.set(winX + math.floor((winW - unicode.len(text4)) / 2), winY + 7, text4)
     
-    -- Кнопки (симметричные)
+    -- ★★★ КНОПКИ (СИММЕТРИЧНЫЕ) ★★★
     local btnW = 14
     local totalBtnsW = btnW * 2 + UI.SPACING.button_gap
     local startX = winX + math.floor((winW - totalBtnsW) / 2)
@@ -4569,7 +4592,7 @@ function showUnbindConfirmPopup()
     local yesBtn = drawAuthButton("[ ДА, ОТВЯЗАТЬ ]", startX, btnY, btnW, false)
     local noBtn = drawAuthButton("[ ОТМЕНА ]", startX + btnW + UI.SPACING.button_gap, btnY, btnW, true)
     
-    -- Цикл ожидания
+    -- ★★★ ЦИКЛ ОЖИДАНИЯ ★★★
     while true do
         local ev = {event.pull(0.5)}
         
@@ -4584,178 +4607,19 @@ function showUnbindConfirmPopup()
             local x, y = ev[3], ev[4]
             
             if isButtonClicked(noBtn, x, y) then
+                -- ★★★ ВОЗВРАЩАЕМСЯ В ОКНО АУТЕНТИФИКАЦИИ ★★★
+                gpu.setBackground(UI.COLORS.bg_main)
+                gpu.fill(1, 1, screenW, screenH, " ")
                 showAuthPopup()
                 break
             end
             
             if isButtonClicked(yesBtn, x, y) then
+                -- ★★★ ВЫПОЛНЯЕМ ОТВЯЗКУ ★★★
                 unbindAccount()
                 break
             end
         end
-    end
-end
-
-function unbindAccount()
-    if not currentPlayer then
-        showTempMessage("Ошибка: игрок не авторизован", 2)
-        return
-    end
-    
-    local json_data = toJson({
-        site_user = currentPlayer
-    })
-    
-    local success, response = pcall(function()
-        return internet.request(WEB_URL .. "/api/unbind_player", json_data, {
-            ["Content-Type"] = "application/json; charset=utf-8",
-            ["Connection"] = "close",
-            ["Timeout"] = "5"
-        })
-    end)
-    
-    if success and response then
-        local body = ""
-        for chunk in response do
-            body = body .. chunk
-        end
-        local data = parseJSON(body)
-        
-        if data and data.success then
-            -- ★★★ УДАЛЯЕМ ПРИВЯЗКУ ИЗ ДАННЫХ ИГРОКА ★★★
-            if currentPlayer and playersIndex[currentPlayer] then
-                local player = playersIndex[currentPlayer]
-                player.site_user = nil
-                saveDBDeferred()
-                
-                local change = {
-                    id = "unbind_" .. os.time() .. "_" .. math.random(100000),
-                    type = "unbind_player",
-                    data = {
-                        player = currentPlayer
-                    }
-                }
-                add_pending_change(change)
-                
-                boundPlayer = nil
-                clearBoundPlayer()
-                bindingCache.isBound = false
-                bindingCache.lastCheck = 0
-                
-                addLog("🔓 Аккаунт отвязан: " .. currentPlayer)
-                
-                gpu.setForeground(colors.success)
-                gpu.set(28, 17, "✅ Аккаунт ОТВЯЗАН!")
-                gpu.setForeground(colors.text_main)
-                gpu.set(23, 18, "   Доступ к магазину ограничен")
-                os.sleep(2)
-                goBackToMenu()
-            else
-                gpu.setForeground(colors.error)
-                gpu.set(20, 17, "❌ Игрок не найден")
-                os.sleep(2)
-                markDirty()
-            end
-        else
-            local errorMsg = (data and data.error) or "Ошибка отвязки"
-            gpu.setForeground(colors.error)
-            gpu.set(20, 17, "❌ " .. errorMsg)
-            os.sleep(2)
-            markDirty()
-        end
-    else
-        gpu.setForeground(colors.error)
-        gpu.set(20, 17, "❌ Ошибка соединения")
-        os.sleep(2)
-        markDirty()
-    end
-end
-
-function verifyAuthCode(code)
-    drawCenteredText(15, "Проверка кода...", colors.accent_secondary)
-    os.sleep(0.5)
-    
-    local success, response = pcall(function()
-        return internet.request(WEB_URL .. "/api/verify_auth_code", toJson({
-            code = code,
-            game_player = currentPlayer
-        }), {
-            ["Content-Type"] = "application/json",
-            ["Connection"] = "close",
-            ["Timeout"] = "5"
-        })
-    end)
-    
-    if success and response then
-        local body = ""
-        for chunk in response do
-            body = body .. chunk
-        end
-        local data = parseJSON(body)
-        
-        if data and data.success then
-            -- ★★★ СОХРАНЯЕМ ПРИВЯЗКУ ★★★
-            if currentPlayer and playersIndex[currentPlayer] then
-                local player = playersIndex[currentPlayer]
-                player.site_user = data.player
-                saveDB()  -- ✅ МГНОВЕННОЕ СОХРАНЕНИЕ
-                
-                local change = {
-                    id = "bind_" .. os.time() .. "_" .. math.random(100000),
-                    type = "bind_player",
-                    data = {
-                        player = currentPlayer,
-                        site_user = data.player
-                    }
-                }
-                add_pending_change(change)
-                
-                boundPlayer = data.player
-                saveBoundPlayer(data.player)
-                bindingCache.isBound = true
-                bindingCache.lastCheck = os.time()
-                
-                addLog("🔗 Аккаунт привязан: " .. boundPlayer .. " -> " .. currentPlayer)
-                
-                -- ★★★ ПОКАЗЫВАЕМ СООБЩЕНИЕ ОБ УСПЕХЕ ★★★
-                gpu.setForeground(colors.success)
-                gpu.set(20, 14, "✅ Аккаунт успешно привязан!")
-                gpu.setForeground(colors.text_main)
-                gpu.set(18, 15, "Теперь вы можете пользоваться магазином")
-                
-                syncCurrentPlayer()
-                os.sleep(2)
-                
-                -- ★★★ НЕ ВЫЗЫВАЕМ goBackToMenu() ЗДЕСЬ ★★★
-                -- Просто возвращаем true
-                return true
-            else
-                gpu.setForeground(colors.error)
-                gpu.set(20, 14, "❌ Ошибка: игрок не найден")
-                os.sleep(2)
-                markDirty()
-                return false
-            end
-        else
-            local errorMsg = (data and data.error) or "Ошибка привязки"
-            gpu.setForeground(colors.error)
-            gpu.set(20, 14, "❌ " .. errorMsg)
-            
-            if data and data.bound then
-                gpu.setForeground(colors.text_main)
-                gpu.set(15, 15, "Этот игрок уже привязан к другому аккаунту")
-            end
-            
-            os.sleep(2)
-            markDirty()
-            return false
-        end
-    else
-        gpu.setForeground(colors.error)
-        gpu.set(20, 14, "❌ Ошибка соединения с сервером")
-        os.sleep(2)
-        markDirty()
-        return false
     end
 end
 
