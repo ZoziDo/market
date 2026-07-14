@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА123331142
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА
 -- ============================================================
 
 local function setupAutoStart()
@@ -4405,10 +4405,11 @@ function showAuthPopup()
                         -- ★★★ УСПЕХ ★★★
                         forceSyncBinding()
                         
-                        -- ★★★ ПОКАЗЫВАЕМ СООБЩЕНИЕ ОБ УСПЕХЕ В ТОМ ЖЕ ОКНЕ ★★★
+                        -- ★★★ ОЧИЩАЕМ ВСЁ ОКНО ОТ ПРЕДЫДУЩИХ СООБЩЕНИЙ ★★★
                         gpu.setBackground(UI.COLORS.bg_card)
-                        gpu.fill(winX + 2, winY + 11, winW - 4, 3, " ")
+                        gpu.fill(winX + 2, winY + 9, winW - 4, 8, " ")
                         
+                        -- ★★★ ПОКАЗЫВАЕМ СООБЩЕНИЕ ОБ УСПЕХЕ ★★★
                         local msg1 = "✅ Аккаунт успешно привязан!"
                         gpu.setForeground(UI.COLORS.success)
                         gpu.set(winX + math.floor((winW - unicode.len(msg1)) / 2), winY + 11, msg1)
@@ -4417,23 +4418,20 @@ function showAuthPopup()
                         gpu.setForeground(UI.COLORS.text_main)
                         gpu.set(winX + math.floor((winW - unicode.len(msg2)) / 2), winY + 12, msg2)
                         
-                        gpu.setBackground(UI.COLORS.bg_card)
-                        gpu.fill(winX + 2, winY + 9, winW - 4, 3, " ")
-                        gpu.fill(winX + 2, winY + winH - 4, winW - 4, 3, " ")
-                        
                         os.sleep(1.5)
                         
-                        -- ★★★ ПОЛНОСТЬЮ ОЧИЩАЕМ ЭКРАН И ПЕРЕХОДИМ В МЕНЮ ★★★
+                        -- ★★★ ВЫХОДИМ В МЕНЮ ★★★
                         gpu.setBackground(UI.COLORS.bg_main)
                         gpu.fill(1, 1, screenW, screenH, " ")
                         currentScreen = "menu"
-                        goBackToMenu()
-                        forceRender()
+                        drawMainMenu()
+                        drawTempMessage()
                         break
                     else
+                        -- ★★★ ОШИБКА ★★★
                         errorMsg = "❌ Неверный код или ошибка"
                         gpu.setBackground(UI.COLORS.bg_card)
-                        gpu.fill(winX + 2, errorY, winW - 4, 1, " ")
+                        gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
                         gpu.setForeground(UI.COLORS.error)
                         gpu.set(winX + math.floor((winW - unicode.len(errorMsg)) / 2), errorY, errorMsg)
                         markDirty()
@@ -4442,7 +4440,7 @@ function showAuthPopup()
                 else
                     errorMsg = "⚠️ Введите 6-значный код!"
                     gpu.setBackground(UI.COLORS.bg_card)
-                    gpu.fill(winX + 2, errorY, winW - 4, 1, " ")
+                    gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
                     gpu.setForeground(UI.COLORS.warning)
                     gpu.set(winX + math.floor((winW - unicode.len(errorMsg)) / 2), errorY, errorMsg)
                     os.sleep(1.5)
@@ -4459,11 +4457,14 @@ function showAuthPopup()
                         isEditing = false
                         local success = verifyAuthCode(authCodeInput)
                         if success then
+                            -- ★★★ УСПЕХ ★★★
                             forceSyncBinding()
                             
+                            -- ★★★ ОЧИЩАЕМ ВСЁ ОКНО ОТ ПРЕДЫДУЩИХ СООБЩЕНИЙ ★★★
                             gpu.setBackground(UI.COLORS.bg_card)
-                            gpu.fill(winX + 2, winY + 11, winW - 4, 3, " ")
+                            gpu.fill(winX + 2, winY + 9, winW - 4, 8, " ")
                             
+                            -- ★★★ ПОКАЗЫВАЕМ СООБЩЕНИЕ ОБ УСПЕХЕ ★★★
                             local msg1 = "✅ Аккаунт успешно привязан!"
                             gpu.setForeground(UI.COLORS.success)
                             gpu.set(winX + math.floor((winW - unicode.len(msg1)) / 2), winY + 11, msg1)
@@ -4472,23 +4473,20 @@ function showAuthPopup()
                             gpu.setForeground(UI.COLORS.text_main)
                             gpu.set(winX + math.floor((winW - unicode.len(msg2)) / 2), winY + 12, msg2)
                             
-                            gpu.setBackground(UI.COLORS.bg_card)
-                            gpu.fill(winX + 2, winY + 9, winW - 4, 3, " ")
-                            gpu.fill(winX + 2, winY + winH - 4, winW - 4, 3, " ")
-                            
                             os.sleep(1.5)
                             
-                            -- ★★★ ПОЛНОСТЬЮ ОЧИЩАЕМ ЭКРАН И ПЕРЕХОДИМ В МЕНЮ ★★★
+                            -- ★★★ ВЫХОДИМ В МЕНЮ ★★★
                             gpu.setBackground(UI.COLORS.bg_main)
                             gpu.fill(1, 1, screenW, screenH, " ")
                             currentScreen = "menu"
-                            goBackToMenu()
-                            forceRender()
+                            drawMainMenu()
+                            drawTempMessage()
                             break
                         else
+                            -- ★★★ ОШИБКА ★★★
                             errorMsg = "❌ Неверный код или ошибка"
                             gpu.setBackground(UI.COLORS.bg_card)
-                            gpu.fill(winX + 2, errorY, winW - 4, 1, " ")
+                            gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
                             gpu.setForeground(UI.COLORS.error)
                             gpu.set(winX + math.floor((winW - unicode.len(errorMsg)) / 2), errorY, errorMsg)
                             markDirty()
@@ -4497,7 +4495,7 @@ function showAuthPopup()
                     else
                         errorMsg = "⚠️ Введите 6-значный код!"
                         gpu.setBackground(UI.COLORS.bg_card)
-                        gpu.fill(winX + 2, errorY, winW - 4, 1, " ")
+                        gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
                         gpu.setForeground(UI.COLORS.warning)
                         gpu.set(winX + math.floor((winW - unicode.len(errorMsg)) / 2), errorY, errorMsg)
                         os.sleep(1.5)
@@ -4735,9 +4733,6 @@ function unbindAccount()
 end
 
 function verifyAuthCode(code)
-    drawCenteredText(15, "Проверка кода...", colors.accent_secondary)
-    os.sleep(0.5)
-    
     local success, response = pcall(function()
         return internet.request(WEB_URL .. "/api/verify_auth_code", toJson({
             code = code,
@@ -4780,31 +4775,14 @@ function verifyAuthCode(code)
                 addLog("🔗 Аккаунт привязан: " .. boundPlayer .. " -> " .. currentPlayer)
                 
                 syncCurrentPlayer()
-                os.sleep(2)
                 return true
             else
-                -- ★★★ ОШИБКА: ИГРОК НЕ НАЙДЕН (ЦЕНТРИРОВАННО) ★★★
-                local errorMsg = "❌ Ошибка: игрок не найден"
-                local screenW, screenH = getScreenSize()
-                gpu.setForeground(UI.COLORS.error)
-                gpu.set(getCenteredX(errorMsg), math.floor(screenH / 2), errorMsg)
-                os.sleep(2)
-                markDirty()
                 return false
             end
         else
-            os.sleep(0.5)
-            markDirty()
             return false
         end
     else
-        -- ★★★ ОШИБКА СОЕДИНЕНИЯ (ЦЕНТРИРОВАННО) ★★★
-        local errorMsg = "❌ Ошибка соединения с сервером"
-        local screenW, screenH = getScreenSize()
-        gpu.setForeground(UI.COLORS.error)
-        gpu.set(getCenteredX(errorMsg), math.floor(screenH / 2), errorMsg)
-        os.sleep(2)
-        markDirty()
         return false
     end
 end
