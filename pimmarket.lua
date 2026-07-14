@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333111
 -- ============================================================
 
 local function setupAutoStart()
@@ -4388,70 +4388,70 @@ function showAuthPopup()
                 break
             end
             
-            if ev[1] == "touch" then
-                local x, y = ev[3], ev[4]
-                
-                if isButtonClicked(closeBtn, x, y) then
+        if ev[1] == "touch" then
+            local x, y = ev[3], ev[4]
+            
+            if isButtonClicked(closeBtn, x, y) then
+                isEditing = false
+                goBackToMenu()
+                break
+            end
+            
+            if isButtonClicked(confirmBtn, x, y) then
+                if authCodeInput and #authCodeInput == 6 then
                     isEditing = false
-                    goBackToMenu()
-                    break
-                end
-                
-                if isButtonClicked(confirmBtn, x, y) then
-                    if authCodeInput and #authCodeInput == 6 then
-                        isEditing = false
-                        local success = verifyAuthCode(authCodeInput)
-                        if success then
-                            -- ★★★ УСПЕХ ★★★
-                            forceSyncBinding()
-                            
-                            -- ★★★ ПОКАЗЫВАЕМ СООБЩЕНИЕ ОБ УСПЕХЕ В ТОМ ЖЕ ОКНЕ ★★★
-                            -- Очищаем область сообщений
-                            gpu.setBackground(UI.COLORS.bg_card)
-                            gpu.fill(winX + 2, winY + 11, winW - 4, 3, " ")
-                            gpu.fill(winX + 2, winY + 11, winW - 4, 3, " ")
-                            
-                            -- Сообщение об успехе (по центру)
-                            local msg1 = "✅ Аккаунт успешно привязан!"
-                            gpu.setForeground(UI.COLORS.success)
-                            gpu.set(winX + math.floor((winW - unicode.len(msg1)) / 2), winY + 11, msg1)
-                            
-                            local msg2 = "Теперь вы можете пользоваться магазином"
-                            gpu.setForeground(UI.COLORS.text_main)
-                            gpu.set(winX + math.floor((winW - unicode.len(msg2)) / 2), winY + 12, msg2)
-                            
-                            -- Убираем поле ввода и кнопки
-                            gpu.setBackground(UI.COLORS.bg_card)
-                            gpu.fill(winX + 2, winY + 9, winW - 4, 3, " ")
-                            gpu.fill(winX + 2, winY + winH - 4, winW - 4, 3, " ")
-                            
-                            os.sleep(1.5)
-                            currentScreen = "menu"
-                            goBackToMenu()
-                            markDirty()
-                            break
-                        else
-                            isEditing = true
-                            errorMsg = "❌ Неверный код или ошибка"
-                            -- ★★★ ОЧИЩАЕМ ОБЛАСТЬ СООБЩЕНИЯ ★★★
-                            gpu.setBackground(UI.COLORS.bg_card)
-                            gpu.fill(winX + 2, errorY, winW - 4, 1, " ")
-                            gpu.setForeground(UI.COLORS.error)
-                            gpu.set(winX + math.floor((winW - unicode.len(errorMsg)) / 2), errorY, errorMsg)
-                            markDirty()
-                        end
+                    local success = verifyAuthCode(authCodeInput)
+                    if success then
+                        -- ★★★ УСПЕХ ★★★
+                        forceSyncBinding()
+                        
+                        -- ★★★ ПОКАЗЫВАЕМ СООБЩЕНИЕ ОБ УСПЕХЕ В ТОМ ЖЕ ОКНЕ ★★★
+                        -- Очищаем область сообщений
+                        gpu.setBackground(UI.COLORS.bg_card)
+                        gpu.fill(winX + 2, winY + 11, winW - 4, 3, " ")
+                        
+                        -- Сообщение об успехе (по центру)
+                        local msg1 = "✅ Аккаунт успешно привязан!"
+                        gpu.setForeground(UI.COLORS.success)
+                        gpu.set(winX + math.floor((winW - unicode.len(msg1)) / 2), winY + 11, msg1)
+                        
+                        local msg2 = "Теперь вы можете пользоваться магазином"
+                        gpu.setForeground(UI.COLORS.text_main)
+                        gpu.set(winX + math.floor((winW - unicode.len(msg2)) / 2), winY + 12, msg2)
+                        
+                        -- Убираем поле ввода и кнопки
+                        gpu.setBackground(UI.COLORS.bg_card)
+                        gpu.fill(winX + 2, winY + 9, winW - 4, 3, " ")
+                        gpu.fill(winX + 2, winY + winH - 4, winW - 4, 3, " ")
+                        
+                        os.sleep(1.5)
+                        currentScreen = "menu"
+                        goBackToMenu()
+                        markDirty()
+                        break
                     else
-                        errorMsg = "⚠️ Введите 6-значный код!"
+                        errorMsg = "❌ Неверный код или ошибка"
                         -- ★★★ ОЧИЩАЕМ ОБЛАСТЬ СООБЩЕНИЯ ★★★
                         gpu.setBackground(UI.COLORS.bg_card)
                         gpu.fill(winX + 2, errorY, winW - 4, 1, " ")
-                        gpu.setForeground(UI.COLORS.warning)
+                        gpu.setForeground(UI.COLORS.error)
                         gpu.set(winX + math.floor((winW - unicode.len(errorMsg)) / 2), errorY, errorMsg)
-                        os.sleep(1.5)
                         markDirty()
+                        -- ★★★ ВОЗВРАЩАЕМ РЕЖИМ РЕДАКТИРОВАНИЯ ★★★
+                        isEditing = true
                     end
-                    break
+                else
+                    errorMsg = "⚠️ Введите 6-значный код!"
+                    -- ★★★ ОЧИЩАЕМ ОБЛАСТЬ СООБЩЕНИЯ ★★★
+                    gpu.setBackground(UI.COLORS.bg_card)
+                    gpu.fill(winX + 2, errorY, winW - 4, 1, " ")
+                    gpu.setForeground(UI.COLORS.warning)
+                    gpu.set(winX + math.floor((winW - unicode.len(errorMsg)) / 2), errorY, errorMsg)
+                    os.sleep(1.5)
+                    markDirty()
                 end
+                break
+            end
                 
             elseif ev[1] == "key_down" then
                 local ch = ev[3]
@@ -4671,28 +4671,65 @@ function unbindAccount()
                 
                 addLog("🔓 Аккаунт отвязан: " .. currentPlayer)
                 
-                gpu.setForeground(colors.success)
-                gpu.set(28, 17, "✅ Аккаунт ОТВЯЗАН!")
-                gpu.setForeground(colors.text_main)
-                gpu.set(23, 18, "   Доступ к магазину ограничен")
+                -- ★★★ ОЧИЩАЕМ ЭКРАН ★★★
+                local screenW, screenH = getScreenSize()
+                gpu.setBackground(UI.COLORS.bg_main)
+                gpu.fill(1, 1, screenW, screenH, " ")
+                
+                -- ★★★ РИСУЕМ ОКНО С СООБЩЕНИЕМ ★★★
+                local winW = math.min(48, screenW - 6)
+                local winH = 10
+                local winX = math.floor((screenW - winW) / 2) + 1
+                local winY = math.floor((screenH - winH) / 2) + 1
+                
+                gpu.setBackground(UI.COLORS.bg_card)
+                gpu.fill(winX, winY, winW, winH, " ")
+                
+                gpu.setForeground(UI.COLORS.accent)
+                gpu.fill(winX, winY, winW, 1, "═")
+                gpu.fill(winX, winY + winH - 1, winW, 1, "═")
+                for i = 1, winH - 2 do
+                    gpu.set(winX, winY + i, "║")
+                    gpu.set(winX + winW - 1, winY + i, "║")
+                end
+                gpu.set(winX, winY, "╔")
+                gpu.set(winX + winW - 1, winY, "╗")
+                gpu.set(winX, winY + winH - 1, "╚")
+                gpu.set(winX + winW - 1, winY + winH - 1, "╝")
+                
+                -- ★★★ ЗАГОЛОВОК ★★★
+                local title = "🔐 АУТЕНТИФИКАЦИЯ"
+                gpu.setForeground(UI.COLORS.accent)
+                gpu.set(winX + math.floor((winW - unicode.len(title)) / 2), winY + 1, title)
+                
+                -- ★★★ СООБЩЕНИЕ ОБ УСПЕШНОЙ ОТВЯЗКЕ (ЦЕНТРИРОВАННО) ★★★
+                local msg1 = "✅ Аккаунт ОТВЯЗАН!"
+                gpu.setForeground(UI.COLORS.success)
+                gpu.set(winX + math.floor((winW - unicode.len(msg1)) / 2), winY + 4, msg1)
+                
+                local msg2 = "Доступ к магазину ограничен"
+                gpu.setForeground(UI.COLORS.text_main)
+                gpu.set(winX + math.floor((winW - unicode.len(msg2)) / 2), winY + 5, msg2)
+                
                 os.sleep(2)
                 goBackToMenu()
             else
-                gpu.setForeground(colors.error)
-                gpu.set(20, 17, "❌ Игрок не найден")
+                gpu.setForeground(UI.COLORS.error)
+                local errMsg = "❌ Игрок не найден"
+                gpu.set(getCenteredX(errMsg), math.floor(screenH / 2), errMsg)
                 os.sleep(2)
                 markDirty()
             end
         else
             local errorMsg = (data and data.error) or "Ошибка отвязки"
-            gpu.setForeground(colors.error)
-            gpu.set(20, 17, "❌ " .. errorMsg)
+            gpu.setForeground(UI.COLORS.error)
+            gpu.set(getCenteredX("❌ " .. errorMsg), math.floor(screenH / 2), "❌ " .. errorMsg)
             os.sleep(2)
             markDirty()
         end
     else
-        gpu.setForeground(colors.error)
-        gpu.set(20, 17, "❌ Ошибка соединения")
+        gpu.setForeground(UI.COLORS.error)
+        gpu.set(getCenteredX("❌ Ошибка соединения"), math.floor(screenH / 2), "❌ Ошибка соединения")
         os.sleep(2)
         markDirty()
     end
@@ -4743,12 +4780,6 @@ function verifyAuthCode(code)
                 bindingCache.lastCheck = os.time()
                 
                 addLog("🔗 Аккаунт привязан: " .. boundPlayer .. " -> " .. currentPlayer)
-                
-                -- ★★★ ПОКАЗЫВАЕМ СООБЩЕНИЕ ОБ УСПЕХЕ ★★★
-                gpu.setForeground(colors.success)
-                gpu.set(20, 14, "✅ Аккаунт успешно привязан!")
-                gpu.setForeground(colors.text_main)
-                gpu.set(18, 15, "Теперь вы можете пользоваться магазином")
                 
                 syncCurrentPlayer()
                 os.sleep(2)
