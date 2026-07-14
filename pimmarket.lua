@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333555
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333111
 -- ============================================================
 
 local function setupAutoStart()
@@ -553,6 +553,27 @@ function forceRender()
 end
 
 function renderCurrentScreen()
+    -- ★★★ ПОПАПЫ ★★★
+    if showInsufficientPopup then
+        drawInsufficientPopup()
+        drawTempMessage()
+        return
+    end
+    if showSellPopup then
+        drawSellPopup()
+        drawTempMessage()
+        return
+    end
+    if showPartialPopup then
+        drawPartialPopup()
+        drawTempMessage()
+        return
+    end
+    if showInventoryFullPopup then
+        drawInventoryFullPopup()
+        drawTempMessage()
+        return
+    end
     if currentScreen == "welcome" then
         drawWelcomeScreen()
     elseif currentScreen == "menu" then
@@ -4734,13 +4755,6 @@ function performSell()
     showSellPopup = false
     markDirty()
     
-    -- ★★★ ЛОГИ В КОНЦЕ ★★★
-    writeDebugFile("========================================")
-    writeDebugFile("✅ performSell() ЗАВЕРШЕНА")
-    writeDebugFile("   realExtracted=" .. tostring(realExtracted))
-    writeDebugFile("   value=" .. tostring(value))
-    writeDebugFile("   currentPlayer=" .. tostring(currentPlayer))
-    writeDebugFile("========================================")
 end
 
 
@@ -4806,8 +4820,7 @@ function performBuy()
         insufficientBalanceCoin = coinBalance
         insufficientBalanceEma = emaBalance
         unlockTransactions()
-        markDirty()
-        drawInsufficientPopup()
+        showInsufficientPopupAndWait() 
         return
     end
 
@@ -4871,10 +4884,8 @@ function performBuy()
     end
 
     if extracted == 0 then
-        showInventoryFullPopup = true
+        showInventoryFullPopupAndWait()  -- ✅ НОВАЯ ФУНКЦИЯ
         unlockTransactions()
-        markDirty()
-        drawInventoryFullPopup()
         return
     end
 
@@ -4903,8 +4914,7 @@ function performBuy()
         partialItem = item
         showPartialPopup = true
         unlockTransactions()
-        markDirty()
-        drawPartialPopup()
+        showPartialPopupAndWait()  -- ✅ НОВАЯ ФУНКЦИЯ
         return
     end
 
@@ -5760,6 +5770,198 @@ if not drawAgreementScreen then
 end
 
 -- ============================================================
+-- ★★★ ПОПАП ПРОДАЖИ (УЛУЧШЕННЫЙ) ★★★
+-- ============================================================
+
+function showSellPopupAndWait()
+    showSellPopup = true
+    drawSellPopup()
+    
+    while showSellPopup do
+        local ev = {event.pull(0.5)}
+        
+        if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
+            showSellPopup = false
+            safeExit()
+            return
+        end
+        
+        if ev[1] == "touch" then
+            local x, y = ev[3], ev[4]
+            
+            local popupWidth = 40
+            local popupHeight = 10
+            local popupX = math.floor((80 - popupWidth) / 2)
+            local popupY = 10
+            
+            local yesBtn = {x=popupX+5, y=popupY+7, xs=13, ys=1}
+            local noBtn  = {x=popupX+popupWidth-16, y=popupY+7, xs=12, ys=1}
+            
+            if isButtonClicked(yesBtn, x, y) then
+                showSellPopup = false
+                performSell()
+                break
+            elseif isButtonClicked(noBtn, x, y) then
+                showSellPopup = false
+                markDirty()
+                break
+            elseif not (x >= popupX and x < popupX + popupWidth and y >= popupY and y < popupY + popupHeight) then
+                showSellPopup = false
+                markDirty()
+                break
+            end
+        end
+    end
+end
+
+-- ============================================================
+-- ★★★ ПОПАП ЧАСТИЧНОЙ ВЫДАЧИ (УЛУЧШЕННЫЙ) ★★★
+-- ============================================================
+
+function showPartialPopupAndWait()
+    showPartialPopup = true
+    drawPartialPopup()
+    
+    while showPartialPopup do
+        local ev = {event.pull(0.5)}
+        
+        if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
+            showPartialPopup = false
+            safeExit()
+            return
+        end
+        
+        if ev[1] == "touch" then
+            local x, y = ev[3], ev[4]
+            
+            local popupWidth = 52
+            local popupHeight = 9
+            local popupX = math.floor((80 - popupWidth) / 2)
+            local popupY = 9
+            
+            local okBtnText = "[ ПРИНЯТЬ ]"
+            local okBtnWidth = unicode.len(okBtnText) + 2
+            local okBtn = {
+                x = popupX + math.floor((popupWidth - okBtnWidth) / 2),
+                y = popupY + 6,
+                xs = okBtnWidth,
+                ys = 1
+            }
+            
+            if isButtonClicked(okBtn, x, y) then
+                showPartialPopup = false
+                markDirty()
+                break
+            end
+            
+            if not (x >= popupX and x < popupX + popupWidth and y >= popupY and y < popupY + popupHeight) then
+                showPartialPopup = false
+                markDirty()
+                break
+            end
+        end
+    end
+end
+
+-- ============================================================
+-- ★★★ ПОПАП ИНВЕНТАРЬ ПОЛОН (УЛУЧШЕННЫЙ) ★★★
+-- ============================================================
+
+function showInventoryFullPopupAndWait()
+    showInventoryFullPopup = true
+    drawInventoryFullPopup()
+    
+    while showInventoryFullPopup do
+        local ev = {event.pull(0.5)}
+        
+        if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
+            showInventoryFullPopup = false
+            safeExit()
+            return
+        end
+        
+        if ev[1] == "touch" then
+            local x, y = ev[3], ev[4]
+            
+            local popupWidth = 52
+            local popupHeight = 9
+            local popupX = math.floor((80 - popupWidth) / 2)
+            local popupY = 9
+            
+            local okBtnText = "[ ПОНЯТНО ]"
+            local okBtnWidth = unicode.len(okBtnText) + 2
+            local okBtn = {
+                x = popupX + math.floor((popupWidth - okBtnWidth) / 2),
+                y = popupY + 6,
+                xs = okBtnWidth,
+                ys = 1
+            }
+            
+            if isButtonClicked(okBtn, x, y) then
+                showInventoryFullPopup = false
+                markDirty()
+                break
+            end
+            
+            if not (x >= popupX and x < popupX + popupWidth and y >= popupY and y < popupY + popupHeight) then
+                showInventoryFullPopup = false
+                markDirty()
+                break
+            end
+        end
+    end
+end
+
+-- ============================================================
+-- ★★★ ПОПАП НЕДОСТАТОЧНО СРЕДСТВ (УЛУЧШЕННЫЙ) ★★★
+-- ============================================================
+
+function showInsufficientPopupAndWait()
+    showInsufficientPopup = true
+    drawInsufficientPopup()
+    
+    while showInsufficientPopup do
+        local ev = {event.pull(0.5)}
+        
+        if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
+            showInsufficientPopup = false
+            safeExit()
+            return
+        end
+        
+        if ev[1] == "touch" then
+            local x, y = ev[3], ev[4]
+            
+            local popupWidth = 52
+            local popupHeight = 11
+            local popupX = math.floor((80 - popupWidth) / 2)
+            local popupY = 7
+            
+            local okBtnText = "[ ПОНЯТНО ]"
+            local okBtnWidth = unicode.len(okBtnText) + 2
+            local okBtn = {
+                x = popupX + math.floor((popupWidth - okBtnWidth) / 2),
+                y = popupY + 8,
+                xs = okBtnWidth,
+                ys = 1
+            }
+            
+            if isButtonClicked(okBtn, x, y) then
+                showInsufficientPopup = false
+                markDirty()
+                break
+            end
+            
+            if not (x >= popupX and x < popupX + popupWidth and y >= popupY and y < popupY + popupHeight) then
+                showInsufficientPopup = false
+                markDirty()
+                break
+            end
+        end
+    end
+end
+
+-- ============================================================
 -- ОСНОВНОЙ ЦИКЛ
 -- ============================================================
 
@@ -6151,11 +6353,10 @@ function main()
                             local needEma = selectedItem.priceEma or 0
                             
                             if (needCoin > 0 and coinBalance < needCoin) or (needEma > 0 and emaBalance < needEma) then
-                                showInsufficientPopup = true
                                 insufficientBalanceCoin = coinBalance
                                 insufficientBalanceEma = emaBalance
-                                markDirty()
-                                drawInsufficientPopup()
+                                -- ★★★ ВЫЗЫВАЕМ НОВУЮ ФУНКЦИЮ ★★★
+                                showInsufficientPopupAndWait()
                                 goto continue
                             end
                             goToPurchase(selectedItem)
@@ -6179,21 +6380,7 @@ function main()
             end
 
             if showSellPopup and currentScreen == "sell_scan" then
-                local popupWidth = 40
-                local popupHeight = 10
-                local popupX = math.floor((80 - popupWidth) / 2)
-                local popupY = 10
-                local yesBtn = {x=popupX+5, y=popupY+7, xs=13, ys=1}
-                local noBtn  = {x=popupX+popupWidth-16, y=popupY+7, xs=12, ys=1}
-                if isButtonClicked(yesBtn, x, y) then
-                    performSell()
-                elseif isButtonClicked(noBtn, x, y) then
-                    showSellPopup = false
-                    markDirty()
-                elseif not (x >= popupX and x < popupX + popupWidth and y >= popupY and y < popupY + popupHeight) then
-                    showSellPopup = false
-                    markDirty()
-                end
+                -- Уже обрабатывается в showSellPopupAndWait()
                 goto continue
             end
 
@@ -6258,8 +6445,7 @@ function main()
                     end
                     foundAmount = scanPlayerInventory(sellConfirmItem.internalName, sellConfirmItem.damage or 0)
                     if foundAmount > 0 then
-                        showSellPopup = true
-                        markDirty()
+                        showSellPopupAndWait()
                     else
                         drawCenteredText(17, "Предмет не найден!", colors.error)
                         os.sleep(0.8)
@@ -6508,65 +6694,8 @@ function main()
                     goto continue
                 end
             end
-
-            if showInsufficientPopup then
-                local popupWidth = 52
-                local popupHeight = 11
-                local popupX = math.floor((80 - popupWidth) / 2)
-                local popupY = 7
-                local okBtn = {
-                    x = popupX + 18,
-                    y = popupY + 8,
-                    xs = 16,
-                    ys = 1
-                }
-                if x >= okBtn.x and x < okBtn.x + okBtn.xs and y >= okBtn.y and y < okBtn.y + okBtn.ys then
-                    showInsufficientPopup = false
-                    if currentShopMode == "buy" then
-                        currentScreen = "shop_buy"
-                        markDirty()
-                    else
-                        currentScreen = "shop_sell"
-                        markDirty()
-                    end
-                    goto continue
-                end
-                if not (x >= popupX and x < popupX + popupWidth and y >= popupY and y < popupY + popupHeight) then
-                    showInsufficientPopup = false
-                    if currentShopMode == "buy" then
-                        currentScreen = "shop_buy"
-                        markDirty()
-                    else
-                        currentScreen = "shop_sell"
-                        markDirty()
-                    end
-                    goto continue
-                end
-            end
-
-            if showInventoryFullPopup then
-                local popupWidth = 52
-                local popupHeight = 9
-                local popupX = math.floor((80 - popupWidth) / 2)
-                local popupY = 9
-                local okBtnText = "[ ПОНЯТНО ]"
-                local okBtnWidth = unicode.len(okBtnText) + 2
-                local okBtn = {
-                    x = popupX + math.floor((popupWidth - okBtnWidth) / 2),
-                    y = popupY+6,
-                    xs = okBtnWidth,
-                    ys = 1
-                }
-                if isButtonClicked(okBtn, x, y) then
-                    showInventoryFullPopup = false
-                    currentScreen = "shop_buy"
-                    markDirty()
-                end
-                goto continue
-            end
-
-            goto continue
         end
+ 
 
         if e == "scroll" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
             local playerName = ev[6] or "Неизвестный"
