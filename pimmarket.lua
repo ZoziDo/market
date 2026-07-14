@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333111
 -- ============================================================
 
 local function setupAutoStart()
@@ -4129,6 +4129,12 @@ function handleQuantityButtonClick(btnText)
     markDirty()
 end
 
+
+
+-- ============================================================
+-- ★★★ НОВЫЙ ИНТЕРФЕЙС АУТЕНТИФИКАЦИИ (ИСПРАВЛЕННЫЙ) ★★★
+-- ============================================================
+
 -- ============================================================
 -- КОНСТАНТЫ UI
 -- ============================================================
@@ -4236,9 +4242,9 @@ function drawAuthInputField(text, winX, winY, winW, yOffset, isActive)
     return inputX, inputW
 end
 
--- ============================================================ 
+-- ============================================================
 -- ★★★ ПОКАЗ СООБЩЕНИЯ ОБ УСПЕХЕ ★★★
--- ============================================================ 
+-- ============================================================
 
 function showAuthSuccessMessage()
     local screenW, screenH = getScreenSize()
@@ -4620,6 +4626,169 @@ function showUnbindConfirmPopup()
                 break
             end
         end
+    end
+end
+
+function unbindAccount()
+    if not currentPlayer then
+        showTempMessage("Ошибка: игрок не авторизован", 2)
+        return
+    end
+    
+    local json_data = toJson({
+        site_user = currentPlayer
+    })
+    
+    local success, response = pcall(function()
+        return internet.request(WEB_URL .. "/api/unbind_player", json_data, {
+            ["Content-Type"] = "application/json; charset=utf-8",
+            ["Connection"] = "close",
+            ["Timeout"] = "5"
+        })
+    end)
+    
+    if success and response then
+        local body = ""
+        for chunk in response do
+            body = body .. chunk
+        end
+        local data = parseJSON(body)
+        
+        if data and data.success then
+            -- ★★★ УДАЛЯЕМ ПРИВЯЗКУ ИЗ ДАННЫХ ИГРОКА ★★★
+            if currentPlayer and playersIndex[currentPlayer] then
+                local player = playersIndex[currentPlayer]
+                player.site_user = nil
+                saveDBDeferred()
+                
+                local change = {
+                    id = "unbind_" .. os.time() .. "_" .. math.random(100000),
+                    type = "unbind_player",
+                    data = {
+                        player = currentPlayer
+                    }
+                }
+                add_pending_change(change)
+                
+                boundPlayer = nil
+                clearBoundPlayer()
+                bindingCache.isBound = false
+                bindingCache.lastCheck = 0
+                
+                addLog("🔓 Аккаунт отвязан: " .. currentPlayer)
+                
+                gpu.setForeground(colors.success)
+                gpu.set(28, 17, "✅ Аккаунт ОТВЯЗАН!")
+                gpu.setForeground(colors.text_main)
+                gpu.set(23, 18, "   Доступ к магазину ограничен")
+                os.sleep(2)
+                goBackToMenu()
+            else
+                gpu.setForeground(colors.error)
+                gpu.set(20, 17, "❌ Игрок не найден")
+                os.sleep(2)
+                markDirty()
+            end
+        else
+            local errorMsg = (data and data.error) or "Ошибка отвязки"
+            gpu.setForeground(colors.error)
+            gpu.set(20, 17, "❌ " .. errorMsg)
+            os.sleep(2)
+            markDirty()
+        end
+    else
+        gpu.setForeground(colors.error)
+        gpu.set(20, 17, "❌ Ошибка соединения")
+        os.sleep(2)
+        markDirty()
+    end
+end
+
+function verifyAuthCode(code)
+    drawCenteredText(15, "Проверка кода...", colors.accent_secondary)
+    os.sleep(0.5)
+    
+    local success, response = pcall(function()
+        return internet.request(WEB_URL .. "/api/verify_auth_code", toJson({
+            code = code,
+            game_player = currentPlayer
+        }), {
+            ["Content-Type"] = "application/json",
+            ["Connection"] = "close",
+            ["Timeout"] = "5"
+        })
+    end)
+    
+    if success and response then
+        local body = ""
+        for chunk in response do
+            body = body .. chunk
+        end
+        local data = parseJSON(body)
+        
+        if data and data.success then
+            -- ★★★ СОХРАНЯЕМ ПРИВЯЗКУ ★★★
+            if currentPlayer and playersIndex[currentPlayer] then
+                local player = playersIndex[currentPlayer]
+                player.site_user = data.player
+                saveDB()  -- ✅ МГНОВЕННОЕ СОХРАНЕНИЕ
+                
+                local change = {
+                    id = "bind_" .. os.time() .. "_" .. math.random(100000),
+                    type = "bind_player",
+                    data = {
+                        player = currentPlayer,
+                        site_user = data.player
+                    }
+                }
+                add_pending_change(change)
+                
+                boundPlayer = data.player
+                saveBoundPlayer(data.player)
+                bindingCache.isBound = true
+                bindingCache.lastCheck = os.time()
+                
+                addLog("🔗 Аккаунт привязан: " .. boundPlayer .. " -> " .. currentPlayer)
+                
+                -- ★★★ ПОКАЗЫВАЕМ СООБЩЕНИЕ ОБ УСПЕХЕ ★★★
+                gpu.setForeground(colors.success)
+                gpu.set(20, 14, "✅ Аккаунт успешно привязан!")
+                gpu.setForeground(colors.text_main)
+                gpu.set(18, 15, "Теперь вы можете пользоваться магазином")
+                
+                syncCurrentPlayer()
+                os.sleep(2)
+                
+                -- ★★★ НЕ ВЫЗЫВАЕМ goBackToMenu() ЗДЕСЬ ★★★
+                -- Просто возвращаем true
+                return true
+            else
+                gpu.setForeground(colors.error)
+                gpu.set(20, 14, "❌ Ошибка: игрок не найден")
+                os.sleep(2)
+                markDirty()
+                return false
+            end
+        else
+            local errorMsg = (data and data.error) or "Ошибка привязки"
+            gpu.setForeground(colors.error)
+            gpu.set(20, 14, "❌ " .. errorMsg)
+            
+            if data and data.bound then
+                gpu.setForeground(colors.text_main)
+                gpu.set(15, 15, "Этот игрок уже привязан к другому аккаунту")
+            end
+            
+            os.sleep(2)
+            markDirty()
+            return false
+        end
+    else
+        gpu.setForeground(colors.error)
+        gpu.set(20, 14, "❌ Ошибка соединения с сервером")
+        os.sleep(2)
+        markDirty()
+        return false
     end
 end
 
