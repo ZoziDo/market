@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА11
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА
 -- ============================================================
 
 local function setupAutoStart()
@@ -4294,10 +4294,12 @@ function showAuthPopup()
                         isEditing = false
                         local success = verifyAuthCode(authCodeInput)
                         if success then
+                            -- ★★★ ОЧИЩАЕМ ЭКРАН И ПЕРЕРИСОВЫВАЕМ МЕНЮ ★★★
                             forceSyncBinding()
+                            clear()  -- ← ПОЛНОСТЬЮ ОЧИЩАЕМ ЭКРАН
                             currentScreen = "menu"
-                            goBackToMenu()
-                            markDirty()
+                            -- ★★★ НЕ ВЫЗЫВАЕМ goBackToMenu() — ОНА УЖЕ ЕСТЬ ★★★
+                            forceRender()  -- ← ПРИНУДИТЕЛЬНАЯ ПЕРЕРИСОВКА
                             break
                         else
                             isEditing = true
@@ -4315,15 +4317,16 @@ function showAuthPopup()
             elseif ev[1] == "key_down" then
                 local ch = ev[3]
                 
-                if ch == 13 then  -- Enter
+                if ch == 13 then
                     if authCodeInput and #authCodeInput == 6 then
                         isEditing = false
                         local success = verifyAuthCode(authCodeInput)
                         if success then
+                            -- ★★★ ОЧИЩАЕМ ЭКРАН И ПЕРЕРИСОВЫВАЕМ МЕНЮ ★★★
                             forceSyncBinding()
+                            clear()  -- ← ПОЛНОСТЬЮ ОЧИЩАЕМ ЭКРАН
                             currentScreen = "menu"
-                            goBackToMenu()
-                            markDirty()
+                            forceRender()  -- ← ПРИНУДИТЕЛЬНАЯ ПЕРЕРИСОВКА
                             break
                         else
                             isEditing = true
