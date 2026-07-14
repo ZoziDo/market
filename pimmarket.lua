@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333
 -- ============================================================
 
 local function setupAutoStart()
@@ -2210,7 +2210,7 @@ function checkBindingOnServer()
             if player then
                 if player.site_user ~= data.site_user then
                     player.site_user = data.site_user
-                    saveDB()  -- ✅ saveDB() вместо saveDBDeferred()
+                    saveDB()
                     writeDebugLog("🔄 Локальная привязка обновлена: " .. data.site_user)
                 end
             end
@@ -2221,13 +2221,13 @@ function checkBindingOnServer()
             bindingCache.lastCheck = os.time()
             
         elseif data and data.success == false then
-            -- На сервере НЕТ привязки
+            -- ★★★ НА СЕРВЕРЕ НЕТ ПРИВЯЗКИ — ОЧИЩАЕМ ЛОКАЛЬНУЮ ★★★
             writeDebugLog("❌ На сервере нет привязки для: " .. currentPlayer)
             
             local player = playersIndex[currentPlayer]
             if player and player.site_user then
                 player.site_user = nil
-                saveDB()  -- ✅ saveDB() вместо saveDBDeferred()
+                saveDB()
                 writeDebugLog("🗑️ Локальная привязка удалена")
             end
             
@@ -2236,6 +2236,7 @@ function checkBindingOnServer()
             bindingCache.isBound = false
             bindingCache.lastCheck = os.time()
             
+            -- ★★★ ОБНОВЛЯЕМ UI ★★★
             if currentScreen == "menu" then
                 markDirty()
             end
@@ -4291,13 +4292,14 @@ function showAuthPopup()
                 if isButtonClicked(confirmBtn, x, y) then
                     if authCodeInput and #authCodeInput == 6 then
                         isEditing = false
-                        -- ★★★ ВЫЗЫВАЕМ verifyAuthCode ★★★
                         local success = verifyAuthCode(authCodeInput)
                         if success then
-                            -- ★★★ ЕСЛИ УСПЕШНО - ВЫХОДИМ ИЗ ЦИКЛА ★★★
+                            -- ★★★ ПРАВИЛЬНЫЙ ВЫХОД В МЕНЮ ★★★
+                            currentScreen = "menu"
+                            goBackToMenu()
+                            markDirty()
                             break
                         else
-                            -- ★★★ ЕСЛИ ОШИБКА - ВОЗВРАЩАЕМСЯ В РЕЖИМ ВВОДА ★★★
                             isEditing = true
                             markDirty()
                         end
@@ -4318,6 +4320,10 @@ function showAuthPopup()
                         isEditing = false
                         local success = verifyAuthCode(authCodeInput)
                         if success then
+                            -- ★★★ ПРАВИЛЬНЫЙ ВЫХОД В МЕНЮ ★★★
+                            currentScreen = "menu"
+                            goBackToMenu()
+                            markDirty()
                             break
                         else
                             isEditing = true
@@ -4533,7 +4539,7 @@ function verifyAuthCode(code)
             if currentPlayer and playersIndex[currentPlayer] then
                 local player = playersIndex[currentPlayer]
                 player.site_user = data.player
-                saveDBDeferred()
+                saveDB()  -- ✅ МГНОВЕННОЕ СОХРАНЕНИЕ
                 
                 local change = {
                     id = "bind_" .. os.time() .. "_" .. math.random(100000),
@@ -4561,10 +4567,9 @@ function verifyAuthCode(code)
                 syncCurrentPlayer()
                 os.sleep(2)
                 
-                -- ★★★ ВОЗВРАЩАЕМСЯ В МЕНЮ ★★★
-                currentScreen = "menu"
-                goBackToMenu()
-                return true  -- ★★★ ВОЗВРАЩАЕМ УСПЕХ ★★★
+                -- ★★★ НЕ ВЫЗЫВАЕМ goBackToMenu() ЗДЕСЬ ★★★
+                -- Просто возвращаем true
+                return true
             else
                 gpu.setForeground(colors.error)
                 gpu.set(20, 14, "❌ Ошибка: игрок не найден")
