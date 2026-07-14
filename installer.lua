@@ -1,5 +1,3 @@
--- PIM Market Installer (исправленный, без лишнего вывода wget)
------------------------------------- config ------------------------------------
 local REPOSITORY  = "https://raw.githubusercontent.com/ZoziDo/market/main/"
 
 local filesToDownload = {
@@ -7,9 +5,8 @@ local filesToDownload = {
   {url = REPOSITORY .. "agreement.lua",   path = "/home/agreement.lua"},
 }
 
-local appTitle = "PIM Market – Installer (fixed)"
+local appTitle = "VIP MARKET – Installer (fixed)"
 local rebootAfter = true
--------------------------------------------------------------------------------
 
 local computer  = require("computer")
 local component = require("component")
@@ -78,7 +75,7 @@ local function drawChrome()
   frame(X,Y,W,H)
   text(X+2, Y, "┤ "..appTitle.." ├", COL_TEXT)
   text(X+W-20, Y, "[by ZoziDo]", COL_DIM)
-  text(X+W-15, Y+1, "🛒 PIM", COL_WARN)
+  text(X+W-15, Y+1, "🛒 VIP", COL_WARN)
   text(X+2, Y+2, "Status:", COL_DIM)
   text(X+2, Y+6, "Progress:", COL_DIM)
   text(X+2, Y+9, "Log:", COL_DIM)
@@ -159,7 +156,7 @@ local function install()
     writeStatus("Completed with errors. Check log.", COL_WARN)
   end
 
-  text(X+2, Y+H-2, "PIM Market | Installer (fixed)", COL_DIM)
+  text(X+2, Y+H-2, "VIP MARKET | Installer (fixed)", COL_DIM)
 
   if rebootAfter then
     for n=3,1,-1 do
