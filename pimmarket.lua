@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- НАСТРОЙКА АВТОЗАПУСКА (УСТАНОВЩИК)
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА
 -- ============================================================
 
 local function setupAutoStart()
@@ -19,19 +19,23 @@ local function setupAutoStart()
     local io = require("io")
     local os = require("os")
     
-    -- Проверяем наличие основного скрипта
-    local installerFile = "/home/installer.lua"
-    if not fs.exists(installerFile) then
-        -- Если установщика нет - создаём заглушку
-        local file = io.open(installerFile, "w")
+    local startupFile = "/home/startup.lua"
+    if not fs.exists(startupFile) then
+        print("📝 Создаём автозапуск: " .. startupFile)
+        local file = io.open(startupFile, "w")
         if file then
             file:write([[
--- PIM Market Installer
-print("⚠️ Установщик не найден, скачайте его с GitHub")
-os.sleep(5)
-os.exit(0)
+-- Автозапуск PIM MARKET
+local shell = require("shell")
+local computer = require("computer")
+
+os.sleep(3)
+shell.execute("lua /home/pimmarket.lua &")
+print("✅ PIM MARKET запущен")
 ]])
             file:close()
+            print("✅ Автозапуск создан")
+            return true
         end
     end
     
@@ -39,8 +43,10 @@ os.exit(0)
     if not fs.exists(shrcFile) then
         local file = io.open(shrcFile, "w")
         if file then
-            file:write("lua /home/installer.lua\n")
+            file:write("-- Автозапуск PIM MARKET\n")
+            file:write("lua /home/pimmarket.lua &\n")
             file:close()
+            print("✅ .shrc создан")
         end
     end
     
@@ -55,6 +61,7 @@ if not fs.exists("/home/.autostart_done") then
             file:write("autostart_configured_" .. os.date("%Y-%m-%d %H:%M:%S"))
             file:close()
         end
+        print("🎯 Автозагрузка настроена!")
     end
 end
 
@@ -1263,6 +1270,23 @@ function removeAdmin(playerName)
         end
     end
     return false
+end
+
+function getOrCreatePlayer(name)
+    if not players[name] then
+        players[name] = {
+            balance = 0.0,
+            emaBalance = 0.0,
+            transactions = 0,
+            regDate = getRealTimeString(),
+            agreed = false,
+            banned = false,
+            hasFeedback = false
+        }
+        saveDB()  -- ★★★ СОХРАНЯЕМ СРАЗУ ПРИ СОЗДАНИИ ★★★
+        writeDebugLog("➕ Создан новый игрок: " .. name)
+    end
+    return players[name]
 end
 
 function addTransaction(type, playerName, item, qty, value_coin, value_ema)
@@ -2990,9 +3014,9 @@ function drawMainMenu()
         if not playerAgreed then
             gpu.setForeground(colors.accent_secondary)
             if showShopDenied then
-                drawCenteredText(8, "Доступ запрещён. Примите соглашение [Соглашение]", colors.error)
+                drawCenteredText(7, "Доступ запрещён. Примите соглашение [Соглашение]", colors.error)
             else
-                drawCenteredText(8, "Вы не приняли пользовательское соглашение! Нажмите [Соглашение]", colors.accent_secondary)
+                drawCenteredText(7, "Вы не приняли пользовательское соглашение! Нажмите [Соглашение]", colors.accent_secondary)
             end
         end
 
@@ -5638,7 +5662,25 @@ function checkWebCommands()
                 sendResult(true, "Отзыв обработан")
                 goto continue
             end
-            
+
+            -- ★★★ ОБРАБОТКА ПРИНЯТИЯ СОГЛАШЕНИЯ — ОТДЕЛЬНЫЙ БЛОК! ★★★
+            if cmd.command == "agree" then
+                writeDebugFile("📝 Получена команда agree для: " .. (d.name or "?"))
+                local playerName = d.name
+                if not playerName then
+                    sendResult(false, "Нет имени игрока")
+                    goto continue
+                end
+                
+                local player = getOrCreatePlayer(playerName)
+                player.agreed = true
+                saveDB()  -- ★★★ СОХРАНЯЕМ ★★★
+                
+                addLog("📝 " .. playerName .. " принял пользовательское соглашение")
+                sendResult(true, "Соглашение принято")
+                goto continue
+            end
+
             sendResult(false, "Неизвестная команда: " .. tostring(cmd.command))
             
             ::continue::
