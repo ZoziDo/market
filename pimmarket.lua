@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА1
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333
 -- ============================================================
 
 local function setupAutoStart()
@@ -1193,6 +1193,40 @@ end
 -- ★★★ ИНИЦИАЛИЗИРУЕМ ИНДЕКС ПОСЛЕ ЗАГРУЗКИ ИГРОКОВ ★★★
 syncPlayerIndex()
 
+-- ★★★ ПРОВЕРЯЕМ ПРИВЯЗКИ ПРИ ЗАПУСКЕ ★★★
+-- Проверяем всех игроков на наличие привязок и сверяем с сервером
+for name, player in pairs(players) do
+    if player.site_user and player.site_user ~= "" then
+        -- Проверяем на сервере
+        local success, response = pcall(function()
+            return internet.request(WEB_URL .. "/api/player_binding?site_user=" .. player.site_user, nil, {
+                ["Connection"] = "close",
+                ["Timeout"] = "2"
+            })
+        end)
+        
+        if success and response then
+            local body = ""
+            for chunk in response do
+                body = body .. chunk
+            end
+            local data = parseJSON(body)
+            
+            -- Если на сервере нет привязки - очищаем локально
+            if not data or not data.success then
+                player.site_user = nil
+                writeDebugLog("🗑️ Очищена привязка для " .. name .. " (не найдена на сервере)")
+                print("🗑️ Очищена привязка для " .. name)
+            end
+        end
+    end
+end
+
+-- Сохраняем после проверки
+if dbDirty then
+    saveDB()
+end
+
 if fs.exists(STATS_PATH) then
     local file = io.open(STATS_PATH, "r")
     local raw = file:read("*a")
@@ -2171,13 +2205,11 @@ function checkBindingOnServer()
             -- На сервере есть привязка
             writeDebugLog("✅ На сервере есть привязка: " .. data.site_user)
             
-            -- Проверяем, совпадает ли с локальной
             local player = playersIndex[currentPlayer]
             if player then
                 if player.site_user ~= data.site_user then
-                    -- Обновляем локальные данные
                     player.site_user = data.site_user
-                    saveDB()
+                    saveDB()  -- ✅ saveDB() вместо saveDBDeferred()
                     writeDebugLog("🔄 Локальная привязка обновлена: " .. data.site_user)
                 end
             end
@@ -2191,11 +2223,10 @@ function checkBindingOnServer()
             -- На сервере НЕТ привязки
             writeDebugLog("❌ На сервере нет привязки для: " .. currentPlayer)
             
-            -- Очищаем локальную привязку
             local player = playersIndex[currentPlayer]
             if player and player.site_user then
                 player.site_user = nil
-                saveDB()
+                saveDB()  -- ✅ saveDB() вместо saveDBDeferred()
                 writeDebugLog("🗑️ Локальная привязка удалена")
             end
             
@@ -2204,7 +2235,6 @@ function checkBindingOnServer()
             bindingCache.isBound = false
             bindingCache.lastCheck = os.time()
             
-            -- Если игрок в меню — обновляем UI
             if currentScreen == "menu" then
                 markDirty()
             end
