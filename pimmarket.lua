@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12
 -- ============================================================
 
 local function setupAutoStart()
@@ -1193,6 +1193,197 @@ end
 -- ★★★ ИНИЦИАЛИЗИРУЕМ ИНДЕКС ПОСЛЕ ЗАГРУЗКИ ИГРОКОВ ★★★
 syncPlayerIndex()
 
+-- ============================================================
+-- JSON ПАРСЕР
+-- ============================================================
+
+function parseJSON(json_str)
+    if not json_str or json_str == "" then 
+        writeDebugLog("parseJSON: пустая строка")
+        return nil 
+    end
+
+    local str = json_str
+    local pos = 1
+    local len = #str
+
+    local function skipSpace()
+        while pos <= len do
+            local c = str:sub(pos, pos)
+            if c ~= " " and c ~= "\n" and c ~= "\r" and c ~= "\t" then break end
+            pos = pos + 1
+        end
+    end
+
+    local function parseString()
+        if str:sub(pos, pos) ~= '"' then 
+            return nil 
+        end
+        
+        pos = pos + 1
+        local start = pos
+        local result = ""
+        
+        while pos <= len do
+            local ch = str:sub(pos, pos)
+            if ch == '"' then
+                result = result .. str:sub(start, pos-1)
+                pos = pos + 1
+                return result
+            elseif ch == '\\' then
+                result = result .. str:sub(start, pos-1)
+                pos = pos + 1
+                if pos > len then return nil end
+                
+                local esc = str:sub(pos, pos)
+                local map = {
+                    ['"'] = '"',
+                    ['\\'] = '\\',
+                    ['/'] = '/',
+                    b = '\b',
+                    f = '\f',
+                    n = '\n',
+                    r = '\r',
+                    t = '\t'
+                }
+                
+                if map[esc] then
+                    result = result .. map[esc]
+                elseif esc == 'u' then
+                    local hex = str:sub(pos+1, pos+4)
+                    if #hex == 4 then
+                        local code = tonumber(hex, 16)
+                        if code then
+                            result = result .. unicode.char(code)
+                            pos = pos + 4
+                        end
+                    end
+                else
+                    result = result .. '\\' .. esc
+                end
+                pos = pos + 1
+                start = pos
+            else
+                pos = pos + 1
+            end
+        end
+        return nil
+    end
+
+    function parseNumber()
+        local start = pos
+        while pos <= len do
+            local ch = str:sub(pos, pos)
+            if not ch:match("[%d%.%-%+eE]") then break end
+            pos = pos + 1
+        end
+        return tonumber(str:sub(start, pos-1))
+    end
+
+    local function parseArray()
+        if str:sub(pos, pos) ~= '[' then 
+            return nil
+        end
+        
+        pos = pos + 1
+        local arr = {}
+        skipSpace()
+        if str:sub(pos, pos) == ']' then
+            pos = pos + 1
+            return arr
+        end
+        
+        while true do
+            local val = parseValue()
+            if val == nil then break end
+            table.insert(arr, val)
+            skipSpace()
+            local ch = str:sub(pos, pos)
+            if ch == ',' then 
+                pos = pos + 1
+            elseif ch == ']' then 
+                pos = pos + 1
+                break
+            else 
+                break 
+            end
+        end
+        return arr
+    end
+
+    local function parseObject()
+        if str:sub(pos, pos) ~= '{' then 
+            return nil
+        end
+        
+        pos = pos + 1
+        local obj = {}
+        skipSpace()
+        if str:sub(pos, pos) == '}' then
+            pos = pos + 1
+            return obj
+        end
+        
+        while true do
+            skipSpace()
+            local key = parseString()
+            if not key then break end
+            skipSpace()
+            if str:sub(pos, pos) ~= ':' then break end
+            pos = pos + 1
+            skipSpace()
+            local val = parseValue()
+            if val == nil then break end
+            obj[key] = val
+            skipSpace()
+            local ch = str:sub(pos, pos)
+            if ch == ',' then 
+                pos = pos + 1
+            elseif ch == '}' then 
+                pos = pos + 1
+                break
+            else 
+                break 
+            end
+        end
+        return obj
+    end
+
+    function parseValue()
+        skipSpace()
+        if pos > len then 
+            return nil
+        end
+        local ch = str:sub(pos, pos)
+
+        if ch == '"' then
+            return parseString()
+        elseif ch == '{' then
+            return parseObject()
+        elseif ch == '[' then
+            return parseArray()
+        elseif ch == 't' and str:sub(pos, pos+3) == 'true' then
+            pos = pos + 4
+            return true
+        elseif ch == 'f' and str:sub(pos, pos+4) == 'false' then
+            pos = pos + 5
+            return false
+        elseif ch == 'n' and str:sub(pos, pos+3) == 'null' then
+            pos = pos + 4
+            return nil
+        elseif ch:match("[%d%-]") then
+            return parseNumber()
+        end
+        writeDebugLog("parseValue: неизвестный символ " .. ch)
+        return nil
+    end
+
+    skipSpace()
+    local result = parseValue()
+    writeDebugLog("parseJSON результат: " .. (result and "таблица" or "nil"))
+    return result
+end  
+
 -- ★★★ ПРОВЕРЯЕМ ПРИВЯЗКИ ПРИ ЗАПУСКЕ ★★★
 -- Проверяем всех игроков на наличие привязок и сверяем с сервером
 for name, player in pairs(players) do
@@ -1833,196 +2024,6 @@ feedbackRating = 5  -- ★★★ НОВАЯ ПЕРЕМЕННАЯ ДЛЯ РЕЙТ
 feedbackEditMode = false
 playerHasFeedback = false
 
--- ============================================================
--- JSON ПАРСЕР
--- ============================================================
-
-function parseJSON(json_str)
-    if not json_str or json_str == "" then 
-        writeDebugLog("parseJSON: пустая строка")
-        return nil 
-    end
-
-    local str = json_str
-    local pos = 1
-    local len = #str
-
-    local function skipSpace()
-        while pos <= len do
-            local c = str:sub(pos, pos)
-            if c ~= " " and c ~= "\n" and c ~= "\r" and c ~= "\t" then break end
-            pos = pos + 1
-        end
-    end
-
-    local function parseString()
-        if str:sub(pos, pos) ~= '"' then 
-            return nil 
-        end
-        
-        pos = pos + 1
-        local start = pos
-        local result = ""
-        
-        while pos <= len do
-            local ch = str:sub(pos, pos)
-            if ch == '"' then
-                result = result .. str:sub(start, pos-1)
-                pos = pos + 1
-                return result
-            elseif ch == '\\' then
-                result = result .. str:sub(start, pos-1)
-                pos = pos + 1
-                if pos > len then return nil end
-                
-                local esc = str:sub(pos, pos)
-                local map = {
-                    ['"'] = '"',
-                    ['\\'] = '\\',
-                    ['/'] = '/',
-                    b = '\b',
-                    f = '\f',
-                    n = '\n',
-                    r = '\r',
-                    t = '\t'
-                }
-                
-                if map[esc] then
-                    result = result .. map[esc]
-                elseif esc == 'u' then
-                    local hex = str:sub(pos+1, pos+4)
-                    if #hex == 4 then
-                        local code = tonumber(hex, 16)
-                        if code then
-                            result = result .. unicode.char(code)
-                            pos = pos + 4
-                        end
-                    end
-                else
-                    result = result .. '\\' .. esc
-                end
-                pos = pos + 1
-                start = pos
-            else
-                pos = pos + 1
-            end
-        end
-        return nil
-    end
-
-    function parseNumber()
-        local start = pos
-        while pos <= len do
-            local ch = str:sub(pos, pos)
-            if not ch:match("[%d%.%-%+eE]") then break end
-            pos = pos + 1
-        end
-        return tonumber(str:sub(start, pos-1))
-    end
-
-    local function parseArray()
-        if str:sub(pos, pos) ~= '[' then 
-            return nil
-        end
-        
-        pos = pos + 1
-        local arr = {}
-        skipSpace()
-        if str:sub(pos, pos) == ']' then
-            pos = pos + 1
-            return arr
-        end
-        
-        while true do
-            local val = parseValue()
-            if val == nil then break end
-            table.insert(arr, val)
-            skipSpace()
-            local ch = str:sub(pos, pos)
-            if ch == ',' then 
-                pos = pos + 1
-            elseif ch == ']' then 
-                pos = pos + 1
-                break
-            else 
-                break 
-            end
-        end
-        return arr
-    end
-
-    local function parseObject()
-        if str:sub(pos, pos) ~= '{' then 
-            return nil
-        end
-        
-        pos = pos + 1
-        local obj = {}
-        skipSpace()
-        if str:sub(pos, pos) == '}' then
-            pos = pos + 1
-            return obj
-        end
-        
-        while true do
-            skipSpace()
-            local key = parseString()
-            if not key then break end
-            skipSpace()
-            if str:sub(pos, pos) ~= ':' then break end
-            pos = pos + 1
-            skipSpace()
-            local val = parseValue()
-            if val == nil then break end
-            obj[key] = val
-            skipSpace()
-            local ch = str:sub(pos, pos)
-            if ch == ',' then 
-                pos = pos + 1
-            elseif ch == '}' then 
-                pos = pos + 1
-                break
-            else 
-                break 
-            end
-        end
-        return obj
-    end
-
-    function parseValue()
-        skipSpace()
-        if pos > len then 
-            return nil
-        end
-        local ch = str:sub(pos, pos)
-
-        if ch == '"' then
-            return parseString()
-        elseif ch == '{' then
-            return parseObject()
-        elseif ch == '[' then
-            return parseArray()
-        elseif ch == 't' and str:sub(pos, pos+3) == 'true' then
-            pos = pos + 4
-            return true
-        elseif ch == 'f' and str:sub(pos, pos+4) == 'false' then
-            pos = pos + 5
-            return false
-        elseif ch == 'n' and str:sub(pos, pos+3) == 'null' then
-            pos = pos + 4
-            return nil
-        elseif ch:match("[%d%-]") then
-            return parseNumber()
-        end
-        writeDebugLog("parseValue: неизвестный символ " .. ch)
-        return nil
-    end
-
-    skipSpace()
-    local result = parseValue()
-    writeDebugLog("parseJSON результат: " .. (result and "таблица" or "nil"))
-    return result
-end  -- <-- ЭТОТ end ЗАКРЫВАЕТ parseJSON
 
 -- ============================================================
 -- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
