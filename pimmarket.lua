@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333555
 -- ============================================================
 
 local function setupAutoStart()
@@ -1283,7 +1283,7 @@ function getOrCreatePlayer(name)
             banned = false,
             hasFeedback = false
         }
-        saveDB()  -- ★★★ СОХРАНЯЕМ СРАЗУ ПРИ СОЗДАНИИ ★★★
+        saveDB()
         writeDebugLog("➕ Создан новый игрок: " .. name)
     end
     return players[name]
@@ -6472,7 +6472,8 @@ function main()
                     local player = playersIndex[currentPlayer]
                     if player then
                         player.agreed = true
-                        saveDBDeferred()
+                        saveDB()  -- ✅ МГНОВЕННОЕ СОХРАНЕНИЕ НА ДИСК
+                        writeDebugLog("💾 Соглашение сохранено для " .. currentPlayer)
                     end
                     showTempMessage("✅ Спасибо! Теперь вам доступен магазин.", 2)
                     goBackToMenu()
