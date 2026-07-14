@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333111
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА
 -- ============================================================
 
 local function setupAutoStart()
@@ -5803,11 +5803,11 @@ function showSellPopupAndWait()
                 break
             elseif isButtonClicked(noBtn, x, y) then
                 showSellPopup = false
-                markDirty()
+                forceRender()  -- ✅ ВМЕСТО markDirty()
                 break
             elseif not (x >= popupX and x < popupX + popupWidth and y >= popupY and y < popupY + popupHeight) then
                 showSellPopup = false
-                markDirty()
+                forceRender()  -- ✅ ВМЕСТО markDirty()
                 break
             end
         end
@@ -5850,13 +5850,13 @@ function showPartialPopupAndWait()
             
             if isButtonClicked(okBtn, x, y) then
                 showPartialPopup = false
-                markDirty()
+                forceRender()  -- ✅ ВМЕСТО markDirty()
                 break
             end
             
             if not (x >= popupX and x < popupX + popupWidth and y >= popupY and y < popupY + popupHeight) then
                 showPartialPopup = false
-                markDirty()
+                forceRender()  -- ✅ ВМЕСТО markDirty()
                 break
             end
         end
@@ -5899,13 +5899,13 @@ function showInventoryFullPopupAndWait()
             
             if isButtonClicked(okBtn, x, y) then
                 showInventoryFullPopup = false
-                markDirty()
+                forceRender()  -- ✅ ВМЕСТО markDirty()
                 break
             end
             
             if not (x >= popupX and x < popupX + popupWidth and y >= popupY and y < popupY + popupHeight) then
                 showInventoryFullPopup = false
-                markDirty()
+                forceRender()  -- ✅ ВМЕСТО markDirty()
                 break
             end
         end
@@ -5948,13 +5948,13 @@ function showInsufficientPopupAndWait()
             
             if isButtonClicked(okBtn, x, y) then
                 showInsufficientPopup = false
-                markDirty()
+                forceRender()  -- ✅ ВМЕСТО markDirty()
                 break
             end
             
             if not (x >= popupX and x < popupX + popupWidth and y >= popupY and y < popupY + popupHeight) then
                 showInsufficientPopup = false
-                markDirty()
+                forceRender()  -- ✅ ВМЕСТО markDirty()
                 break
             end
         end
