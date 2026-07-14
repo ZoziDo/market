@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333123
 -- ============================================================
 
 local function setupAutoStart()
@@ -4247,63 +4247,60 @@ end
 function showAuthPopup()
     writeDebugLog("showAuthPopup()")
     currentScreen = "auth_popup"
-    authCodeInput = ""  -- ★★★ ВАЖНО: ОЧИЩАЕМ ПРИ ОТКРЫТИИ ★★★
+    authCodeInput = ""  -- ОЧИЩАЕМ ПРИ ОТКРЫТИИ
     
     local screenW, screenH = getScreenSize()
     
-    -- ★★★ РАЗМЕРЫ ОКНА ★★★
+    -- РАЗМЕРЫ ОКНА
     local winW = math.min(52, screenW - 6)
     local winH = math.min(20, screenH - 6)
     local winX = math.floor((screenW - winW) / 2) + 1
     local winY = math.floor((screenH - winH) / 2) + 1
     
-    -- ★★★ ОЧИЩАЕМ ЭКРАН ★★★
-    gpu.setBackground(UI.COLORS.bg_main)
-    gpu.fill(1, 1, screenW, screenH, " ")
-    
-    -- ★★★ РИСУЕМ ОКНО ★★★
-    gpu.setBackground(UI.COLORS.bg_card)
-    gpu.fill(winX, winY, winW, winH, " ")
-    
-    -- Рамка
-    gpu.setForeground(UI.COLORS.accent)
-    gpu.fill(winX, winY, winW, 1, "═")
-    gpu.fill(winX, winY + winH - 1, winW, 1, "═")
-    for i = 1, winH - 2 do
-        gpu.set(winX, winY + i, "║")
-        gpu.set(winX + winW - 1, winY + i, "║")
+    -- ФУНКЦИЯ ДЛЯ ОТРИСОВКИ ВСЕГО ОКНА
+    local function drawAuthWindow()
+        gpu.setBackground(UI.COLORS.bg_main)
+        gpu.fill(1, 1, screenW, screenH, " ")
+        
+        gpu.setBackground(UI.COLORS.bg_card)
+        gpu.fill(winX, winY, winW, winH, " ")
+        
+        gpu.setForeground(UI.COLORS.accent)
+        gpu.fill(winX, winY, winW, 1, "═")
+        gpu.fill(winX, winY + winH - 1, winW, 1, "═")
+        for i = 1, winH - 2 do
+            gpu.set(winX, winY + i, "║")
+            gpu.set(winX + winW - 1, winY + i, "║")
+        end
+        gpu.set(winX, winY, "╔")
+        gpu.set(winX + winW - 1, winY, "╗")
+        gpu.set(winX, winY + winH - 1, "╚")
+        gpu.set(winX + winW - 1, winY + winH - 1, "╝")
+        
+        gpu.setForeground(UI.COLORS.accent_dim)
+        gpu.fill(winX + 4, winY + 2, winW - 8, 1, "─")
+        
+        local title = "🔐 АУТЕНТИФИКАЦИЯ"
+        gpu.setForeground(UI.COLORS.accent)
+        gpu.set(winX + math.floor((winW - unicode.len(title)) / 2), winY + 1, title)
+        
+        local playerLabel = "👤 Игрок: "
+        local playerName = currentPlayer or "Неизвестно"
+        local playerY = winY + 4
+        gpu.setForeground(UI.COLORS.text_main)
+        gpu.set(winX + math.floor((winW - unicode.len(playerLabel .. playerName)) / 2), playerY, playerLabel)
+        gpu.setForeground(UI.COLORS.accent)
+        gpu.set(winX + math.floor((winW - unicode.len(playerLabel .. playerName)) / 2) + unicode.len(playerLabel), playerY, playerName)
     end
-    gpu.set(winX, winY, "╔")
-    gpu.set(winX + winW - 1, winY, "╗")
-    gpu.set(winX, winY + winH - 1, "╚")
-    gpu.set(winX + winW - 1, winY + winH - 1, "╝")
     
-    -- Декоративная линия
-    gpu.setForeground(UI.COLORS.accent_dim)
-    gpu.fill(winX + 4, winY + 2, winW - 8, 1, "─")
-    
-    -- ★★★ ЗАГОЛОВОК ★★★
-    local title = "🔐 АУТЕНТИФИКАЦИЯ"
-    gpu.setForeground(UI.COLORS.accent)
-    gpu.set(winX + math.floor((winW - unicode.len(title)) / 2), winY + 1, title)
-    
-    -- ★★★ ИГРОК ★★★
-    local playerLabel = "👤 Игрок: "
-    local playerName = currentPlayer or "Неизвестно"
-    local playerY = winY + 4
-    gpu.setForeground(UI.COLORS.text_main)
-    gpu.set(winX + math.floor((winW - unicode.len(playerLabel .. playerName)) / 2), playerY, playerLabel)
-    gpu.setForeground(UI.COLORS.accent)
-    gpu.set(winX + math.floor((winW - unicode.len(playerLabel .. playerName)) / 2) + unicode.len(playerLabel), playerY, playerName)
-    
-    -- ★★★ ПРОВЕРКА ПРИВЯЗКИ ★★★
+    -- ПРОВЕРКА ПРИВЯЗКИ
     local savedBound = loadBoundPlayer()
     local isBound = (boundPlayer and boundPlayer ~= "") or (savedBound and savedBound ~= "")
     
     if isBound then
+        drawAuthWindow()
         local displayName = boundPlayer or savedBound
         
-        -- Сообщение о привязке
         local boundMsg = "✅ Аккаунт ПРИВЯЗАН"
         gpu.setForeground(UI.COLORS.success)
         gpu.set(winX + math.floor((winW - unicode.len(boundMsg)) / 2), winY + 6, boundMsg)
@@ -4312,7 +4309,6 @@ function showAuthPopup()
         gpu.setForeground(UI.COLORS.text_muted)
         gpu.set(winX + math.floor((winW - unicode.len(boundTo)) / 2), winY + 7, boundTo)
         
-        -- ★★★ КНОПКИ (СИММЕТРИЧНЫЕ) ★★★
         local btnW = 14
         local totalBtnsW = btnW * 2 + UI.SPACING.button_gap
         local startX = winX + math.floor((winW - totalBtnsW) / 2)
@@ -4321,7 +4317,6 @@ function showAuthPopup()
         local unbindBtn = drawAuthButton("[ ОТВЯЗАТЬ ]", startX, btnY, btnW, false)
         local closeBtn = drawAuthButton("[ ЗАКРЫТЬ ]", startX + btnW + UI.SPACING.button_gap, btnY, btnW, true)
         
-        -- ★★★ ЦИКЛ ОЖИДАНИЯ ★★★
         while currentScreen == "auth_popup" do
             local ev = {event.pull(0.5)}
             
@@ -4350,7 +4345,9 @@ function showAuthPopup()
         end
         
     else
-        -- ★★★ ИНСТРУКЦИЯ ★★★
+        -- ОТРИСОВЫВАЕМ ОКНО
+        drawAuthWindow()
+        
         local instr1 = "📋 Введите код из браузера"
         gpu.setForeground(UI.COLORS.text_main)
         gpu.set(winX + math.floor((winW - unicode.len(instr1)) / 2), winY + 6, instr1)
@@ -4359,10 +4356,10 @@ function showAuthPopup()
         gpu.setForeground(UI.COLORS.text_muted)
         gpu.set(winX + math.floor((winW - unicode.len(instr2)) / 2), winY + 7, instr2)
         
-        -- ★★★ ПОЛЕ ВВОДА ★★★
+        -- ПОЛЕ ВВОДА
         drawAuthInputField(authCodeInput, winX, winY, winW, 9, true)
         
-        -- ★★★ КНОПКИ (СИММЕТРИЧНЫЕ) ★★★
+        -- КНОПКИ
         local btnW = 14
         local totalBtnsW = btnW * 2 + UI.SPACING.button_gap
         local startX = winX + math.floor((winW - totalBtnsW) / 2)
@@ -4371,17 +4368,11 @@ function showAuthPopup()
         local confirmBtn = drawAuthButton("[ ПОДТВЕРДИТЬ ]", startX, btnY, btnW, true)
         local closeBtn = drawAuthButton("[ ЗАКРЫТЬ ]", startX + btnW + UI.SPACING.button_gap, btnY, btnW, false)
         
-        -- ★★★ СООБЩЕНИЕ ОБ ОШИБКЕ ★★★
         local errorMsg = ""
         local errorY = winY + 12
         
-        -- ★★★ ЦИКЛ ОЖИДАНИЯ ★★★
-        local isEditing = true
-        
-        -- ★★★ ФЛАГ ДЛЯ ОТСЛЕЖИВАНИЯ, БЫЛА ЛИ ОШИБКА ★★★
-        local hadError = false
-
-        while currentScreen == "auth_popup" and isEditing do
+        -- ★★★ ОСНОВНОЙ ЦИКЛ ★★★
+        while currentScreen == "auth_popup" do
             local ev = {event.pull(0.5)}
             
             if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
@@ -4391,38 +4382,30 @@ function showAuthPopup()
                 break
             end
             
+            -- ★★★ ОБРАБОТКА КАСАНИЙ ★★★
             if ev[1] == "touch" then
                 local x, y = ev[3], ev[4]
                 
                 if isButtonClicked(closeBtn, x, y) then
-                    isEditing = false
                     goBackToMenu()
                     break
                 end
                 
                 if isButtonClicked(confirmBtn, x, y) then
-                    -- ★★★ ОЧИЩАЕМ СООБЩЕНИЕ ОБ ОШИБКЕ ★★★
+                    -- ОЧИЩАЕМ СООБЩЕНИЕ ОБ ОШИБКЕ
                     errorMsg = ""
                     gpu.setBackground(UI.COLORS.bg_card)
                     gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
                     
-                    -- ★★★ ПРОВЕРЯЕМ ДЛИНУ КОДА ★★★
                     if authCodeInput and #authCodeInput == 6 then
-                        -- ★★★ СОХРАНЯЕМ КОД ДЛЯ ПРОВЕРКИ ★★★
                         local codeToCheck = authCodeInput
-                        
-                        -- ★★★ СБРАСЫВАЕМ ПОЛЕ ВВОДА ДЛЯ БЕЗОПАСНОСТИ ★★★
                         authCodeInput = ""
                         drawAuthInputField(authCodeInput, winX, winY, winW, 9, true)
                         
-                        isEditing = false
                         local success = verifyAuthCode(codeToCheck)
                         
                         if success then
-                            -- ★★★ УСПЕХ ★★★
                             forceSyncBinding()
-                            
-                            -- ★★★ ОЧИЩАЕМ ВСЁ ОКНО ДЛЯ СООБЩЕНИЯ ОБ УСПЕХЕ ★★★
                             gpu.setBackground(UI.COLORS.bg_card)
                             gpu.fill(winX + 2, winY + 9, winW - 4, 8, " ")
                             
@@ -4434,14 +4417,12 @@ function showAuthPopup()
                             gpu.setForeground(UI.COLORS.text_main)
                             gpu.set(winX + math.floor((winW - unicode.len(msg2)) / 2), winY + 12, msg2)
                             
-                            -- ★★★ УБИРАЕМ ПОЛЕ ВВОДА И КНОПКИ ★★★
                             gpu.setBackground(UI.COLORS.bg_card)
                             gpu.fill(winX + 2, winY + 9, winW - 4, 2, " ")
                             gpu.fill(winX + 2, winY + winH - 4, winW - 4, 3, " ")
                             
                             os.sleep(1.5)
                             
-                            -- ★★★ ПЕРЕХОДИМ В МЕНЮ ★★★
                             gpu.setBackground(UI.COLORS.bg_main)
                             gpu.fill(1, 1, screenW, screenH, " ")
                             currentScreen = "menu"
@@ -4449,24 +4430,20 @@ function showAuthPopup()
                             drawTempMessage()
                             break
                         else
-                            -- ★★★ ОШИБКА ★★★
-                            hadError = true
                             errorMsg = "❌ Неверный код или ошибка"
                             gpu.setBackground(UI.COLORS.bg_card)
                             gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
                             gpu.setForeground(UI.COLORS.error)
                             gpu.set(winX + math.floor((winW - unicode.len(errorMsg)) / 2), errorY, errorMsg)
-                            markDirty()
-                            isEditing = true
-                            -- ★★★ ПОЛЕ ВВОДА УЖЕ ОЧИЩЕНО ★★★
+                            -- НЕ перерисовываем всё окно, только сообщение
                         end
                     else
-                        errorMsg = "  Введите 6-значный код!"
+                        errorMsg = "⚠️ Введите 6-значный код!"
                         gpu.setBackground(UI.COLORS.bg_card)
                         gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
                         gpu.setForeground(UI.COLORS.warning)
                         gpu.set(winX + math.floor((winW - unicode.len(errorMsg)) / 2), errorY, errorMsg)
-                        -- ★★★ ОЖИДАЕМ, НО НЕ БЛОКИРУЕМ ВВОД ★★★
+                        -- Ждём, но не блокируем ввод
                         local startTime = os.clock()
                         while os.clock() - startTime < 1.5 do
                             local ev2 = {event.pull(0.05)}
@@ -4475,60 +4452,56 @@ function showAuthPopup()
                                 markDirty()
                                 break
                             end
+                            -- ★★★ ОБРАБАТЫВАЕМ ВВОД ВО ВРЕМЯ ОЖИДАНИЯ ★★★
                             if ev2[1] == "key_down" then
                                 local ch = ev2[3]
                                 if ch == 8 then
                                     authCodeInput = unicode.sub(authCodeInput or "", 1, -2)
-                                    drawAuthInputField(authCodeInput, winX, winY, winW, 9, true)
+                                    errorMsg = ""
                                     gpu.setBackground(UI.COLORS.bg_card)
                                     gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
-                                    errorMsg = ""
-                                    markDirty()
+                                    drawAuthInputField(authCodeInput, winX, winY, winW, 9, true)
                                 elseif ch >= 48 and ch <= 57 then
                                     if unicode.len(authCodeInput or "") < 6 then
                                         authCodeInput = (authCodeInput or "") .. unicode.char(ch)
-                                        drawAuthInputField(authCodeInput, winX, winY, winW, 9, true)
+                                        errorMsg = ""
                                         gpu.setBackground(UI.COLORS.bg_card)
                                         gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
-                                        errorMsg = ""
-                                        markDirty()
+                                        drawAuthInputField(authCodeInput, winX, winY, winW, 9, true)
                                     end
                                 end
                             end
                         end
                         gpu.setBackground(UI.COLORS.bg_card)
                         gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
-                        markDirty()
                     end
-                    break
+                end
+            end
+            
+            -- ★★★ ОБРАБОТКА КЛАВИАТУРЫ ★★★
+            if ev[1] == "key_down" then
+                local ch = ev[3]
+                local playerName = ev[5] or "Неизвестный"
+                
+                if not isPimOwner(playerName) then
+                    goto continue_key
                 end
                 
-            elseif ev[1] == "key_down" then
-                local ch = ev[3]
-                
                 if ch == 13 then  -- Enter
-                    -- ★★★ ОЧИЩАЕМ СООБЩЕНИЕ ОБ ОШИБКЕ ★★★
+                    -- ОЧИЩАЕМ СООБЩЕНИЕ ОБ ОШИБКЕ
                     errorMsg = ""
                     gpu.setBackground(UI.COLORS.bg_card)
                     gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
                     
-                    -- ★★★ ПРОВЕРЯЕМ ДЛИНУ КОДА ★★★
                     if authCodeInput and #authCodeInput == 6 then
-                        -- ★★★ СОХРАНЯЕМ КОД ДЛЯ ПРОВЕРКИ ★★★
                         local codeToCheck = authCodeInput
-                        
-                        -- ★★★ СБРАСЫВАЕМ ПОЛЕ ВВОДА ДЛЯ БЕЗОПАСНОСТИ ★★★
                         authCodeInput = ""
                         drawAuthInputField(authCodeInput, winX, winY, winW, 9, true)
                         
-                        isEditing = false
                         local success = verifyAuthCode(codeToCheck)
                         
                         if success then
-                            -- ★★★ УСПЕХ ★★★
                             forceSyncBinding()
-                            
-                            -- ★★★ ОЧИЩАЕМ ВСЁ ОКНО ДЛЯ СООБЩЕНИЯ ОБ УСПЕХЕ ★★★
                             gpu.setBackground(UI.COLORS.bg_card)
                             gpu.fill(winX + 2, winY + 9, winW - 4, 8, " ")
                             
@@ -4540,14 +4513,12 @@ function showAuthPopup()
                             gpu.setForeground(UI.COLORS.text_main)
                             gpu.set(winX + math.floor((winW - unicode.len(msg2)) / 2), winY + 12, msg2)
                             
-                            -- ★★★ УБИРАЕМ ПОЛЕ ВВОДА И КНОПКИ ★★★
                             gpu.setBackground(UI.COLORS.bg_card)
                             gpu.fill(winX + 2, winY + 9, winW - 4, 2, " ")
                             gpu.fill(winX + 2, winY + winH - 4, winW - 4, 3, " ")
                             
                             os.sleep(1.5)
                             
-                            -- ★★★ ПЕРЕХОДИМ В МЕНЮ ★★★
                             gpu.setBackground(UI.COLORS.bg_main)
                             gpu.fill(1, 1, screenW, screenH, " ")
                             currentScreen = "menu"
@@ -4555,16 +4526,11 @@ function showAuthPopup()
                             drawTempMessage()
                             break
                         else
-                            -- ★★★ ОШИБКА ★★★
-                            hadError = true
                             errorMsg = "❌ Неверный код или ошибка"
                             gpu.setBackground(UI.COLORS.bg_card)
                             gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
                             gpu.setForeground(UI.COLORS.error)
                             gpu.set(winX + math.floor((winW - unicode.len(errorMsg)) / 2), errorY, errorMsg)
-                            markDirty()
-                            isEditing = true
-                            -- ★★★ ПОЛЕ ВВОДА УЖЕ ОЧИЩЕНО ★★★
                         end
                     else
                         errorMsg = "⚠️ Введите 6-значный код!"
@@ -4584,50 +4550,44 @@ function showAuthPopup()
                                 local ch2 = ev2[3]
                                 if ch2 == 8 then
                                     authCodeInput = unicode.sub(authCodeInput or "", 1, -2)
-                                    drawAuthInputField(authCodeInput, winX, winY, winW, 9, true)
+                                    errorMsg = ""
                                     gpu.setBackground(UI.COLORS.bg_card)
                                     gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
-                                    errorMsg = ""
-                                    markDirty()
+                                    drawAuthInputField(authCodeInput, winX, winY, winW, 9, true)
                                 elseif ch2 >= 48 and ch2 <= 57 then
                                     if unicode.len(authCodeInput or "") < 6 then
                                         authCodeInput = (authCodeInput or "") .. unicode.char(ch2)
-                                        drawAuthInputField(authCodeInput, winX, winY, winW, 9, true)
+                                        errorMsg = ""
                                         gpu.setBackground(UI.COLORS.bg_card)
                                         gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
-                                        errorMsg = ""
-                                        markDirty()
+                                        drawAuthInputField(authCodeInput, winX, winY, winW, 9, true)
                                     end
                                 end
                             end
                         end
                         gpu.setBackground(UI.COLORS.bg_card)
                         gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
-                        markDirty()
                     end
-                    break
                     
                 elseif ch == 8 then  -- Backspace
                     authCodeInput = unicode.sub(authCodeInput or "", 1, -2)
-                    -- ★★★ ОЧИЩАЕМ СООБЩЕНИЕ ОБ ОШИБКЕ ПРИ СТИРАНИИ ★★★
                     errorMsg = ""
                     gpu.setBackground(UI.COLORS.bg_card)
                     gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
                     drawAuthInputField(authCodeInput, winX, winY, winW, 9, true)
-                    markDirty()
                     
                 elseif ch >= 48 and ch <= 57 then  -- Цифры 0-9
                     if unicode.len(authCodeInput or "") < 6 then
                         authCodeInput = (authCodeInput or "") .. unicode.char(ch)
-                        -- ★★★ ОЧИЩАЕМ СООБЩЕНИЕ ОБ ОШИБКЕ ПРИ ВВОДЕ ★★★
                         errorMsg = ""
                         gpu.setBackground(UI.COLORS.bg_card)
                         gpu.fill(winX + 2, errorY, winW - 4, 3, " ")
                         drawAuthInputField(authCodeInput, winX, winY, winW, 9, true)
-                        markDirty()
                     end
                 end
             end
+            
+            ::continue_key::
         end
     end
 end
