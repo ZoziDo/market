@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА1
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА44
 -- ============================================================
 
 local function setupAutoStart()
@@ -4294,6 +4294,8 @@ function showAuthPopup()
                         isEditing = false
                         local success = verifyAuthCode(authCodeInput)
                         if success then
+                            -- ★★★ ПРИНУДИТЕЛЬНО ОБНОВЛЯЕМ СТАТУС ★★★
+                            forceSyncBinding()  -- ← ДОБАВИТЬ ЭТУ СТРОКУ
                             -- ★★★ ПРАВИЛЬНЫЙ ВЫХОД В МЕНЮ ★★★
                             currentScreen = "menu"
                             goBackToMenu()
@@ -4312,31 +4314,30 @@ function showAuthPopup()
                     break
                 end
                 
-            elseif ev[1] == "key_down" then
-                local ch = ev[3]
-                
-                if ch == 13 then
-                    if authCodeInput and #authCodeInput == 6 then
-                        isEditing = false
-                        local success = verifyAuthCode(authCodeInput)
-                        if success then
-                            -- ★★★ ПРАВИЛЬНЫЙ ВЫХОД В МЕНЮ ★★★
-                            currentScreen = "menu"
-                            goBackToMenu()
-                            markDirty()
-                            break
-                        else
-                            isEditing = true
-                            markDirty()
-                        end
+            if ch == 13 then
+                if authCodeInput and #authCodeInput == 6 then
+                    isEditing = false
+                    local success = verifyAuthCode(authCodeInput)
+                    if success then
+                        -- ★★★ ПРИНУДИТЕЛЬНО ОБНОВЛЯЕМ СТАТУС ★★★
+                        forceSyncBinding()  -- ← ДОБАВИТЬ ЭТУ СТРОКУ
+                        -- ★★★ ПРАВИЛЬНЫЙ ВЫХОД В МЕНЮ ★★★
+                        currentScreen = "menu"
+                        goBackToMenu()
+                        markDirty()
+                        break
                     else
-                        gpu.setForeground(colors.error)
-                        gpu.set(popupX + 3, popupY + 13, " Введите 6-значный код!")
-                        os.sleep(1.5)
+                        isEditing = true
                         markDirty()
                     end
-                    break
-                    
+                else
+                    gpu.setForeground(colors.error)
+                    gpu.set(popupX + 3, popupY + 13, " Введите 6-значный код!")
+                    os.sleep(1.5)
+                    markDirty()
+                end
+                break
+                
                 elseif ch == 8 then
                     authCodeInput = unicode.sub(authCodeInput or "", 1, -2)
                     markDirty()
