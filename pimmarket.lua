@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА123336666
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА123331142
 -- ============================================================
 
 local function setupAutoStart()
@@ -4793,29 +4793,7 @@ function verifyAuthCode(code)
                 return false
             end
         else
-            -- ★★★ ОШИБКА ПРИВЯЗКИ (ЦЕНТРИРОВАННО) ★★★
-            local errorMsg = (data and data.error) or "Ошибка привязки"
-            
-            -- Получаем размеры экрана для центрирования
-            local screenW, screenH = getScreenSize()
-            
-            -- Очищаем область сообщения
-            gpu.setBackground(UI.COLORS.bg_main)
-            gpu.fill(1, math.floor(screenH / 2) - 2, screenW, 4, " ")
-            
-            -- Показываем основную ошибку (по центру)
-            local fullError = "❌ " .. errorMsg
-            gpu.setForeground(UI.COLORS.error)
-            gpu.set(getCenteredX(fullError), math.floor(screenH / 2) - 1, fullError)
-            
-            -- Дополнительное сообщение, если игрок уже привязан
-            if data and data.bound then
-                local boundMsg = "Этот игрок уже привязан к другому аккаунту"
-                gpu.setForeground(UI.COLORS.text_main)
-                gpu.set(getCenteredX(boundMsg), math.floor(screenH / 2), boundMsg)
-            end
-            
-            os.sleep(2)
+            os.sleep(0.5)
             markDirty()
             return false
         end
