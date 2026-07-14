@@ -4,8 +4,6 @@ local REPOSITORY  = "https://raw.githubusercontent.com/ZoziDo/market/main/"
 
 local filesToDownload = {
   {url = REPOSITORY .. "pimmarket.lua",   path = "/home/pimmarket.lua"},
-  {url = REPOSITORY .. "buy_items.lua",   path = "/home/buy_items.lua"},
-  {url = REPOSITORY .. "shop_items.lua",  path = "/home/shop_items.lua"},
   {url = REPOSITORY .. "agreement.lua",   path = "/home/agreement.lua"},
 }
 
