@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333111
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА
 -- ============================================================
 
 local function setupAutoStart()
@@ -4129,10 +4129,8 @@ function handleQuantityButtonClick(btnText)
     markDirty()
 end
 
-
-
 -- ============================================================
--- ★★★ НОВЫЙ ИНТЕРФЕЙС АУТЕНТИФИКАЦИИ (ИСПРАВЛЕННЫЙ) ★★★
+-- ★★★ НОВЫЙ ИНТЕРФЕЙС АУТЕНТИФИКАЦИИ (ФИНАЛЬНЫЙ) ★★★
 -- ============================================================
 
 -- ============================================================
@@ -4240,56 +4238,6 @@ function drawAuthInputField(text, winX, winY, winW, yOffset, isActive)
     gpu.set(textX, y, displayText)
     
     return inputX, inputW
-end
-
--- ============================================================
--- ★★★ ПОКАЗ СООБЩЕНИЯ ОБ УСПЕХЕ ★★★
--- ============================================================
-
-function showAuthSuccessMessage()
-    local screenW, screenH = getScreenSize()
-    
-    -- Очищаем экран
-    gpu.setBackground(UI.COLORS.bg_main)
-    gpu.fill(1, 1, screenW, screenH, " ")
-    
-    -- Рисуем рамку
-    local winW = math.min(48, screenW - 6)
-    local winH = 10
-    local winX = math.floor((screenW - winW) / 2) + 1
-    local winY = math.floor((screenH - winH) / 2) + 1
-    
-    gpu.setBackground(UI.COLORS.bg_card)
-    gpu.fill(winX, winY, winW, winH, " ")
-    
-    gpu.setForeground(UI.COLORS.accent)
-    gpu.fill(winX, winY, winW, 1, "═")
-    gpu.fill(winX, winY + winH - 1, winW, 1, "═")
-    for i = 1, winH - 2 do
-        gpu.set(winX, winY + i, "║")
-        gpu.set(winX + winW - 1, winY + i, "║")
-    end
-    gpu.set(winX, winY, "╔")
-    gpu.set(winX + winW - 1, winY, "╗")
-    gpu.set(winX, winY + winH - 1, "╚")
-    gpu.set(winX + winW - 1, winY + winH - 1, "╝")
-    
-    -- ★★★ ЗАГОЛОВОК ★★★
-    local title = "🔐 АУТЕНТИФИКАЦИЯ"
-    gpu.setForeground(UI.COLORS.accent)
-    gpu.set(winX + math.floor((winW - unicode.len(title)) / 2), winY + 1, title)
-    
-    -- ★★★ СООБЩЕНИЕ ОБ УСПЕХЕ (ЦЕНТРИРОВАННО) ★★★
-    local msg1 = "✅ Аккаунт успешно привязан!"
-    gpu.setForeground(UI.COLORS.success)
-    gpu.set(winX + math.floor((winW - unicode.len(msg1)) / 2), winY + 4, msg1)
-    
-    local msg2 = "Теперь вы можете пользоваться магазином"
-    gpu.setForeground(UI.COLORS.text_main)
-    gpu.set(winX + math.floor((winW - unicode.len(msg2)) / 2), winY + 5, msg2)
-    
-    -- Ждём 1.5 секунды
-    os.sleep(1.5)
 end
 
 -- ============================================================
@@ -4456,9 +4404,28 @@ function showAuthPopup()
                         if success then
                             -- ★★★ УСПЕХ ★★★
                             forceSyncBinding()
-                            -- ★★★ ПОКАЗЫВАЕМ СООБЩЕНИЕ ОБ УСПЕХЕ ★★★
-                            showAuthSuccessMessage()
-                            -- ★★★ ПЕРЕХОДИМ В МЕНЮ ★★★
+                            
+                            -- ★★★ ПОКАЗЫВАЕМ СООБЩЕНИЕ ОБ УСПЕХЕ В ТОМ ЖЕ ОКНЕ ★★★
+                            -- Очищаем область сообщений
+                            gpu.setBackground(UI.COLORS.bg_card)
+                            gpu.fill(winX + 2, winY + 11, winW - 4, 3, " ")
+                            gpu.fill(winX + 2, winY + 11, winW - 4, 3, " ")
+                            
+                            -- Сообщение об успехе (по центру)
+                            local msg1 = "✅ Аккаунт успешно привязан!"
+                            gpu.setForeground(UI.COLORS.success)
+                            gpu.set(winX + math.floor((winW - unicode.len(msg1)) / 2), winY + 11, msg1)
+                            
+                            local msg2 = "Теперь вы можете пользоваться магазином"
+                            gpu.setForeground(UI.COLORS.text_main)
+                            gpu.set(winX + math.floor((winW - unicode.len(msg2)) / 2), winY + 12, msg2)
+                            
+                            -- Убираем поле ввода и кнопки
+                            gpu.setBackground(UI.COLORS.bg_card)
+                            gpu.fill(winX + 2, winY + 9, winW - 4, 3, " ")
+                            gpu.fill(winX + 2, winY + winH - 4, winW - 4, 3, " ")
+                            
+                            os.sleep(1.5)
                             currentScreen = "menu"
                             goBackToMenu()
                             markDirty()
@@ -4466,12 +4433,18 @@ function showAuthPopup()
                         else
                             isEditing = true
                             errorMsg = "❌ Неверный код или ошибка"
+                            -- ★★★ ОЧИЩАЕМ ОБЛАСТЬ СООБЩЕНИЯ ★★★
+                            gpu.setBackground(UI.COLORS.bg_card)
+                            gpu.fill(winX + 2, errorY, winW - 4, 1, " ")
                             gpu.setForeground(UI.COLORS.error)
                             gpu.set(winX + math.floor((winW - unicode.len(errorMsg)) / 2), errorY, errorMsg)
                             markDirty()
                         end
                     else
                         errorMsg = "⚠️ Введите 6-значный код!"
+                        -- ★★★ ОЧИЩАЕМ ОБЛАСТЬ СООБЩЕНИЯ ★★★
+                        gpu.setBackground(UI.COLORS.bg_card)
+                        gpu.fill(winX + 2, errorY, winW - 4, 1, " ")
                         gpu.setForeground(UI.COLORS.warning)
                         gpu.set(winX + math.floor((winW - unicode.len(errorMsg)) / 2), errorY, errorMsg)
                         os.sleep(1.5)
@@ -4489,7 +4462,24 @@ function showAuthPopup()
                         local success = verifyAuthCode(authCodeInput)
                         if success then
                             forceSyncBinding()
-                            showAuthSuccessMessage()
+                            
+                            -- ★★★ ПОКАЗЫВАЕМ СООБЩЕНИЕ ОБ УСПЕХЕ В ТОМ ЖЕ ОКНЕ ★★★
+                            gpu.setBackground(UI.COLORS.bg_card)
+                            gpu.fill(winX + 2, winY + 11, winW - 4, 3, " ")
+                            
+                            local msg1 = "✅ Аккаунт успешно привязан!"
+                            gpu.setForeground(UI.COLORS.success)
+                            gpu.set(winX + math.floor((winW - unicode.len(msg1)) / 2), winY + 11, msg1)
+                            
+                            local msg2 = "Теперь вы можете пользоваться магазином"
+                            gpu.setForeground(UI.COLORS.text_main)
+                            gpu.set(winX + math.floor((winW - unicode.len(msg2)) / 2), winY + 12, msg2)
+                            
+                            gpu.setBackground(UI.COLORS.bg_card)
+                            gpu.fill(winX + 2, winY + 9, winW - 4, 3, " ")
+                            gpu.fill(winX + 2, winY + winH - 4, winW - 4, 3, " ")
+                            
+                            os.sleep(1.5)
                             currentScreen = "menu"
                             goBackToMenu()
                             markDirty()
@@ -4497,12 +4487,16 @@ function showAuthPopup()
                         else
                             isEditing = true
                             errorMsg = "❌ Неверный код или ошибка"
+                            gpu.setBackground(UI.COLORS.bg_card)
+                            gpu.fill(winX + 2, errorY, winW - 4, 1, " ")
                             gpu.setForeground(UI.COLORS.error)
                             gpu.set(winX + math.floor((winW - unicode.len(errorMsg)) / 2), errorY, errorMsg)
                             markDirty()
                         end
                     else
                         errorMsg = "⚠️ Введите 6-значный код!"
+                        gpu.setBackground(UI.COLORS.bg_card)
+                        gpu.fill(winX + 2, errorY, winW - 4, 1, " ")
                         gpu.setForeground(UI.COLORS.warning)
                         gpu.set(winX + math.floor((winW - unicode.len(errorMsg)) / 2), errorY, errorMsg)
                         os.sleep(1.5)
