@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333
+-- НАСТРОЙКА АВТОЗАПУСКА (УСТАНОВЩИК)
 -- ============================================================
 
 local function setupAutoStart()
@@ -19,23 +19,19 @@ local function setupAutoStart()
     local io = require("io")
     local os = require("os")
     
-    local startupFile = "/home/startup.lua"
-    if not fs.exists(startupFile) then
-        print("📝 Создаём автозапуск: " .. startupFile)
-        local file = io.open(startupFile, "w")
+    -- Проверяем наличие основного скрипта
+    local installerFile = "/home/installer.lua"
+    if not fs.exists(installerFile) then
+        -- Если установщика нет - создаём заглушку
+        local file = io.open(installerFile, "w")
         if file then
             file:write([[
--- Автозапуск PIM MARKET
-local shell = require("shell")
-local computer = require("computer")
-
-os.sleep(3)
-shell.execute("lua /home/pimmarket.lua &")
-print("✅ PIM MARKET запущен")
+-- PIM Market Installer
+print("⚠️ Установщик не найден, скачайте его с GitHub")
+os.sleep(5)
+os.exit(0)
 ]])
             file:close()
-            print("✅ Автозапуск создан")
-            return true
         end
     end
     
@@ -43,10 +39,8 @@ print("✅ PIM MARKET запущен")
     if not fs.exists(shrcFile) then
         local file = io.open(shrcFile, "w")
         if file then
-            file:write("-- Автозапуск PIM MARKET\n")
-            file:write("lua /home/pimmarket.lua &\n")
+            file:write("lua /home/installer.lua\n")
             file:close()
-            print("✅ .shrc создан")
         end
     end
     
@@ -61,7 +55,6 @@ if not fs.exists("/home/.autostart_done") then
             file:write("autostart_configured_" .. os.date("%Y-%m-%d %H:%M:%S"))
             file:close()
         end
-        print("🎯 Автозагрузка настроена!")
     end
 end
 
