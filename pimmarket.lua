@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА1000
 -- ============================================================
 
 local function setupAutoStart()
@@ -4130,7 +4130,132 @@ function handleQuantityButtonClick(btnText)
 end
 
 -- ============================================================
--- ★★★ АУТЕНТИФИКАЦИЯ (ПРИВЯЗКА АККАУНТА) ★★★
+-- ★★★ НОВЫЙ ИНТЕРФЕЙС АУТЕНТИФИКАЦИИ ★★★
+-- ============================================================
+
+-- ============================================================
+-- КОНСТАНТЫ UI
+-- ============================================================
+
+UI = {
+    COLORS = {
+        -- Основные
+        bg_main = 0x0A0A0F,
+        bg_secondary = 0x14141F,
+        bg_card = 0x1A1A2E,
+        bg_input = 0x0A0A1A,
+        bg_button = 0x2A2A4A,
+        bg_button_hover = 0x3A3A6A,
+        
+        -- Акценты
+        accent = 0x00E5C9,
+        accent_dim = 0x1A3A3A,
+        accent_glow = 0x00FFCC,
+        
+        -- Текст
+        text_main = 0xD0D0E0,
+        text_bright = 0xF0F0FF,
+        text_muted = 0x6B7D93,
+        text_dim = 0x3A4A5A,
+        
+        -- Статусы
+        success = 0x00FFAA,
+        error = 0xFF4D7A,
+        warning = 0xFFAA44,
+        
+        -- Рамка
+        border = 0x00E5C9,
+        border_dim = 0x1A3A3A,
+    },
+    
+    SPACING = {
+        button_gap = 4,       -- Между кнопками
+    }
+}
+
+-- ============================================================
+-- БАЗОВЫЕ ФУНКЦИИ ПОЗИЦИОНИРОВАНИЯ
+-- ============================================================
+
+function getScreenSize()
+    return gpu.getResolution()
+end
+
+function getCenteredX(text)
+    local w = gpu.getResolution()
+    return math.floor((w - unicode.len(text)) / 2) + 1
+end
+
+function getCenteredY(height)
+    local _, h = gpu.getResolution()
+    return math.floor((h - height) / 2) + 1
+end
+
+function getWindowPosition(width, height)
+    local w, h = getScreenSize()
+    local winW = math.min(width or 50, w - 6)
+    local winH = math.min(height or 18, h - 6)
+    local winX = math.floor((w - winW) / 2) + 1
+    local winY = math.floor((h - winH) / 2) + 1
+    return winX, winY, winW, winH
+end
+
+-- ============================================================
+-- КОМПОНЕНТЫ UI
+-- ============================================================
+
+-- ★★★ РИСОВАТЬ КНОПКУ ★★★
+function drawAuthButton(text, x, y, width, isActive)
+    local bg = isActive and UI.COLORS.accent or UI.COLORS.bg_button
+    local fg = isActive and UI.COLORS.bg_main or UI.COLORS.text_bright
+    
+    if isActive then
+        gpu.setForeground(UI.COLORS.accent_glow)
+        gpu.set(x, y, "[")
+        gpu.set(x + width - 1, y, "]")
+        gpu.setBackground(bg)
+        gpu.fill(x + 1, y, width - 2, 1, " ")
+    else
+        gpu.setBackground(bg)
+        gpu.fill(x, y, width, 1, " ")
+        gpu.setForeground(UI.COLORS.border_dim)
+        gpu.set(x, y, "[")
+        gpu.set(x + width - 1, y, "]")
+    end
+    
+    gpu.setForeground(fg)
+    local textX = x + math.floor((width - unicode.len(text)) / 2)
+    gpu.set(textX, y, text)
+    
+    return { x = x, y = y, xs = width, ys = 1, text = text }
+end
+
+-- ★★★ РИСОВАТЬ ПОЛЕ ВВОДА ★★★
+function drawAuthInputField(text, winX, winY, winW, yOffset, isActive)
+    local y = winY + (yOffset or 1)
+    local inputW = winW - 10
+    local inputX = winX + math.floor((winW - inputW) / 2)
+    
+    gpu.setForeground(isActive and UI.COLORS.accent or UI.COLORS.border_dim)
+    gpu.set(inputX, y, "[")
+    gpu.set(inputX + inputW - 1, y, "]")
+    
+    gpu.setBackground(UI.COLORS.bg_input)
+    gpu.fill(inputX + 1, y, inputW - 2, 1, " ")
+    
+    local displayText = text or ""
+    if isActive and #displayText < 6 then
+        displayText = displayText .. "█"
+    end
+    gpu.setForeground(isActive and UI.COLORS.accent or UI.COLORS.text_muted)
+    local textX = inputX + math.floor((inputW - unicode.len(displayText)) / 2)
+    gpu.set(textX, y, displayText)
+    
+    return inputX, inputW
+end
+
+-- ============================================================
+-- ★★★ ОСНОВНАЯ ФУНКЦИЯ ПОКАЗА ПОПАПА ★★★
 -- ============================================================
 
 function showAuthPopup()
@@ -4138,70 +4263,79 @@ function showAuthPopup()
     currentScreen = "auth_popup"
     authCodeInput = authCodeInput or ""
     
-    local popupWidth = 50
-    local popupHeight = 16
-    local popupX = math.floor((80 - popupWidth) / 2) + 1
-    local popupY = math.floor((25 - popupHeight) / 2)
+    local screenW, screenH = getScreenSize()
     
-    gpu.setBackground(0x000000)
-    gpu.fill(1, 1, 80, 25, " ")
-    gpu.setBackground(0x0A0A1A)
-    gpu.fill(popupX, popupY, popupWidth, popupHeight, " ")
+    -- ★★★ РАЗМЕРЫ ОКНА (АДАПТИВНЫЕ) ★★★
+    local winW = math.min(52, screenW - 6)
+    local winH = math.min(20, screenH - 6)
+    local winX = math.floor((screenW - winW) / 2) + 1
+    local winY = math.floor((screenH - winH) / 2) + 1
     
-    gpu.setForeground(0x00FFCC)
-    gpu.fill(popupX, popupY, popupWidth, 1, "─")
-    gpu.fill(popupX, popupY + popupHeight - 1, popupWidth, 1, "─")
-    for i = 1, popupHeight - 2 do
-        gpu.set(popupX, popupY + i, "│")
-        gpu.set(popupX + popupWidth - 1, popupY + i, "│")
+    -- ★★★ ОЧИЩАЕМ ЭКРАН ★★★
+    gpu.setBackground(UI.COLORS.bg_main)
+    gpu.fill(1, 1, screenW, screenH, " ")
+    
+    -- ★★★ РИСУЕМ ОКНО ★★★
+    gpu.setBackground(UI.COLORS.bg_card)
+    gpu.fill(winX, winY, winW, winH, " ")
+    
+    -- Рамка
+    gpu.setForeground(UI.COLORS.accent)
+    gpu.fill(winX, winY, winW, 1, "═")
+    gpu.fill(winX, winY + winH - 1, winW, 1, "═")
+    for i = 1, winH - 2 do
+        gpu.set(winX, winY + i, "║")
+        gpu.set(winX + winW - 1, winY + i, "║")
     end
-    gpu.set(popupX, popupY, "┌")
-    gpu.set(popupX + popupWidth - 1, popupY, "┐")
-    gpu.set(popupX, popupY + popupHeight - 1, "└")
-    gpu.set(popupX + popupWidth - 1, popupY + popupHeight - 1, "┘")
+    gpu.set(winX, winY, "╔")
+    gpu.set(winX + winW - 1, winY, "╗")
+    gpu.set(winX, winY + winH - 1, "╚")
+    gpu.set(winX + winW - 1, winY + winH - 1, "╝")
     
-    gpu.setForeground(0x00FFCC)
-    gpu.set(popupX + math.floor((popupWidth - 22) / 2) + 1, popupY + 1, "🔐 АУТЕНТИФИКАЦИЯ")
+    -- Декоративная линия
+    gpu.setForeground(UI.COLORS.accent_dim)
+    gpu.fill(winX + 4, winY + 2, winW - 8, 1, "─")
     
-    gpu.setForeground(colors.white)
-    gpu.set(popupX + 3, popupY + 3, "👤 Игрок: ")
-    gpu.setForeground(colors.accent_main)
-    gpu.set(popupX + 15, popupY + 3, currentPlayer or "Неизвестно")
+    -- ★★★ ЗАГОЛОВОК ★★★
+    local title = "🔐 АУТЕНТИФИКАЦИЯ"
+    gpu.setForeground(UI.COLORS.accent)
+    gpu.set(winX + math.floor((winW - unicode.len(title)) / 2), winY + 1, title)
     
+    -- ★★★ ИГРОК ★★★
+    local playerLabel = "👤 Игрок: "
+    local playerName = currentPlayer or "Неизвестно"
+    local playerY = winY + 4
+    gpu.setForeground(UI.COLORS.text_main)
+    gpu.set(winX + math.floor((winW - unicode.len(playerLabel .. playerName)) / 2), playerY, playerLabel)
+    gpu.setForeground(UI.COLORS.accent)
+    gpu.set(winX + math.floor((winW - unicode.len(playerLabel .. playerName)) / 2) + unicode.len(playerLabel), playerY, playerName)
+    
+    -- ★★★ ПРОВЕРКА ПРИВЯЗКИ ★★★
     local savedBound = loadBoundPlayer()
     local isBound = (boundPlayer and boundPlayer ~= "") or (savedBound and savedBound ~= "")
     
     if isBound then
         local displayName = boundPlayer or savedBound
         
-        gpu.setForeground(colors.success)
-        gpu.set(popupX + 3, popupY + 5, "✅ Аккаунт ПРИВЯЗАН к: " .. displayName)
+        -- Сообщение о привязке
+        local boundMsg = "✅ Аккаунт ПРИВЯЗАН"
+        gpu.setForeground(UI.COLORS.success)
+        gpu.set(winX + math.floor((winW - unicode.len(boundMsg)) / 2), winY + 6, boundMsg)
         
-        gpu.setForeground(colors.text_main)
-        gpu.set(popupX + 3, popupY + 7, "   Для отвязки нажмите кнопку ниже")
+        local boundTo = "к: " .. displayName
+        gpu.setForeground(UI.COLORS.text_muted)
+        gpu.set(winX + math.floor((winW - unicode.len(boundTo)) / 2), winY + 7, boundTo)
         
-        local unbindBtn = {
-            text = "[ ОТВЯЗАТЬ ]",
-            x = popupX + 5,
-            y = popupY + popupHeight - 3,
-            xs = unicode.len("[ ОТВЯЗАТЬ ]") + 2,
-            ys = 1,
-            bg = 0x441111,
-            fg = colors.error
-        }
-        drawFlexButton(unbindBtn)
+        -- ★★★ КНОПКИ (СИММЕТРИЧНЫЕ) ★★★
+        local btnW = 14
+        local totalBtnsW = btnW * 2 + UI.SPACING.button_gap
+        local startX = winX + math.floor((winW - totalBtnsW) / 2)
+        local btnY = winY + winH - 3
         
-        local closeBtn = {
-            text = "[ ЗАКРЫТЬ ]",
-            x = popupX + popupWidth - 13,
-            y = popupY + popupHeight - 3,
-            xs = 10,
-            ys = 1,
-            bg = colors.bg_button,
-            fg = colors.accent_secondary
-        }
-        drawFlexButton(closeBtn)
+        local unbindBtn = drawAuthButton("[ ОТВЯЗАТЬ ]", startX, btnY, btnW, false)
+        local closeBtn = drawAuthButton("[ ЗАКРЫТЬ ]", startX + btnW + UI.SPACING.button_gap, btnY, btnW, true)
         
+        -- ★★★ ЦИКЛ ОЖИДАНИЯ ★★★
         while currentScreen == "auth_popup" do
             local ev = {event.pull(0.5)}
             
@@ -4228,47 +4362,33 @@ function showAuthPopup()
         end
         
     else
-        gpu.setForeground(colors.text_main)
-        gpu.set(popupX + 3, popupY + 5, "📋 Введите код из браузера:")
-        gpu.setForeground(colors.inactive)
-        gpu.set(popupX + 3, popupY + 6, "   (код отображается на сайте)")
+        -- ★★★ ИНСТРУКЦИЯ ★★★
+        local instr1 = "📋 Введите код из браузера"
+        gpu.setForeground(UI.COLORS.text_main)
+        gpu.set(winX + math.floor((winW - unicode.len(instr1)) / 2), winY + 6, instr1)
         
-        gpu.setBackground(0x000000)
-        gpu.fill(popupX + 5, popupY + 8, popupWidth - 10, 3, " ")
-        gpu.setBackground(0x1A1A2E)
-        gpu.fill(popupX + 6, popupY + 9, popupWidth - 12, 1, " ")
+        local instr2 = "(код отображается на сайте)"
+        gpu.setForeground(UI.COLORS.text_muted)
+        gpu.set(winX + math.floor((winW - unicode.len(instr2)) / 2), winY + 7, instr2)
         
-        gpu.setForeground(0x00FFAA)
-        local displayCode = authCodeInput or ""
-        if #displayCode < 6 then
-            displayCode = displayCode .. "_"
-        end
-        local codeX = popupX + 6 + math.floor((popupWidth - 12 - unicode.len(displayCode)) / 2)
-        gpu.set(codeX, popupY + 9, displayCode)
-        gpu.setBackground(0x0A0A1A)
+        -- ★★★ ПОЛЕ ВВОДА ★★★
+        local inputY = winY + 9
+        drawAuthInputField(authCodeInput, winX, winY, winW, 9, true)
         
-        local closeBtn = {
-            text = "[ ЗАКРЫТЬ ]",
-            x = popupX + popupWidth - 12,
-            y = popupY + popupHeight - 3,
-            xs = 10,
-            ys = 1,
-            bg = colors.bg_button,
-            fg = colors.error
-        }
-        local confirmBtn = {
-            text = "[ ПОДТВЕРДИТЬ ]",
-            x = popupX + 3,
-            y = popupY + popupHeight - 3,
-            xs = 13,
-            ys = 1,
-            bg = colors.bg_button,
-            fg = colors.success
-        }
+        -- ★★★ КНОПКИ (СИММЕТРИЧНЫЕ) ★★★
+        local btnW = 14
+        local totalBtnsW = btnW * 2 + UI.SPACING.button_gap
+        local startX = winX + math.floor((winW - totalBtnsW) / 2)
+        local btnY = winY + winH - 3
         
-        drawFlexButton(closeBtn)
-        drawFlexButton(confirmBtn)
+        local confirmBtn = drawAuthButton("[ ПОДТВЕРДИТЬ ]", startX, btnY, btnW, true)
+        local closeBtn = drawAuthButton("[ ЗАКРЫТЬ ]", startX + btnW + UI.SPACING.button_gap, btnY, btnW, false)
         
+        -- ★★★ СООБЩЕНИЕ ОБ ОШИБКЕ ★★★
+        local errorMsg = ""
+        local errorY = winY + 12
+        
+        -- ★★★ ЦИКЛ ОЖИДАНИЯ ★★★
         local isEditing = true
         while currentScreen == "auth_popup" and isEditing do
             local ev = {event.pull(0.5)}
@@ -4294,20 +4414,36 @@ function showAuthPopup()
                         isEditing = false
                         local success = verifyAuthCode(authCodeInput)
                         if success then
-                            -- ★★★ ОЧИЩАЕМ ЭКРАН И ПЕРЕРИСОВЫВАЕМ МЕНЮ ★★★
+                            -- ★★★ УСПЕХ ★★★
                             forceSyncBinding()
-                            clear()  -- ← ПОЛНОСТЬЮ ОЧИЩАЕМ ЭКРАН
+                            gpu.setBackground(UI.COLORS.bg_main)
+                            gpu.fill(1, 1, screenW, screenH, " ")
+                            
+                            -- Показываем сообщение об успехе
+                            local msg = "✅ Аккаунт успешно привязан!"
+                            gpu.setForeground(UI.COLORS.success)
+                            gpu.set(getCenteredX(msg), math.floor(screenH / 2) - 1, msg)
+                            
+                            local msg2 = "Теперь вы можете пользоваться магазином"
+                            gpu.setForeground(UI.COLORS.text_main)
+                            gpu.set(getCenteredX(msg2), math.floor(screenH / 2), msg2)
+                            
+                            os.sleep(1.5)
                             currentScreen = "menu"
-                            -- ★★★ НЕ ВЫЗЫВАЕМ goBackToMenu() — ОНА УЖЕ ЕСТЬ ★★★
-                            forceRender()  -- ← ПРИНУДИТЕЛЬНАЯ ПЕРЕРИСОВКА
+                            goBackToMenu()
+                            markDirty()
                             break
                         else
                             isEditing = true
+                            errorMsg = "❌ Неверный код или ошибка"
+                            gpu.setForeground(UI.COLORS.error)
+                            gpu.set(winX + math.floor((winW - unicode.len(errorMsg)) / 2), errorY, errorMsg)
                             markDirty()
                         end
                     else
-                        gpu.setForeground(colors.error)
-                        gpu.set(popupX + 3, popupY + 13, " Введите 6-значный код!")
+                        errorMsg = "⚠️ Введите 6-значный код!"
+                        gpu.setForeground(UI.COLORS.warning)
+                        gpu.set(winX + math.floor((winW - unicode.len(errorMsg)) / 2), errorY, errorMsg)
                         os.sleep(1.5)
                         markDirty()
                     end
@@ -4317,24 +4453,39 @@ function showAuthPopup()
             elseif ev[1] == "key_down" then
                 local ch = ev[3]
                 
-                if ch == 13 then
+                if ch == 13 then  -- Enter
                     if authCodeInput and #authCodeInput == 6 then
                         isEditing = false
                         local success = verifyAuthCode(authCodeInput)
                         if success then
-                            -- ★★★ ОЧИЩАЕМ ЭКРАН И ПЕРЕРИСОВЫВАЕМ МЕНЮ ★★★
                             forceSyncBinding()
-                            clear()  -- ← ПОЛНОСТЬЮ ОЧИЩАЕМ ЭКРАН
+                            gpu.setBackground(UI.COLORS.bg_main)
+                            gpu.fill(1, 1, screenW, screenH, " ")
+                            
+                            local msg = "✅ Аккаунт успешно привязан!"
+                            gpu.setForeground(UI.COLORS.success)
+                            gpu.set(getCenteredX(msg), math.floor(screenH / 2) - 1, msg)
+                            
+                            local msg2 = "Теперь вы можете пользоваться магазином"
+                            gpu.setForeground(UI.COLORS.text_main)
+                            gpu.set(getCenteredX(msg2), math.floor(screenH / 2), msg2)
+                            
+                            os.sleep(1.5)
                             currentScreen = "menu"
-                            forceRender()  -- ← ПРИНУДИТЕЛЬНАЯ ПЕРЕРИСОВКА
+                            goBackToMenu()
+                            markDirty()
                             break
                         else
                             isEditing = true
+                            errorMsg = "❌ Неверный код или ошибка"
+                            gpu.setForeground(UI.COLORS.error)
+                            gpu.set(winX + math.floor((winW - unicode.len(errorMsg)) / 2), errorY, errorMsg)
                             markDirty()
                         end
                     else
-                        gpu.setForeground(colors.error)
-                        gpu.set(popupX + 3, popupY + 13, " Введите 6-значный код!")
+                        errorMsg = "⚠️ Введите 6-значный код!"
+                        gpu.setForeground(UI.COLORS.warning)
+                        gpu.set(winX + math.floor((winW - unicode.len(errorMsg)) / 2), errorY, errorMsg)
                         os.sleep(1.5)
                         markDirty()
                     end
@@ -4355,65 +4506,70 @@ function showAuthPopup()
     end
 end
 
+-- ============================================================
+-- ★★★ ОБНОВЛЁННЫЙ ПОПАП ПОДТВЕРЖДЕНИЯ ОТВЯЗКИ ★★★
+-- ============================================================
+
 function showUnbindConfirmPopup()
     writeDebugLog("showUnbindConfirmPopup()")
     
-    local popupWidth = 46
-    local popupHeight = 10
-    local popupX = math.floor((80 - popupWidth) / 2) + 1
-    local popupY = math.floor((25 - popupHeight) / 2)
+    local screenW, screenH = getScreenSize()
     
-    gpu.setBackground(0x000000)
-    gpu.fill(popupX - 2, popupY - 2, popupWidth + 4, popupHeight + 4, " ")
-    gpu.setBackground(0x0A0A1A)
-    gpu.fill(popupX, popupY, popupWidth, popupHeight, " ")
+    -- Размеры окна
+    local winW = math.min(46, screenW - 6)
+    local winH = math.min(12, screenH - 6)
+    local winX = math.floor((screenW - winW) / 2) + 1
+    local winY = math.floor((screenH - winH) / 2) + 1
     
-    gpu.setForeground(colors.error)
-    gpu.fill(popupX, popupY, popupWidth, 1, "═")
-    gpu.fill(popupX, popupY + popupHeight - 1, popupWidth, 1, "═")
-    for i = 1, popupHeight - 2 do
-        gpu.set(popupX, popupY + i, "║")
-        gpu.set(popupX + popupWidth - 1, popupY + i, "║")
+    -- Рисуем окно
+    gpu.setBackground(UI.COLORS.bg_card)
+    gpu.fill(winX, winY, winW, winH, " ")
+    
+    -- Рамка (красная для предупреждения)
+    gpu.setForeground(UI.COLORS.error)
+    gpu.fill(winX, winY, winW, 1, "═")
+    gpu.fill(winX, winY + winH - 1, winW, 1, "═")
+    for i = 1, winH - 2 do
+        gpu.set(winX, winY + i, "║")
+        gpu.set(winX + winW - 1, winY + i, "║")
     end
-    gpu.set(popupX, popupY, "╔")
-    gpu.set(popupX + popupWidth - 1, popupY, "╗")
-    gpu.set(popupX, popupY + popupHeight - 1, "╚")
-    gpu.set(popupX + popupWidth - 1, popupY + popupHeight - 1, "╝")
+    gpu.set(winX, winY, "╔")
+    gpu.set(winX + winW - 1, winY, "╗")
+    gpu.set(winX, winY + winH - 1, "╚")
+    gpu.set(winX + winW - 1, winY + winH - 1, "╝")
     
-    local titleText = "ПОДТВЕРЖДЕНИЕ"
-    local titleLen = unicode.len(titleText)
-    gpu.setForeground(colors.error)
-    gpu.set(popupX + math.floor((popupWidth - titleLen) / 2), popupY + 1, titleText)
+    -- Заголовок
+    local title = "⚠️ ПОДТВЕРЖДЕНИЕ"
+    gpu.setForeground(UI.COLORS.error)
+    gpu.set(winX + math.floor((winW - unicode.len(title)) / 2), winY + 1, title)
     
-    gpu.setForeground(colors.text_main)
-    gpu.set(popupX + 3, popupY + 3, "Вы действительно хотите")
-    gpu.set(popupX + 3, popupY + 4, "ОТВЯЗАТЬ аккаунт?")
+    -- Текст
+    local text1 = "Вы действительно хотите"
+    gpu.setForeground(UI.COLORS.text_main)
+    gpu.set(winX + math.floor((winW - unicode.len(text1)) / 2), winY + 3, text1)
     
-    gpu.setForeground(colors.inactive)
-    gpu.set(popupX + 3, popupY + 6, "После отвязки доступ к магазину")
-    gpu.set(popupX + 3, popupY + 7, "будет ограничен до новой привязки.")
+    local text2 = "ОТВЯЗАТЬ аккаунт?"
+    gpu.setForeground(UI.COLORS.text_bright)
+    gpu.set(winX + math.floor((winW - unicode.len(text2)) / 2), winY + 4, text2)
     
-    local yesBtn = {
-        text = "[ ДА, ОТВЯЗАТЬ ]",
-        x = popupX + 5,
-        y = popupY + popupHeight - 2,
-        xs = unicode.len("[ ДА, ОТВЯЗАТЬ ]") + 2,
-        ys = 1,
-        bg = 0x441111,
-        fg = colors.error
-    }
-    local noBtn = {
-        text = "[ ОТМЕНА ]",
-        x = popupX + popupWidth - unicode.len("[ ОТМЕНА ]") - 4,
-        y = popupY + popupHeight - 2,
-        xs = unicode.len("[ ОТМЕНА ]") + 2,
-        ys = 1,
-        bg = colors.bg_button,
-        fg = colors.accent_secondary
-    }
-    drawFlexButton(yesBtn)
-    drawFlexButton(noBtn)
+    local text3 = "После отвязки доступ к магазину"
+    gpu.setForeground(UI.COLORS.text_muted)
+    gpu.set(winX + math.floor((winW - unicode.len(text3)) / 2), winY + 6, text3)
     
+    local text4 = "будет ограничен до новой привязки."
+    gpu.setForeground(UI.COLORS.text_muted)
+    gpu.set(winX + math.floor((winW - unicode.len(text4)) / 2), winY + 7, text4)
+    
+    -- Кнопки (симметричные)
+    local btnW = 14
+    local totalBtnsW = btnW * 2 + UI.SPACING.button_gap
+    local startX = winX + math.floor((winW - totalBtnsW) / 2)
+    local btnY = winY + winH - 2
+    
+    local yesBtn = drawAuthButton("[ ДА, ОТВЯЗАТЬ ]", startX, btnY, btnW, false)
+    local noBtn = drawAuthButton("[ ОТМЕНА ]", startX + btnW + UI.SPACING.button_gap, btnY, btnW, true)
+    
+    -- Цикл ожидания
     while true do
         local ev = {event.pull(0.5)}
         
