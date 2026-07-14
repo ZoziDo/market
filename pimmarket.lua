@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА111
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА123336666
 -- ============================================================
 
 local function setupAutoStart()
@@ -4555,7 +4555,7 @@ function showUnbindConfirmPopup()
     gpu.set(winX + winW - 1, winY + winH - 1, "╝")
     
     -- ★★★ ЗАГОЛОВОК ★★★
-    local title = "⚠️ ПОДТВЕРЖДЕНИЕ"
+    local title = "ПОДТВЕРЖДЕНИЕ"
     gpu.setForeground(UI.COLORS.error)
     gpu.set(winX + math.floor((winW - unicode.len(title)) / 2), winY + 1, title)
     
@@ -4757,11 +4757,10 @@ function verifyAuthCode(code)
         local data = parseJSON(body)
         
         if data and data.success then
-            -- ★★★ СОХРАНЯЕМ ПРИВЯЗКУ ★★★
             if currentPlayer and playersIndex[currentPlayer] then
                 local player = playersIndex[currentPlayer]
                 player.site_user = data.player
-                saveDB()  -- ✅ МГНОВЕННОЕ СОХРАНЕНИЕ
+                saveDB()
                 
                 local change = {
                     id = "bind_" .. os.time() .. "_" .. math.random(100000),
@@ -4782,25 +4781,38 @@ function verifyAuthCode(code)
                 
                 syncCurrentPlayer()
                 os.sleep(2)
-                
-                -- ★★★ НЕ ВЫЗЫВАЕМ goBackToMenu() ЗДЕСЬ ★★★
-                -- Просто возвращаем true
                 return true
             else
-                gpu.setForeground(colors.error)
-                gpu.set(20, 14, "❌ Ошибка: игрок не найден")
+                -- ★★★ ОШИБКА: ИГРОК НЕ НАЙДЕН (ЦЕНТРИРОВАННО) ★★★
+                local errorMsg = "❌ Ошибка: игрок не найден"
+                local screenW, screenH = getScreenSize()
+                gpu.setForeground(UI.COLORS.error)
+                gpu.set(getCenteredX(errorMsg), math.floor(screenH / 2), errorMsg)
                 os.sleep(2)
                 markDirty()
                 return false
             end
         else
+            -- ★★★ ОШИБКА ПРИВЯЗКИ (ЦЕНТРИРОВАННО) ★★★
             local errorMsg = (data and data.error) or "Ошибка привязки"
-            gpu.setForeground(colors.error)
-            gpu.set(20, 14, "❌ " .. errorMsg)
             
+            -- Получаем размеры экрана для центрирования
+            local screenW, screenH = getScreenSize()
+            
+            -- Очищаем область сообщения
+            gpu.setBackground(UI.COLORS.bg_main)
+            gpu.fill(1, math.floor(screenH / 2) - 2, screenW, 4, " ")
+            
+            -- Показываем основную ошибку (по центру)
+            local fullError = "❌ " .. errorMsg
+            gpu.setForeground(UI.COLORS.error)
+            gpu.set(getCenteredX(fullError), math.floor(screenH / 2) - 1, fullError)
+            
+            -- Дополнительное сообщение, если игрок уже привязан
             if data and data.bound then
-                gpu.setForeground(colors.text_main)
-                gpu.set(15, 15, "Этот игрок уже привязан к другому аккаунту")
+                local boundMsg = "Этот игрок уже привязан к другому аккаунту"
+                gpu.setForeground(UI.COLORS.text_main)
+                gpu.set(getCenteredX(boundMsg), math.floor(screenH / 2), boundMsg)
             end
             
             os.sleep(2)
@@ -4808,8 +4820,11 @@ function verifyAuthCode(code)
             return false
         end
     else
-        gpu.setForeground(colors.error)
-        gpu.set(20, 14, "❌ Ошибка соединения с сервером")
+        -- ★★★ ОШИБКА СОЕДИНЕНИЯ (ЦЕНТРИРОВАННО) ★★★
+        local errorMsg = "❌ Ошибка соединения с сервером"
+        local screenW, screenH = getScreenSize()
+        gpu.setForeground(UI.COLORS.error)
+        gpu.set(getCenteredX(errorMsg), math.floor(screenH / 2), errorMsg)
         os.sleep(2)
         markDirty()
         return false
