@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333666
 -- ============================================================
 
 local function setupAutoStart()
@@ -1719,6 +1719,49 @@ function broadcastKill()
     end
 end
 
+-- ============================================================
+-- ★★★ СОХРАНЕНИЕ ТОВАРОВ С QTY В ФАЙЛ ★★★
+-- ============================================================
+
+function saveBuyItemsWithQty()
+    writeDebugLog("💾 Сохранение buy_items с qty в файл...")
+    
+    if not shopItems or #shopItems == 0 then
+        writeDebugLog("⚠️ Нет товаров для сохранения")
+        return false
+    end
+    
+    -- Создаём копию с qty
+    local itemsToSave = {}
+    for _, item in ipairs(shopItems) do
+        -- Получаем актуальное количество из МЭ
+        local actualQty = getActualItemQuantity(item.internalName, item.damage or 0)
+        
+        local saveItem = {
+            internalName = item.internalName,
+            displayName = item.displayName,
+            price_coin = item.priceCoin or 0,
+            price_ema = item.priceEma or 0,
+            damage = item.damage or 0,
+            qty = actualQty  -- ← ★★★ СОХРАНЯЕМ QTY ★★★
+        }
+        table.insert(itemsToSave, saveItem)
+    end
+    
+    -- Сохраняем в файл
+    local file = io.open("/home/buy_items.lua", "w")
+    if not file then
+        writeErrorLog("❌ Не удалось открыть /home/buy_items.lua для записи")
+        return false
+    end
+    
+    file:write("return " .. serialization.serialize(itemsToSave))
+    file:close()
+    
+    writeDebugLog("✅ Сохранено " .. #itemsToSave .. " товаров с qty в buy_items.lua")
+    return true
+end
+
 function sendStats()
     writeDebugLog("📊 sendStats() начат (резервный дамп)")
     
@@ -1808,20 +1851,21 @@ function sendStats()
                 local me = component.me_interface
                 local rawItems = me.getItemsInNetwork()
                 
-                -- Создаём карту количеств из МЭ
                 local meQuantities = {}
                 for _, meItem in ipairs(rawItems) do
                     local key = meItem.name .. ":" .. (meItem.damage or 0)
                     meQuantities[key] = meItem.size or 0
                 end
                 
-                -- Добавляем qty к каждому товару
                 for _, item in ipairs(buyItems) do
                     local key = item.internalName .. ":" .. (item.damage or 0)
                     item.qty = meQuantities[key] or 0
                 end
                 
                 writeDebugLog("📦 Добавлены количества из МЭ")
+                
+                -- ★★★ ★★★ СОХРАНЯЕМ В ФАЙЛ ★★★ ★★★
+                saveBuyItemsWithQty()
             else
                 writeErrorLog("⚠️ ME интерфейс недоступен, qty = 0")
                 for _, item in ipairs(buyItems) do
@@ -5703,23 +5747,27 @@ function checkWebCommands()
             if cmd.command == "send_buy_items" then
                 writeDebugLog("📦 Получена команда send_buy_items")
                 
-                -- ★★★ ОТПРАВЛЯЕМ АКТУАЛЬНЫЕ ТОВАРЫ ★★★
+                -- ★★★ ЗАГРУЖАЕМ ТОВАРЫ С QTY ★★★
+                loadBuyItems(true)
+                
+                -- ★★★ СОХРАНЯЕМ В ФАЙЛ ★★★
+                saveBuyItemsWithQty()
+                
+                -- ★★★ ОТПРАВЛЯЕМ АКТУАЛЬНЫЕ ТОВАРЫ НА САЙТ ★★★
                 local buyItems = {}
                 if fs.exists("/home/buy_items.lua") then
                     local ok, data = pcall(dofile, "/home/buy_items.lua")
                     if ok and type(data) == "table" then 
                         buyItems = data 
-                        writeDebugLog("📦 Загружены buy_items: " .. #buyItems .. " товаров")
                     end
                 end
                 
-                -- ★★★ ОТПРАВЛЯЕМ ТОЛЬКО BUY_ITEMS ★★★
                 sendToWeb("/api/update", toJson({
                     buy_items = buyItems,
                     force_update = true
                 }))
                 
-                sendResult(true, "Buy items отправлены")
+                sendResult(true, "Buy items отправлены с qty")
                 goto continue
             end
 
