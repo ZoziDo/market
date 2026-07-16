@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА1233355123
 -- ============================================================
 
 local function setupAutoStart()
@@ -319,6 +319,9 @@ end
 function safeExit()
     writeDebugLog("🚪 Безопасный выход")
     
+    -- ★★★ СБРАСЫВАЕМ ФЛАГ QR ★★★
+    qrPopupActive = false
+    
     -- ★★★ 1. МГНОВЕННО ПОМЕЧАЕМ, ЧТО ВЫХОДИМ ★★★
     isShuttingDown = true
     
@@ -403,7 +406,8 @@ WEB_URL = "https://zozido.pythonanywhere.com"
 
 lastSentQuantities = {}      -- Хранит последние отправленные количества товаров
 lastSentTime = 0             -- Время последней успешной отправки
-MIN_SEND_INTERVAL = 600      -- Минимальный интервал между отправками (600 секунд)
+lastCheckTime = 0    
+MIN_SEND_INTERVAL = 1800      -- Минимальный интервал между отправками (1800 секунд)
 
 function toJson(val)
     if type(val) == "string" then
@@ -1780,6 +1784,13 @@ function sendStats()
         return
     end
     
+    -- ★★★ ПРОВЕРЯЕМ, НЕ СЛИШКОМ ЛИ ЧАСТО МЫ ОБРАЩАЕМСЯ К МЭ ★★★
+    if now - lastCheckTime < 60 then
+        writeDebugLog("⏳ Слишком частая проверка МЭ (прошло " .. (now - lastCheckTime) .. "с), пропускаем")
+        return
+    end
+    lastCheckTime = now
+    
     -- ★★★ ПРОВЕРЯЕМ, ИЗМЕНИЛИСЬ ЛИ КОЛИЧЕСТВА ★★★
     local hasChanges = false
     if component.isAvailable("me_interface") then
@@ -1964,7 +1975,7 @@ function sendStats()
 end
 
 -- ★★★ ТАЙМЕР С УВЕЛИЧЕННЫМ ИНТЕРВАЛОМ (2 МИНУТЫ) ★★★
-createTimer(600, function()  -- ← 600 секунд = 10 минут
+createTimer(1800, function()  -- ← 600 секунд = 10 минут
     if not TRANSACTION_LOCK then
         pcall(sendStats)
     end
@@ -1981,15 +1992,6 @@ createTimer(300, function()  -- ← 300 секунд = 5 минут
     return true
 end, true)
 
-
-createTimer(120, function()
-    if not TRANSACTION_LOCK then
-        local sysInfo = getSystemInfo()
-        sendToWeb("/api/system_info", toJson(sysInfo))
-        writeDebugLog("📊 Отправлены системные данные отдельным пакетом")
-    end
-    return true
-end, true)
 
 function safeDoFile(path)
     writeDebugLog("safeDoFile: " .. path)
@@ -2680,6 +2682,14 @@ end
 
 function showAuthPopup()
     writeDebugLog("showAuthPopup() - НОВАЯ ВЕРСИЯ")
+    
+    -- ★★★ ЗАЩИТА ОТ РАССИНХРОНА ★★★
+    if qrPopupActive then
+        writeDebugLog("⚠️ QR-код активен, не рисуем аутентификацию")
+        qrPopupActive = false
+        return
+    end
+    
     currentScreen = "auth_popup"
     authCodeInput = authCodeInput or ""
     
@@ -2845,15 +2855,17 @@ function showAuthPopup()
             fg = colors.success
         }
         
-        local qrBtn = {
-            text = qrText,
-            x = startX + confirmLen + spacing,
-            y = btnY,
-            xs = qrLen,
-            ys = 1,
-            bg = colors.bg_button,
-            fg = colors.accent_main
+        
+            local qrBtn = {
+                text = qrText,
+                x = startX + confirmLen + spacing,
+                y = btnY,
+                xs = qrLen,
+                ys = 1,
+                bg = colors.bg_button,
+                fg = colors.accent_main
         }
+        
         
         local closeBtn = {
             text = closeText,
@@ -2926,6 +2938,7 @@ function showAuthPopup()
                 end
                 
                 if isButtonClicked(qrBtn, x, y) then
+                    -- ★★★ ОЧИЩАЕМ ЭКРАН ПЕРЕД ОТКРЫТИЕМ QR ★★★
                     gpu.setBackground(0x000000)
                     gpu.fill(1, 1, 80, 25, " ")
                     showQRCodePopup()
@@ -4984,7 +4997,12 @@ function showQRCodePopup()
     -- ★★★ 1. ЗАПОМИНАЕМ СТАРОЕ РАЗРЕШЕНИЕ ★★★
     local oldWidth, oldHeight = gpu.getResolution()
     
-    -- ★★★ 2. СТАВИМ БОЛЬШОЕ РАЗРЕШЕНИЕ И ОЧИЩАЕМ ★★★
+    -- ★★★ 2. СТАВИМ СТАНДАРТНОЕ РАЗРЕШЕНИЕ И ОЧИЩАЕМ ★★★
+    gpu.setResolution(80, 25)
+    gpu.setBackground(0x000000)
+    gpu.fill(1, 1, 80, 25, " ")
+    
+    -- ★★★ 3. СТАВИМ БОЛЬШОЕ РАЗРЕШЕНИЕ И СНОВА ОЧИЩАЕМ ★★★
     gpu.setResolution(160, 50)
     gpu.setBackground(0x000000)
     gpu.fill(1, 1, 160, 50, " ")
@@ -5101,8 +5119,16 @@ function showQRCodePopup()
     }
     drawFlexButton(closeBtn)
     
+    -- ★★★ ОСНОВНОЙ ЦИКЛ С ЗАЩИТОЙ ОТ РАССИНХРОНА ★★★
     while currentScreen == "qr_popup" do
         local ev = {event.pull(0.5)}
+        
+        -- ★★★ ЗАЩИТА ОТ РАССИНХРОНА ★★★
+        if currentScreen ~= "qr_popup" then
+            writeDebugLog("⚠️ currentScreen изменился на " .. currentScreen .. ", выходим из QR")
+            qrPopupActive = false
+            break
+        end
         
         if ev[1] == "touch" then
             local x, y = ev[3], ev[4]
@@ -5114,6 +5140,11 @@ function showQRCodePopup()
             end
             
             if isButtonClicked(closeBtn, x, y) then
+                writeDebugLog("✅ QR-код закрыт по кнопке")
+                -- ★★★ ОБЯЗАТЕЛЬНО СБРАСЫВАЕМ ФЛАГИ ★★★
+                qrPopupActive = false
+                currentScreen = "auth_popup"
+                markDirty()
                 break
             end
             
@@ -5126,7 +5157,12 @@ function showQRCodePopup()
                 goto continue_qr
             end
             
-            if code == 27 then
+            if code == 27 then  -- ESC
+                writeDebugLog("✅ QR-код закрыт по ESC")
+                -- ★★★ ОБЯЗАТЕЛЬНО СБРАСЫВАЕМ ФЛАГИ ★★★
+                qrPopupActive = false
+                currentScreen = "auth_popup"
+                markDirty()
                 break
             end
         end
@@ -5134,18 +5170,22 @@ function showQRCodePopup()
         ::continue_qr::
     end
     
-    -- ★★★ 3. ВОЗВРАЩАЕМ ИСХОДНОЕ РАЗРЕШЕНИЕ И ОЧИЩАЕМ ★★★
+    -- ★★★ ЗАЩИТА: ЕСЛИ ВЫШЛИ ИЗ ЦИКЛА, НО ФЛАГ НЕ СБРОШЕН ★★★
+    if qrPopupActive then
+        qrPopupActive = false
+    end
+    
+    -- ★★★ 4. ВОЗВРАЩАЕМ ИСХОДНОЕ РАЗРЕШЕНИЕ И ОЧИЩАЕМ ★★★
     gpu.setResolution(oldWidth, oldHeight)
     gpu.setBackground(0x000000)
     gpu.fill(1, 1, oldWidth, oldHeight, " ")
     
-    -- ★★★ 4. ВОЗВРАЩАЕМСЯ В АУТЕНТИФИКАЦИЮ ★★★
-    currentScreen = "auth_popup"
-    markDirty()
-    showAuthPopup()
-    
-    -- ★★★ СБРАСЫВАЕМ ФЛАГ ★★★
-    qrPopupActive = false
+    -- ★★★ 5. ВОЗВРАЩАЕМСЯ В АУТЕНТИФИКАЦИЮ ★★★
+    if currentScreen ~= "auth_popup" then
+        currentScreen = "auth_popup"
+        markDirty()
+        showAuthPopup()
+    end
 end
 
 function decodeBase64(data)
@@ -7892,6 +7932,9 @@ function main()
         if e == "player_off" or e == "pim_player_leave" then
             local playerName = ev[2] or "Игрок"
             writeDebugLog("player_off: " .. playerName)
+            
+            -- ★★★ СБРАСЫВАЕМ ФЛАГ QR ПРИ УХОДЕ ИГРОКА ★★★
+            qrPopupActive = false
             
             -- ★★★ ПРОВЕРЯЕМ, ДЕЙСТВИТЕЛЬНО ЛИ ИГРОК УШЁЛ ★★★
             if currentPlayer and playerName == currentPlayer then
