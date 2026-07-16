@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА1
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА1233355555
 -- ============================================================
 
 local function setupAutoStart()
@@ -5096,8 +5096,35 @@ function showQRCodePopup()
     }
     drawFlexButton(closeBtn)
     
+    -- ★★★ ЦИКЛ ОЖИДАНИЯ С ОБРАБОТКОЙ УХОДА ИГРОКА ★★★
     while currentScreen == "qr_popup" do
         local ev = {event.pull(0.5)}
+        
+        -- ★★★ ПРОВЕРКА: ИГРОК УШЁЛ С PIM ★★★
+        if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
+            writeDebugLog("👤 Игрок ушёл с PIM во время QR-кода")
+            -- Восстанавливаем разрешение
+            gpu.setResolution(oldWidth, oldHeight)
+            -- Выходим в приветствие
+            safeExit()
+            return
+        end
+        
+        -- ★★★ ПРОВЕРКА: ВСЁ ЕЩЁ ЛИ ТОТ ЖЕ ИГРОК ★★★
+        local currentOnPim = getPlayerOnPim()
+        if not currentOnPim or currentOnPim == "" then
+            writeDebugLog("⚠️ Игрок ушёл с PIM, закрываем QR-код")
+            gpu.setResolution(oldWidth, oldHeight)
+            safeExit()
+            return
+        end
+        
+        if currentPlayer and currentOnPim ~= currentPlayer then
+            writeDebugLog("⚠️ Игрок сменился, закрываем QR-код")
+            gpu.setResolution(oldWidth, oldHeight)
+            safeExit()
+            return
+        end
         
         if ev[1] == "touch" then
             local x, y = ev[3], ev[4]
