@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА1233366666
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА1233355551
 -- ============================================================
 
 local function setupAutoStart()
@@ -2648,6 +2648,13 @@ function showUnbindConfirmPopup()
         
         if ev[1] == "touch" then
             local x, y = ev[3], ev[4]
+            local touchPlayer = ev[6] or "Неизвестный"
+            
+            -- ★★★ ПРОВЕРКА: ТОЛЬКО ВЛАДЕЛЕЦ МОЖЕТ НАЖАТЬ ★★★
+            if not isPimOwner(touchPlayer) then
+                writeDebugLog("⚠️ Коснулся не владелец: " .. touchPlayer .. ", игнорируем")
+                goto continue_unbind
+            end
             
             if isButtonClicked(noBtn, x, y) then
                 showAuthPopup()
@@ -2659,6 +2666,8 @@ function showUnbindConfirmPopup()
                 break
             end
         end
+        
+        ::continue_unbind::
     end
 end
 
@@ -2797,28 +2806,65 @@ function showAuthPopup()
         gpu.set(codeX, popupY + 9, displayCode)
         gpu.setBackground(0x0A0A1A)
         
-        -- Кнопки
-        local closeBtn = {
-            text = "[ ЗАКРЫТЬ ]",
-            x = popupX + popupWidth - 12,
-            y = popupY + popupHeight - 3,
-            xs = 10,
-            ys = 1,
-            bg = colors.bg_button,
-            fg = colors.error
-        }
+        -- ★★★ РАССЧИТЫВАЕМ КНОПКИ С РАВНЫМИ ОТСТУПАМИ ★★★
+        local btnY = popupY + popupHeight - 3
+        
+        -- Тексты кнопок
+        local closeText = "[ ЗАКРЫТЬ ]"
+        local qrText = "[ QR CODE ]"
+        local confirmText = "[ ПОДТВЕРДИТЬ ]"
+        
+        local closeLen = unicode.len(closeText) + 2
+        local qrLen = unicode.len(qrText) + 2
+        local confirmLen = unicode.len(confirmText) + 2
+        
+        -- Общая ширина всех кнопок
+        local totalBtnWidth = closeLen + qrLen + confirmLen
+        
+        -- Расстояние между кнопками (2 пробела)
+        local spacing = 2
+        local totalSpacing = spacing * 2  -- два промежутка между тремя кнопками
+        
+        -- Общая ширина с отступами
+        local totalWidth = totalBtnWidth + totalSpacing
+        
+        -- Начальная позиция X для центрирования
+        local startX = popupX + math.floor((popupWidth - totalWidth) / 2)
+        
+        -- Позиции кнопок
         local confirmBtn = {
-            text = "[ ПОДТВЕРДИТЬ ]",
-            x = popupX + 3,
-            y = popupY + popupHeight - 3,
-            xs = 13,
+            text = confirmText,
+            x = startX,
+            y = btnY,
+            xs = confirmLen,
             ys = 1,
             bg = colors.bg_button,
             fg = colors.success
         }
         
-        drawFlexButton(closeBtn)
+        local qrBtn = {
+            text = qrText,
+            x = startX + confirmLen + spacing,
+            y = btnY,
+            xs = qrLen,
+            ys = 1,
+            bg = colors.bg_button,
+            fg = colors.accent_main
+        }
+        
+        local closeBtn = {
+            text = closeText,
+            x = startX + confirmLen + spacing + qrLen + spacing,
+            y = btnY,
+            xs = closeLen,
+            ys = 1,
+            bg = colors.bg_button,
+            fg = colors.error
+        }
+        
         drawFlexButton(confirmBtn)
+        drawFlexButton(qrBtn)
+        drawFlexButton(closeBtn)
         
         local cursorVisible = true
         local cursorTimer = nil
@@ -2873,6 +2919,12 @@ function showAuthPopup()
                         cursorTimer = nil
                     end
                     goBackToMenu()
+                    break
+                end
+                
+                -- ★★★ НОВАЯ КНОПКА QR CODE ★★★
+                if isButtonClicked(qrBtn, x, y) then
+                    showQRCodePopup()
                     break
                 end
                 
@@ -4917,11 +4969,6 @@ end
 -- ============================================================
 -- ★★★ АУТЕНТИФИКАЦИЯ (ПРИВЯЗКА АККАУНТА) ★★★
 -- ============================================================
-
-
-
-
-
 
 function showQRCodePopup()
     writeDebugLog("showQRCodePopup()")
