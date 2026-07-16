@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА1233355
 -- ============================================================
 
 local function setupAutoStart()
@@ -3642,18 +3642,42 @@ end
 
 function drawFeedbacksList()
     writeDebugLog("drawFeedbacksList()")
-    local feedbacks = {}
-    if fs.exists(FEEDBACKS_PATH) then
-        local file = io.open(FEEDBACKS_PATH, "r")
-        if file then
-            local data = file:read("*a")
-            file:close()
-            if data and #data > 0 then
-                local ok, result = pcall(serialization.unserialize, data)
-                if ok and type(result) == "table" then feedbacks = result end
+    
+    -- ★★★ ПРИНУДИТЕЛЬНАЯ ПРОВЕРКА hasFeedback ПРИ ОТКРЫТИИ ОТЗЫВОВ ★★★
+    if currentPlayer then
+        local player = playersIndex[currentPlayer]
+        if player then
+            -- Проверяем в данных игрока
+            playerHasFeedback = player.hasFeedback or false
+            
+            -- ★★★ ПРОВЕРЯЕМ В ФАЙЛЕ ОТЗЫВОВ ★★★
+            if not playerHasFeedback then
+                local feedbacks = {}
+                if fs.exists(FEEDBACKS_PATH) then
+                    local file = io.open(FEEDBACKS_PATH, "r")
+                    if file then
+                        local data = file:read("*a")
+                        file:close()
+                        if data and #data > 0 then
+                            local ok, result = pcall(serialization.unserialize, data)
+                            if ok and type(result) == "table" then feedbacks = result end
+                        end
+                    end
+                end
+                for _, fb in ipairs(feedbacks) do
+                    if fb.name == currentPlayer then
+                        playerHasFeedback = true
+                        player.hasFeedback = true
+                        saveDBDeferred()
+                        writeDebugLog("🔄 Восстановлен hasFeedback для " .. currentPlayer .. " при открытии отзывов")
+                        break
+                    end
+                end
             end
         end
     end
+    
+    local feedbacks = {}
     
     -- ★★★ ОБНОВЛЯЕМ playerHasFeedback ИЗ ЛОКАЛЬНЫХ ДАННЫХ ★★★
     if currentPlayer then
@@ -5928,6 +5952,33 @@ function checkWebCommands()
                 goto continue
             end
 
+            -- ★★★ sync_feedback ДОЛЖЕН БЫТЬ ЗДЕСЬ (ПОСЛЕ new_feedback) ★★★
+            if cmd.command == "sync_feedback" then
+                local playerName = d.player
+                local hasFeedback = d.hasFeedback
+                writeDebugFile("📥 Получена команда sync_feedback для: " .. playerName)
+                
+                if playerName and playersIndex[playerName] then
+                    local player = playersIndex[playerName]
+                    player.hasFeedback = hasFeedback
+                    saveDBDeferred()
+                    if currentPlayer == playerName then
+                        playerHasFeedback = hasFeedback
+                        markDirty()
+                    end
+                    addLog("🔄 Синхронизирован флаг отзыва для " .. playerName .. ": " .. tostring(hasFeedback))
+                    sendResult(true, "Флаг отзыва синхронизирован")
+                else
+                    sendResult(false, "Игрок не найден")
+                end
+                goto continue
+            end
+
+            -- ★★★ ОБРАБОТКА ПРИНЯТИЯ СОГЛАШЕНИЯ ★★★
+            if cmd.command == "agree" then
+                -- ... код agree ...
+            end
+
             -- ★★★ ОБРАБОТКА ПРИНЯТИЯ СОГЛАШЕНИЯ — ОТДЕЛЬНЫЙ БЛОК! ★★★
             if cmd.command == "agree" then
                 writeDebugFile("📝 Получена команда agree для: " .. (d.name or "?"))
@@ -6233,6 +6284,57 @@ if serverVersion and serverVersion > currentItemsVersion then
         return false
     end)
 end
+
+-- ============================================================
+-- ★★★ ВОССТАНОВЛЕНИЕ hasFeedback ПРИ ЗАПУСКЕ ★★★
+-- ============================================================
+
+function restoreFeedbackFlags()
+    writeDebugLog("🔄 Восстановление флагов hasFeedback...")
+    
+    -- Загружаем все отзывы
+    local feedbacks = {}
+    if fs.exists(FEEDBACKS_PATH) then
+        local file = io.open(FEEDBACKS_PATH, "r")
+        if file then
+            local data = file:read("*a")
+            file:close()
+            if data and #data > 0 then
+                local ok, result = pcall(serialization.unserialize, data)
+                if ok and type(result) == "table" then feedbacks = result end
+            end
+        end
+    end
+    
+    -- Создаём список игроков, которые оставили отзывы
+    local feedbackPlayers = {}
+    for _, fb in ipairs(feedbacks) do
+        if fb.name and fb.name ~= "" then
+            feedbackPlayers[fb.name] = true
+        end
+    end
+    
+    -- Обновляем флаги у всех игроков
+    local updated = 0
+    for name, player in pairs(players) do
+        local shouldHaveFeedback = feedbackPlayers[name] or false
+        if player.hasFeedback ~= shouldHaveFeedback then
+            player.hasFeedback = shouldHaveFeedback
+            updated = updated + 1
+            writeDebugLog("   " .. name .. ": hasFeedback = " .. tostring(shouldHaveFeedback))
+        end
+    end
+    
+    if updated > 0 then
+        saveDB()
+        writeDebugLog("✅ Восстановлено " .. updated .. " флагов hasFeedback")
+    else
+        writeDebugLog("✅ Все флаги hasFeedback корректны")
+    end
+end
+
+-- ★★★ ВЫПОЛНЯЕМ ВОССТАНОВЛЕНИЕ ПРИ СТАРТЕ ★★★
+restoreFeedbackFlags()
 
 -- ============================================================
 -- ОСНОВНОЙ ЦИКЛ
@@ -6848,13 +6950,13 @@ function main()
                     goto continue
                 end
                 
-                if isButtonClicked({x=46, y=24, xs=15, ys=1}, x, y) and feedbackInput and feedbackInput ~= "" then
+                                if isButtonClicked({x=46, y=24, xs=15, ys=1}, x, y) and feedbackInput and feedbackInput ~= "" then
                     -- ★★★ ОТПРАВЛЯЕМ ОТЗЫВ С РЕЙТИНГОМ ★★★
                     local feedbackData = {
                         name = currentPlayer or "Аноним",
                         text = feedbackInput,
                         time = getRealTimeString(),
-                        rating = feedbackRating or 5  -- ★★★ ДОБАВЛЯЕМ РЕЙТИНГ ★★★
+                        rating = feedbackRating or 5
                     }
                     
                     -- ★★★ 1. ОТПРАВЛЯЕМ НА СЕРВЕР ★★★
@@ -6885,7 +6987,8 @@ function main()
                     if currentPlayer and playersIndex[currentPlayer] then
                         local player = playersIndex[currentPlayer]
                         player.hasFeedback = true
-                        saveDBDeferred()
+                        saveDB()  -- ← ★★★ МГНОВЕННОЕ СОХРАНЕНИЕ (НЕ saveDBDeferred) ★★★
+                        writeDebugLog("💾 hasFeedback сохранён для " .. currentPlayer)
                         
                         local change = {
                             id = "fb_" .. os.time() .. "_" .. math.random(100000),
@@ -6903,7 +7006,7 @@ function main()
                     showTempMessage("✅ Отзыв отправлен! Спасибо!", 10)
                     feedbackEditMode = false
                     feedbackInput = ""
-                    feedbackRating = 5  -- ★★★ СБРАСЫВАЕМ РЕЙТИНГ ★★★
+                    feedbackRating = 5
                     currentScreen = "feedbacks"
                     markDirty()
                     goto continue
@@ -7335,6 +7438,37 @@ function main()
             end
             
             if alreadyAuthorized then
+                -- ★★★ ПРОВЕРКА hasFeedback ПРИ ВХОДЕ ★★★
+                local player = playersIndex[currentPlayer]
+                if player then
+                    playerHasFeedback = player.hasFeedback or false
+                    
+                    -- ★★★ ПРОВЕРЯЕМ В ФАЙЛЕ ОТЗЫВОВ (НА СЛУЧАЙ СБРОСА ФЛАГА) ★★★
+                    if not playerHasFeedback then
+                        local feedbacks = {}
+                        if fs.exists(FEEDBACKS_PATH) then
+                            local file = io.open(FEEDBACKS_PATH, "r")
+                            if file then
+                                local data = file:read("*a")
+                                file:close()
+                                if data and #data > 0 then
+                                    local ok, result = pcall(serialization.unserialize, data)
+                                    if ok and type(result) == "table" then feedbacks = result end
+                                end
+                            end
+                        end
+                        for _, fb in ipairs(feedbacks) do
+                            if fb.name == currentPlayer then
+                                playerHasFeedback = true
+                                player.hasFeedback = true
+                                saveDBDeferred()
+                                writeDebugLog("🔄 Восстановлен hasFeedback для " .. currentPlayer .. " из файла отзывов")
+                                break
+                            end
+                        end
+                    end
+                end
+                
                 if currentScreen == "auth" or currentScreen == "account_loading" then
                     currentScreen = "menu"
                     markDirty()
