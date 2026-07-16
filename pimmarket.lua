@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА123335555
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА1233322222
 -- ============================================================
 
 local function setupAutoStart()
@@ -648,7 +648,10 @@ function renderCurrentScreen()
         showAuthPopup()
     end
     elseif currentScreen == "qr_popup" then
-
+        -- ★★★ ОЧИЩАЕМ ЭКРАН ОТ СТАРОГО ПОПАПА ★★★
+        gpu.setBackground(0x000000)
+        gpu.fill(1, 1, 80, 25, " ")
+        -- QR-код уже нарисован showQRCodePopup(), ничего не перерисовываем
     end
     drawTempMessage()
 end
@@ -4977,6 +4980,11 @@ end
 function showQRCodePopup()
     writeDebugLog("showQRCodePopup()")
     
+    -- ★★★ ОЧИЩАЕМ ЭКРАН В СТАНДАРТНОМ РАЗРЕШЕНИИ ★★★
+    gpu.setResolution(80, 25)
+    gpu.setBackground(0x000000)
+    gpu.fill(1, 1, 80, 25, " ")
+    
     -- ★★★ УСТАНАВЛИВАЕМ ФЛАГ ★★★
     qrPopupActive = true
     
@@ -4985,12 +4993,7 @@ function showQRCodePopup()
     -- ★★★ 1. ЗАПОМИНАЕМ СТАРОЕ РАЗРЕШЕНИЕ ★★★
     local oldWidth, oldHeight = gpu.getResolution()
     
-    -- ★★★ 2. СТАВИМ СТАНДАРТНОЕ РАЗРЕШЕНИЕ И ЧИСТИМ ★★★
-    gpu.setResolution(80, 25)
-    gpu.setBackground(0x000000)
-    gpu.fill(1, 1, 80, 25, " ")
-    
-    -- ★★★ 3. ТЕПЕРЬ СТАВИМ БОЛЬШОЕ РАЗРЕШЕНИЕ И СНОВА ЧИСТИМ ★★★
+    -- ★★★ 2. ТЕПЕРЬ СТАВИМ БОЛЬШОЕ РАЗРЕШЕНИЕ И СНОВА ЧИСТИМ ★★★
     gpu.setResolution(160, 50)
     gpu.setBackground(0x000000)
     gpu.fill(1, 1, 160, 50, " ")
