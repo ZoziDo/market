@@ -1,6 +1,6 @@
 -- ============================================================
 -- ★★★ PIM MARKET - АВТОМАТИЧЕСКАЯ СИНХРОНИЗАЦИЯ ★★★
--- Версия: 2.0 (с автообновлением товаров)
+-- Версия: 2.0 (с автообновлением товаров).2
 -- ============================================================
 
 local component = require("component")
@@ -159,21 +159,28 @@ function authSendRequest(endpoint, data)
     local url = AUTH_API_URL .. endpoint
     local jsonData = toJson(data)
     
-    local success, response = pcall(function()
-        return internet.request(url, jsonData, {
-            ["Content-Type"] = "application/json",
-            ["Connection"] = "close",
-            ["Timeout"] = REQUEST_TIMEOUT
-        })
-    end)
+    local ok, response = pcall(internet.request, url, jsonData, {
+        ["Content-Type"] = "application/json",
+        ["Connection"] = "close",
+        ["Timeout"] = REQUEST_TIMEOUT
+    })
     
-    if not success or not response then
+    if not ok or not response then
+        writeDebugLog("⚠️ Ошибка запроса к " .. url .. ": " .. tostring(response))
         return nil, "Ошибка соединения"
     end
     
+    -- Безопасное чтение ответа
     local body = ""
-    for chunk in response do
-        body = body .. chunk
+    local read_ok, read_err = pcall(function()
+        for chunk in response do
+            body = body .. chunk
+        end
+    end)
+    
+    if not read_ok then
+        writeDebugLog("⚠️ Ошибка чтения ответа: " .. tostring(read_err))
+        return nil, "Ошибка чтения ответа"
     end
     
     local result = parseJSON(body)
@@ -1625,28 +1632,44 @@ syncPlayerIndex()
 -- Проверяем привязки при запуске
 for name, player in pairs(players) do
     if player.site_user and player.site_user ~= "" then
-        local url = "https://zozido.pythonanywhere.com/api/player_binding?site_user=" .. player.site_user
-        local success, response = pcall(function()
-            return internet.request(url, nil, {
-                ["Connection"] = "close",
-                ["Timeout"] = "2"
-            })
-        end)
+        local url = WEB_URL .. "/api/player_binding?site_user=" .. player.site_user
         
-        if success and response then
-            local body = ""
+        local ok, response = pcall(internet.request, url, nil, {
+            ["Connection"] = "close",
+            ["Timeout"] = "2"
+        })
+        
+        if not ok then
+            writeDebugLog("⚠️ Не удалось выполнить запрос binding для " .. name .. ": " .. tostring(response))
+            goto continue
+        end
+        
+        if not response then
+            writeDebugLog("⚠️ response == nil для " .. name)
+            goto continue
+        end
+        
+        -- Безопасное чтение ответа
+        local body = ""
+        local read_ok, read_err = pcall(function()
             for chunk in response do
                 body = body .. chunk
             end
-            local data = parseJSON(body)
-            
-            if not data or not data.success then
-                player.site_user = nil
-                writeDebugLog("🗑️ Очищена привязка для " .. name .. " (не найдена на сервере)")
-                print("🗑️ Очищена привязка для " .. name)
-            end
+        end)
+        
+        if not read_ok then
+            writeDebugLog("⚠️ Ошибка чтения ответа для " .. name .. ": " .. tostring(read_err))
+            goto continue
+        end
+        
+        local data = parseJSON(body)
+        if not data or not data.success then
+            player.site_user = nil
+            writeDebugLog("🗑️ Очищена привязка для " .. name)
+            print("🗑️ Очищена привязка для " .. name)
         end
     end
+    ::continue::
 end
 
 if dbDirty then
@@ -2293,40 +2316,49 @@ function checkBindingStatus()
         return
     end
     
-    -- ★★★ ИСПРАВЛЕНО: URL В КАВЫЧКАХ ★★★
-    local url = "https://zozido.pythonanywhere.com/api/player_binding?game_player=" .. currentPlayer
+    local url = WEB_URL .. "/api/player_binding?game_player=" .. currentPlayer
     
-    local checkSuccess, checkResponse = pcall(function()
-        return internet.request(url, nil, {
-            ["Connection"] = "close",
-            ["Timeout"] = "3"
-        })
-    end)
+    local ok, response = pcall(internet.request, url, nil, {
+        ["Connection"] = "close",
+        ["Timeout"] = "3"
+    })
     
-    if checkSuccess and checkResponse then
-        local body = ""
-        for chunk in checkResponse do
+    if not ok or not response then
+        writeDebugLog("⚠️ Не удалось проверить привязку: " .. tostring(response))
+        return
+    end
+    
+    -- Безопасное чтение ответа
+    local body = ""
+    local read_ok, read_err = pcall(function()
+        for chunk in response do
             body = body .. chunk
         end
-        local data = parseJSON(body)
-        if data and data.success then
-            local wasBound = boundPlayer ~= nil
-            local isBound = data.success and data.site_user ~= nil
-            
-            if wasBound and not isBound then
-                boundPlayer = nil
-                clearBoundPlayer()
-                addLog("🔓 Привязка отозвана на сервере")
-                if currentScreen == "menu" or currentScreen == "account" then
-                    markDirty()
-                end
-            elseif not wasBound and isBound then
-                boundPlayer = currentPlayer
-                saveBoundPlayer(currentPlayer)
-                addLog("🔗 Привязка восстановлена на сервере")
-                if currentScreen == "menu" or currentScreen == "account" then
-                    markDirty()
-                end
+    end)
+    
+    if not read_ok then
+        writeDebugLog("⚠️ Ошибка чтения ответа binding: " .. tostring(read_err))
+        return
+    end
+    
+    local data = parseJSON(body)
+    if data and data.success then
+        local wasBound = boundPlayer ~= nil
+        local isBound = data.success and data.site_user ~= nil
+        
+        if wasBound and not isBound then
+            boundPlayer = nil
+            clearBoundPlayer()
+            addLog("🔓 Привязка отозвана на сервере")
+            if currentScreen == "menu" or currentScreen == "account" then
+                markDirty()
+            end
+        elseif not wasBound and isBound then
+            boundPlayer = currentPlayer
+            saveBoundPlayer(currentPlayer)
+            addLog("🔗 Привязка восстановлена на сервере")
+            if currentScreen == "menu" or currentScreen == "account" then
+                markDirty()
             end
         end
     end
