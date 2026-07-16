@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА1233355
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА
 -- ============================================================
 
 local function setupAutoStart()
@@ -3652,7 +3652,7 @@ function drawFeedbacksList()
             
             -- ★★★ ПРОВЕРЯЕМ В ФАЙЛЕ ОТЗЫВОВ ★★★
             if not playerHasFeedback then
-                local feedbacks = {}
+                local feedbacksCheck = {}
                 if fs.exists(FEEDBACKS_PATH) then
                     local file = io.open(FEEDBACKS_PATH, "r")
                     if file then
@@ -3660,11 +3660,11 @@ function drawFeedbacksList()
                         file:close()
                         if data and #data > 0 then
                             local ok, result = pcall(serialization.unserialize, data)
-                            if ok and type(result) == "table" then feedbacks = result end
+                            if ok and type(result) == "table" then feedbacksCheck = result end
                         end
                     end
                 end
-                for _, fb in ipairs(feedbacks) do
+                for _, fb in ipairs(feedbacksCheck) do
                     if fb.name == currentPlayer then
                         playerHasFeedback = true
                         player.hasFeedback = true
@@ -3677,14 +3677,24 @@ function drawFeedbacksList()
         end
     end
     
+    -- ★★★ ЗАГРУЖАЕМ ОТЗЫВЫ ИЗ ФАЙЛА ★★★
     local feedbacks = {}
+    if fs.exists(FEEDBACKS_PATH) then
+        local file = io.open(FEEDBACKS_PATH, "r")
+        if file then
+            local data = file:read("*a")
+            file:close()
+            if data and #data > 0 then
+                local ok, result = pcall(serialization.unserialize, data)
+                if ok and type(result) == "table" then feedbacks = result end
+            end
+        end
+    end
     
-    -- ★★★ ОБНОВЛЯЕМ playerHasFeedback ИЗ ЛОКАЛЬНЫХ ДАННЫХ ★★★
+    -- ★★★ ОБНОВЛЯЕМ playerHasFeedback ИЗ ФАЙЛА ОТЗЫВОВ ★★★
     if currentPlayer then
         local player = playersIndex[currentPlayer]
         if player then
-            playerHasFeedback = player.hasFeedback or false
-            -- Проверяем, есть ли отзыв от этого игрока в списке
             local found = false
             for _, fb in ipairs(feedbacks) do
                 if fb.name == currentPlayer then
@@ -3694,10 +3704,9 @@ function drawFeedbacksList()
             end
             if found ~= playerHasFeedback then
                 playerHasFeedback = found
-                if player then
-                    player.hasFeedback = found
-                    saveDBDeferred()
-                end
+                player.hasFeedback = found
+                saveDBDeferred()
+                writeDebugLog("🔄 Обновлён hasFeedback для " .. currentPlayer .. ": " .. tostring(found))
             end
         end
     end
@@ -3706,7 +3715,7 @@ function drawFeedbacksList()
     drawScreenBorder()
 
     local function drawStars(x, y, rating)
-        local starColor = 0xFFD700  -- Золотой цвет
+        local starColor = 0xFFD700
         local emptyColor = colors.inactive
         for i = 1, 5 do
             if i <= rating then
@@ -3730,21 +3739,6 @@ function drawFeedbacksList()
     gpu.set(x + unicode.len(line), 2, title)
     gpu.setForeground(colors.accent_main)
     gpu.set(x + unicode.len(line) + unicode.len(title), 2, line2)
-
-    -- ★★★ ФУНКЦИЯ ДЛЯ ОТРИСОВКИ ЗВЁЗД ★★★
-    local function drawStars(x, y, rating)
-        local starColor = 0xFFD700  -- Золотой цвет
-        local emptyColor = colors.inactive
-        for i = 1, 5 do
-            if i <= rating then
-                gpu.setForeground(starColor)
-                gpu.set(x + (i - 1) * 2, y, "★")
-            else
-                gpu.setForeground(emptyColor)
-                gpu.set(x + (i - 1) * 2, y, "☆")
-            end
-        end
-    end
 
     if #feedbacks == 0 then
         drawCenteredText(10, "Пока нет ни одного отзыва.", colors.text_main)
@@ -3785,7 +3779,7 @@ function drawFeedbacksList()
                 -- Текст отзыва
                 gpu.setForeground(colors.text_bright)
                 local shortText = unicode.sub(fb.text or "", 1, 60)
-                local textX = 7 + 12  -- Отступ после звёзд
+                local textX = 7 + 12
                 if textX + unicode.len(shortText) < 75 then
                     gpu.set(textX, y+2, shortText)
                 else
@@ -5952,7 +5946,6 @@ function checkWebCommands()
                 goto continue
             end
 
-            -- ★★★ sync_feedback ДОЛЖЕН БЫТЬ ЗДЕСЬ (ПОСЛЕ new_feedback) ★★★
             if cmd.command == "sync_feedback" then
                 local playerName = d.player
                 local hasFeedback = d.hasFeedback
@@ -5972,11 +5965,6 @@ function checkWebCommands()
                     sendResult(false, "Игрок не найден")
                 end
                 goto continue
-            end
-
-            -- ★★★ ОБРАБОТКА ПРИНЯТИЯ СОГЛАШЕНИЯ ★★★
-            if cmd.command == "agree" then
-                -- ... код agree ...
             end
 
             -- ★★★ ОБРАБОТКА ПРИНЯТИЯ СОГЛАШЕНИЯ — ОТДЕЛЬНЫЙ БЛОК! ★★★
@@ -6950,8 +6938,7 @@ function main()
                     goto continue
                 end
                 
-                                if isButtonClicked({x=46, y=24, xs=15, ys=1}, x, y) and feedbackInput and feedbackInput ~= "" then
-                    -- ★★★ ОТПРАВЛЯЕМ ОТЗЫВ С РЕЙТИНГОМ ★★★
+                 if isButtonClicked({x=46, y=24, xs=15, ys=1}, x, y) and feedbackInput and feedbackInput ~= "" then
                     local feedbackData = {
                         name = currentPlayer or "Аноним",
                         text = feedbackInput,
