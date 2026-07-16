@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА1
 -- ============================================================
 
 local function setupAutoStart()
@@ -4974,16 +4974,17 @@ function showQRCodePopup()
     writeDebugLog("showQRCodePopup()")
     currentScreen = "qr_popup"
     
-    -- ★★★ ОЧИЩАЕМ ЭКРАН ПЕРЕД РИСОВАНИЕМ ★★★
-    gpu.setBackground(0x000000)
-    gpu.fill(1, 1, 160, 50, " ")
-    
+    -- ★★★ СОХРАНЯЕМ СТАРОЕ РАЗРЕШЕНИЕ ★★★
     local oldWidth, oldHeight = gpu.getResolution()
+    
+    -- ★★★ МЕНЯЕМ РАЗРЕШЕНИЕ НА БОЛЬШОЕ ★★★
     gpu.setResolution(160, 50)
     
+    -- ★★★ ПОЛНОСТЬЮ ОЧИЩАЕМ ЭКРАН ★★★
     gpu.setBackground(0x000000)
     gpu.fill(1, 1, 160, 50, " ")
     
+    -- Рамка
     gpu.setForeground(0x00FFCC)
     gpu.fill(1, 1, 160, 1, "=")
     gpu.fill(1, 50, 160, 1, "=")
@@ -4996,21 +4997,25 @@ function showQRCodePopup()
     gpu.set(1, 50, "+")
     gpu.set(160, 50, "+")
     
+    -- Заголовок
     local titleText = "QR-КОД ДЛЯ ВХОДА"
     local titleX = 80 - math.floor(#titleText / 2) + 2
     gpu.setForeground(0x00FFCC)
     gpu.set(titleX, 2, titleText)
     
+    -- Игрок
     local playerText = "Игрок: " .. (currentPlayer or "?")
     local playerX = 80 - math.floor(#playerText / 2)   
     gpu.setForeground(colors.white)
     gpu.set(playerX, 4, playerText)
     
+    -- Подсказка
     local hintText = "Отсканируйте QR-код для входа на сайт"
     local hintX = 80 - math.floor(#hintText / 2) + 11
     gpu.setForeground(colors.inactive)
     gpu.set(hintX, 5, hintText)
     
+    -- QR-код
     local qrY = 7
     local qrX = 44
     
@@ -5063,17 +5068,19 @@ function showQRCodePopup()
         gpu.set(qrX, qrY + i - 1, line)
     end
     
+    -- Ссылка
     local linkText = "Ссылка: https://zozido.pythonanywhere.com/"
     local linkX = 80 - math.floor(#linkText / 2) + 1
     gpu.setForeground(colors.inactive)
     gpu.set(linkX, qrY + 39, linkText)
     
+    -- Подсказка внизу
     local bottomHint = "[ Нажмите ЗАКРЫТЬ или ESC для возврата ]"
     local bottomHintX = 80 - math.floor(#bottomHint / 2) + 12
     gpu.setForeground(colors.text_main)
     gpu.set(bottomHintX, 48, bottomHint)
     
-    -- ★★★ РАССЧИТЫВАЕМ КНОПКУ ЦЕНТРИРОВАННО ★★★
+    -- ★★★ КНОПКА ЗАКРЫТЬ (ЦЕНТРИРОВАННАЯ) ★★★
     local closeText = "[ ЗАКРЫТЬ ]"
     local closeLen = unicode.len(closeText) + 2
     local closeX = 80 - math.floor(closeLen / 2)
@@ -5124,7 +5131,9 @@ function showQRCodePopup()
         ::continue_qr::
     end
     
+    -- ★★★ ВОЗВРАЩАЕМ РАЗРЕШЕНИЕ ★★★
     gpu.setResolution(oldWidth, oldHeight)
+    
     -- ★★★ ВОЗВРАЩАЕМСЯ В АУТЕНТИФИКАЦИЮ ★★★
     currentScreen = "auth_popup"
     markDirty()
