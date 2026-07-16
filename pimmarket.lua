@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333555
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333
 -- ============================================================
 
 local function setupAutoStart()
@@ -2516,7 +2516,6 @@ function getBindingStatus()
                         local p = playersIndex[currentPlayer]
                         p.site_user = data.site_user
                         saveDB()
-                        addLog("🔗 Привязка восстановлена с сервера: " .. currentPlayer .. " -> " .. data.site_user)
                     end
                     boundPlayer = data.site_user
                     saveBoundPlayer(data.site_user)
@@ -2529,7 +2528,6 @@ function getBindingStatus()
                         if p.site_user then
                             p.site_user = nil
                             saveDB()
-                            addLog("🔓 Привязка отозвана на сервере: " .. currentPlayer)
                         end
                     end
                     boundPlayer = nil
@@ -8040,11 +8038,6 @@ function main()
                     playersIndex[currentPlayer] = player
                     saveDBDeferred()
                     addLog("✅ Новый игрок: " .. currentPlayer)
-                    sendToWeb("/api/new_log", toJson({
-                        time = getRealTimeHM(),
-                        level = "SUCCESS",
-                        text = "Новый игрок: " .. currentPlayer
-                    }))
                     
                     local change = {
                         id = "new_" .. os.time() .. "_" .. math.random(100000),
@@ -8074,18 +8067,12 @@ function main()
                     alreadyAuthorized = true
                     
                     if selector then
-                        addLog("🖥 Селектор доступен")
                     end
                     
                     currentScreen = "menu"
                     markDirty()
                     forceSyncBinding()
                     addLog("👤 Вход: " .. currentPlayer)
-                    sendToWeb("/api/new_log", toJson({
-                        time = getRealTimeHM(),
-                        level = "INFO",
-                        text = "Вход: " .. currentPlayer
-                    }))
                 end
             end
             goto continue
@@ -8094,9 +8081,6 @@ function main()
         if e == "player_off" or e == "pim_player_leave" then
             local playerName = ev[2] or "Игрок"
             writeDebugLog("player_off: " .. playerName)
-            
-            -- ★★★ СБРАСЫВАЕМ ФЛАГ QR ПРИ УХОДЕ ИГРОКА ★★★
-            qrPopupActive = false
             
             -- ★★★ ПРОВЕРЯЕМ, ДЕЙСТВИТЕЛЬНО ЛИ ИГРОК УШЁЛ ★★★
             if currentPlayer and playerName == currentPlayer then
