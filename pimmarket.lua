@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА1233322222
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333
 -- ============================================================
 
 local function setupAutoStart()
@@ -644,14 +644,11 @@ function renderCurrentScreen()
             drawAgreementScreen()
         end
     elseif currentScreen == "auth_popup" then
-    if not qrPopupActive then
-        showAuthPopup()
-    end
+        if not qrPopupActive then
+            showAuthPopup()
+        end
     elseif currentScreen == "qr_popup" then
-        -- ★★★ ОЧИЩАЕМ ЭКРАН ОТ СТАРОГО ПОПАПА ★★★
-        gpu.setBackground(0x000000)
-        gpu.fill(1, 1, 80, 25, " ")
-        -- QR-код уже нарисован showQRCodePopup(), ничего не перерисовываем
+        -- ★★★ НИЧЕГО НЕ ДЕЛАЕМ ★★★
     end
     drawTempMessage()
 end
@@ -4980,20 +4977,14 @@ end
 function showQRCodePopup()
     writeDebugLog("showQRCodePopup()")
     
-    -- ★★★ ОЧИЩАЕМ ЭКРАН В СТАНДАРТНОМ РАЗРЕШЕНИИ ★★★
-    gpu.setResolution(80, 25)
-    gpu.setBackground(0x000000)
-    gpu.fill(1, 1, 80, 25, " ")
-    
     -- ★★★ УСТАНАВЛИВАЕМ ФЛАГ ★★★
     qrPopupActive = true
-    
     currentScreen = "qr_popup"
     
     -- ★★★ 1. ЗАПОМИНАЕМ СТАРОЕ РАЗРЕШЕНИЕ ★★★
     local oldWidth, oldHeight = gpu.getResolution()
     
-    -- ★★★ 2. ТЕПЕРЬ СТАВИМ БОЛЬШОЕ РАЗРЕШЕНИЕ И СНОВА ЧИСТИМ ★★★
+    -- ★★★ 2. СТАВИМ БОЛЬШОЕ РАЗРЕШЕНИЕ И ОЧИЩАЕМ ★★★
     gpu.setResolution(160, 50)
     gpu.setBackground(0x000000)
     gpu.fill(1, 1, 160, 50, " ")
@@ -5143,12 +5134,12 @@ function showQRCodePopup()
         ::continue_qr::
     end
     
-    -- ★★★ 4. ВОЗВРАЩАЕМ ИСХОДНОЕ РАЗРЕШЕНИЕ И ЧИСТИМ ★★★
+    -- ★★★ 3. ВОЗВРАЩАЕМ ИСХОДНОЕ РАЗРЕШЕНИЕ И ОЧИЩАЕМ ★★★
     gpu.setResolution(oldWidth, oldHeight)
     gpu.setBackground(0x000000)
     gpu.fill(1, 1, oldWidth, oldHeight, " ")
     
-    -- ★★★ 5. ВОЗВРАЩАЕМСЯ В АУТЕНТИФИКАЦИЮ ★★★
+    -- ★★★ 4. ВОЗВРАЩАЕМСЯ В АУТЕНТИФИКАЦИЮ ★★★
     currentScreen = "auth_popup"
     markDirty()
     showAuthPopup()
