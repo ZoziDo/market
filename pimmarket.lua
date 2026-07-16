@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА
 -- ============================================================
 
 local function setupAutoStart()
@@ -2922,8 +2922,9 @@ function showAuthPopup()
                     break
                 end
                 
-                -- ★★★ НОВАЯ КНОПКА QR CODE ★★★
                 if isButtonClicked(qrBtn, x, y) then
+                    gpu.setBackground(0x000000)
+                    gpu.fill(1, 1, 80, 25, " ")
                     showQRCodePopup()
                     break
                 end
@@ -5132,10 +5133,10 @@ function showQRCodePopup()
         ::continue_qr::
     end
     
-    -- ★★★ 4. ВОЗВРАЩАЕМ СТАНДАРТНОЕ РАЗРЕШЕНИЕ И ЧИСТИМ ★★★
-    gpu.setResolution(80, 25)
+    -- ★★★ 4. ВОЗВРАЩАЕМ ИСХОДНОЕ РАЗРЕШЕНИЕ И ЧИСТИМ ★★★
+    gpu.setResolution(oldWidth, oldHeight)
     gpu.setBackground(0x000000)
-    gpu.fill(1, 1, 80, 25, " ")
+    gpu.fill(1, 1, oldWidth, oldHeight, " ")
     
     -- ★★★ 5. ВОЗВРАЩАЕМСЯ В АУТЕНТИФИКАЦИЮ ★★★
     currentScreen = "auth_popup"
