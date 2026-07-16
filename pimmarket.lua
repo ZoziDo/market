@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА123335552
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333111111
 -- ============================================================
 
 local function setupAutoStart()
@@ -4972,7 +4972,6 @@ end
 
 function showQRCodePopup()
     writeDebugLog("showQRCodePopup()")
-    currentScreen = "qr_popup"
     
     -- ★★★ СОХРАНЯЕМ СТАРОЕ РАЗРЕШЕНИЕ ★★★
     local oldWidth, oldHeight = gpu.getResolution()
@@ -4980,9 +4979,12 @@ function showQRCodePopup()
     -- ★★★ МЕНЯЕМ РАЗРЕШЕНИЕ НА БОЛЬШОЕ ★★★
     gpu.setResolution(160, 50)
     
-    -- ★★★ ПОЛНОСТЬЮ ОЧИЩАЕМ ЭКРАН ★★★
+    -- ★★★ ПОЛНОСТЬЮ ОЧИЩАЕМ ЭКРАН (ВАЖНО!) ★★★
     gpu.setBackground(0x000000)
     gpu.fill(1, 1, 160, 50, " ")
+    
+    -- ★★★ УСТАНАВЛИВАЕМ ТЕКУЩИЙ ЭКРАН ★★★
+    currentScreen = "qr_popup"
     
     -- Рамка
     gpu.setForeground(0x00FFCC)
@@ -5096,7 +5098,7 @@ function showQRCodePopup()
     }
     drawFlexButton(closeBtn)
     
-    -- ★★★ ПРОСТОЙ ЦИКЛ БЕЗ ЛИШНИХ ПРОВЕРОК ★★★
+    -- ★★★ ЦИКЛ ОЖИДАНИЯ ★★★
     while currentScreen == "qr_popup" do
         local ev = {event.pull(0.5)}
         
