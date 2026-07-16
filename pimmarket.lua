@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА1233355123
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333555
 -- ============================================================
 
 local function setupAutoStart()
@@ -1774,41 +1774,49 @@ function saveBuyItemsWithQty()
 end
 
 
-function sendStats()
-    writeDebugLog("📊 sendStats() начат (резервный дамп)")
-    
-    -- ★★★ ПРОВЕРЯЕМ, ПРОШЛО ЛИ ДОСТАТОЧНО ВРЕМЕНИ ★★★
-    local now = os.time()
-    if now - lastSentTime < MIN_SEND_INTERVAL then
-        writeDebugLog("⏳ Прошло " .. (now - lastSentTime) .. "с, минимальный интервал " .. MIN_SEND_INTERVAL .. "с, пропускаем")
-        return
-    end
-    
-    -- ★★★ ПРОВЕРЯЕМ, НЕ СЛИШКОМ ЛИ ЧАСТО МЫ ОБРАЩАЕМСЯ К МЭ ★★★
-    if now - lastCheckTime < 60 then
-        writeDebugLog("⏳ Слишком частая проверка МЭ (прошло " .. (now - lastCheckTime) .. "с), пропускаем")
-        return
-    end
-    lastCheckTime = now
-    
-    -- ★★★ ПРОВЕРЯЕМ, ИЗМЕНИЛИСЬ ЛИ КОЛИЧЕСТВА ★★★
-    local hasChanges = false
-    if component.isAvailable("me_interface") then
-        local me = component.me_interface
-        local rawItems = me.getItemsInNetwork()
+    function sendStats()
+        writeDebugLog("📊 sendStats() начат (резервный дамп)")
         
-        local currentQuantities = {}
-        for _, meItem in ipairs(rawItems) do
-            local key = meItem.name .. ":" .. (meItem.damage or 0)
-            currentQuantities[key] = meItem.size or 0
+        -- ★★★ ПРОВЕРЯЕМ, ПРОШЛО ЛИ ДОСТАТОЧНО ВРЕМЕНИ ★★★
+        local now = os.time()
+        if now - lastSentTime < MIN_SEND_INTERVAL then
+            writeDebugLog("⏳ Прошло " .. (now - lastSentTime) .. "с, минимальный интервал " .. MIN_SEND_INTERVAL .. "с, пропускаем")
+            return
         end
         
-        -- Сравниваем с последними отправленными
-        for key, qty in pairs(currentQuantities) do
-            if lastSentQuantities[key] ~= qty then
-                hasChanges = true
-                break
+        -- ★★★ ПРОВЕРЯЕМ, НЕ СЛИШКОМ ЛИ ЧАСТО МЫ ОБРАЩАЕМСЯ К МЭ ★★★
+        if now - lastCheckTime < 60 then
+            writeDebugLog("⏳ Слишком частая проверка МЭ (прошло " .. (now - lastCheckTime) .. "с), пропускаем")
+            return
+        end
+        lastCheckTime = now
+        
+        -- ★★★ ЛЁГКАЯ ПРОВЕРКА ТОЛЬКО НУЖНЫХ ПРЕДМЕТОВ ★★★
+        local hasChanges = false
+        
+        -- Загружаем текущие товары из файла
+        local buyItemsFromFile = {}
+        if fs.exists("/home/buy_items.lua") then
+            local ok, data = pcall(dofile, "/home/buy_items.lua")
+            if ok and type(data) == "table" then 
+                buyItemsFromFile = data 
             end
+        end
+        
+        -- Проверяем только те предметы, которые есть в buy_items (НЕ сканируем всю МЭ!)
+        if component.isAvailable("me_interface") and #buyItemsFromFile > 0 then
+            local me = component.me_interface
+            
+            for _, item in ipairs(buyItemsFromFile) do
+                local actualQty = getActualItemQuantity(item.internalName, item.damage or 0)
+                if actualQty ~= (item.qty or 0) then
+                    hasChanges = true
+                    writeDebugLog("🔄 Изменение: " .. (item.displayName or item.internalName) .. " было " .. (item.qty or 0) .. " стало " .. actualQty)
+                    break
+                end
+            end
+        else
+            hasChanges = true
         end
         
         -- Если нет изменений - пропускаем отправку
@@ -1817,10 +1825,159 @@ function sendStats()
             return
         end
         
-        -- Сохраняем новые количества
-        lastSentQuantities = currentQuantities
+        -- Сохраняем время отправки
         lastSentTime = now
         writeDebugLog("📊 Обнаружены изменения, отправляем статистику")
+        
+        local sysInfo = {}
+        local ok, result = pcall(getSystemInfo)
+        if ok and result then
+            sysInfo = result
+        else
+            writeErrorLog("⚠️ Ошибка получения системной информации")
+        end
+        
+        local playerList = {}
+        local totalBalance = 0
+        local playerCount = 0
+        local allPlayerTransactions = {}
+        
+        for _ in pairs(players) do playerCount = playerCount + 1 end
+        writeDebugLog("📊 Всего игроков в памяти: " .. playerCount)
+        
+        for name, data in pairs(players) do
+            writeDebugLog("   👤 " .. name .. ": Coin=" .. tostring(data.balance or 0) .. ", EMA=" .. tostring(data.emaBalance or 0))
+            local bal = (data.balance or 0) + (data.emaBalance or 0)
+            totalBalance = totalBalance + bal
+            
+            if not data.transactionsList then
+                data.transactionsList = {}
+            end
+            
+            if data.transactionsList then
+                for _, t in ipairs(data.transactionsList) do
+                    local tCopy = {
+                        time = t.time,
+                        type = t.type,
+                        player = name,
+                        item = t.item,
+                        qty = t.qty,
+                        coin = t.coin,
+                        ema = t.ema
+                    }
+                    table.insert(allPlayerTransactions, tCopy)
+                end
+            end
+            
+            table.insert(playerList, {
+                name = name,
+                balance = data.balance or 0,
+                emaBalance = data.emaBalance or 0,
+                transactions = data.transactions or 0,
+                banned = data.banned or false,
+                transactionsList = data.transactionsList,
+                site_user = data.site_user
+            })
+        end
+        
+        table.sort(allPlayerTransactions, function(a, b)
+            return a.time > b.time
+        end)
+        
+        writeDebugLog("👥 Игроков отправлено: " .. #playerList)
+        writeDebugLog("📋 Всего транзакций отправлено: " .. #allPlayerTransactions)
+        globalStats.totalBalance = totalBalance
+        saveGlobalStats()
+        
+        local feedbacksList = {}
+        if fs.exists(FEEDBACKS_PATH) then
+            local file = io.open(FEEDBACKS_PATH, "r")
+            if file then
+                local data = file:read("*a")
+                file:close()
+                if data and #data > 0 then
+                    local ok, result = pcall(serialization.unserialize, data)
+                    if ok and type(result) == "table" then feedbacksList = result end
+                end
+            end
+        end
+        
+        -- ★★★ ЗАГРУЖАЕМ ТОВАРЫ С QTY ИЗ МЭ ★★★
+        local buyItems = {}
+        if fs.exists("/home/buy_items.lua") then
+            local ok, data = pcall(dofile, "/home/buy_items.lua")
+            if ok and type(data) == "table" then 
+                buyItems = data 
+                writeDebugLog("📦 Загружены buy_items: " .. #buyItems .. " товаров")
+                
+                -- ★★★ ДОБАВЛЯЕМ QTY ИЗ МЭ СИСТЕМЫ ★★★
+                if component.isAvailable("me_interface") then
+                    local me = component.me_interface
+                    local rawItems = me.getItemsInNetwork()
+                    
+                    -- Создаём карту количеств из МЭ
+                    local meQuantities = {}
+                    for _, meItem in ipairs(rawItems) do
+                        local key = meItem.name .. ":" .. (meItem.damage or 0)
+                        meQuantities[key] = meItem.size or 0
+                    end
+                    
+                    -- Добавляем qty к каждому товару
+                    for _, item in ipairs(buyItems) do
+                        local key = item.internalName .. ":" .. (item.damage or 0)
+                        item.qty = meQuantities[key] or 0
+                    end
+                    
+                    writeDebugLog("📦 Добавлены количества из МЭ")
+                else
+                    writeErrorLog("⚠️ ME интерфейс недоступен, qty = 0")
+                    for _, item in ipairs(buyItems) do
+                        item.qty = 0
+                    end
+                end
+            else
+                writeErrorLog("❌ Ошибка загрузки buy_items.lua")
+            end
+        else
+            writeErrorLog("⚠️ Файл /home/buy_items.lua не найден")
+        end
+        
+        local sellItems = {}
+        if fs.exists("/home/shop_items.lua") then
+            local ok, data = pcall(dofile, "/home/shop_items.lua")
+            if ok and type(data) == "table" and data.sellItems then
+                sellItems = data.sellItems
+                writeDebugLog("📦 Загружены sell_items: " .. #sellItems .. " товаров")
+            else
+                writeErrorLog("❌ Ошибка загрузки shop_items.lua")
+            end
+        else
+            writeErrorLog("⚠️ Файл /home/shop_items.lua не найден")
+        end
+        
+        local payload = {
+            players = playerList,
+            admins = admins,
+            total = #playerList,
+            total_balance = totalBalance,
+            total_transactions = (globalStats.totalBuys or 0) + (globalStats.totalSells or 0),
+            total_reports = globalStats.totalReports or 0,
+            total_feedbacks = #feedbacksList,
+            total_revenue = globalStats.totalRevenue or 0,
+            online = 0,
+            paused = shopPaused,
+            feedbacks = feedbacksList,
+            transactions = allPlayerTransactions,
+            buy_items = buyItems,
+            sell_items = sellItems,
+            system_info = sysInfo
+        }
+        
+        local jsonData = toJson(payload)
+        writeDebugLog("📤 Размер JSON: " .. #jsonData .. " байт")
+        writeDebugLog("📤 Отправлены данные: " .. #playerList .. " игроков, " .. #buyItems .. " товаров покупки, " .. #sellItems .. " товаров продажи")
+        
+        sendToWeb("/api/update", jsonData)
     end
     
     local sysInfo = {}
@@ -1972,18 +2129,20 @@ function sendStats()
     writeDebugLog("📤 Отправлены данные: " .. #playerList .. " игроков, " .. #buyItems .. " товаров покупки, " .. #sellItems .. " товаров продажи")
     
     sendToWeb("/api/update", jsonData)
-end
+
 
 -- ★★★ ТАЙМЕР С УВЕЛИЧЕННЫМ ИНТЕРВАЛОМ (2 МИНУТЫ) ★★★
-createTimer(1800, function()  -- ← 600 секунд = 10 минут
+
+createTimer(1800, function()
     if not TRANSACTION_LOCK then
         pcall(sendStats)
     end
     return true
 end, true)
 
+
 -- ★★★ ТАЙМЕР ДЛЯ СИСТЕМНОЙ ИНФОРМАЦИИ (5 МИНУТ) ★★★
-createTimer(300, function()  -- ← 300 секунд = 5 минут
+createTimer(300, function()
     if not TRANSACTION_LOCK then
         local sysInfo = getSystemInfo()
         sendToWeb("/api/system_info", toJson(sysInfo))
@@ -1991,6 +2150,7 @@ createTimer(300, function()  -- ← 300 секунд = 5 минут
     end
     return true
 end, true)
+
 
 
 function safeDoFile(path)
@@ -2856,15 +3016,17 @@ function showAuthPopup()
         }
         
         
-            local qrBtn = {
-                text = qrText,
-                x = startX + confirmLen + spacing,
-                y = btnY,
-                xs = qrLen,
-                ys = 1,
-                bg = colors.bg_button,
-                fg = colors.accent_main
+        --[[
+        local qrBtn = {
+            text = qrText,
+            x = startX + confirmLen + spacing,
+            y = btnY,
+            xs = qrLen,
+            ys = 1,
+            bg = colors.bg_button,
+            fg = colors.accent_main
         }
+        --]]
         
         
         local closeBtn = {
