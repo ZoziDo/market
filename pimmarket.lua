@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333111111
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333
 -- ============================================================
 
 local function setupAutoStart()
@@ -646,7 +646,7 @@ function renderCurrentScreen()
     elseif currentScreen == "auth_popup" then
         showAuthPopup()
     elseif currentScreen == "qr_popup" then
-        showQRCodePopup()
+
     end
     drawTempMessage()
 end
@@ -4972,19 +4972,20 @@ end
 
 function showQRCodePopup()
     writeDebugLog("showQRCodePopup()")
+    currentScreen = "qr_popup"
     
-    -- ★★★ СОХРАНЯЕМ СТАРОЕ РАЗРЕШЕНИЕ ★★★
+    -- ★★★ 1. ЗАПОМИНАЕМ СТАРОЕ РАЗРЕШЕНИЕ ★★★
     local oldWidth, oldHeight = gpu.getResolution()
     
-    -- ★★★ МЕНЯЕМ РАЗРЕШЕНИЕ НА БОЛЬШОЕ ★★★
-    gpu.setResolution(160, 50)
+    -- ★★★ 2. СТАВИМ СТАНДАРТНОЕ РАЗРЕШЕНИЕ И ЧИСТИМ ★★★
+    gpu.setResolution(80, 25)
+    gpu.setBackground(0x000000)
+    gpu.fill(1, 1, 80, 25, " ")
     
-    -- ★★★ ПОЛНОСТЬЮ ОЧИЩАЕМ ЭКРАН (ВАЖНО!) ★★★
+    -- ★★★ 3. ТЕПЕРЬ СТАВИМ БОЛЬШОЕ РАЗРЕШЕНИЕ И СНОВА ЧИСТИМ ★★★
+    gpu.setResolution(160, 50)
     gpu.setBackground(0x000000)
     gpu.fill(1, 1, 160, 50, " ")
-    
-    -- ★★★ УСТАНАВЛИВАЕМ ТЕКУЩИЙ ЭКРАН ★★★
-    currentScreen = "qr_popup"
     
     -- Рамка
     gpu.setForeground(0x00FFCC)
@@ -5082,7 +5083,7 @@ function showQRCodePopup()
     gpu.setForeground(colors.text_main)
     gpu.set(bottomHintX, 48, bottomHint)
     
-    -- ★★★ КНОПКА ЗАКРЫТЬ (ЦЕНТРИРОВАННАЯ) ★★★
+    -- Кнопка ЗАКРЫТЬ
     local closeText = "[ ЗАКРЫТЬ ]"
     local closeLen = unicode.len(closeText) + 2
     local closeX = 80 - math.floor(closeLen / 2)
@@ -5098,7 +5099,6 @@ function showQRCodePopup()
     }
     drawFlexButton(closeBtn)
     
-    -- ★★★ ЦИКЛ ОЖИДАНИЯ ★★★
     while currentScreen == "qr_popup" do
         local ev = {event.pull(0.5)}
         
@@ -5106,7 +5106,6 @@ function showQRCodePopup()
             local x, y = ev[3], ev[4]
             local touchPlayer = ev[6] or "Неизвестный"
             
-            -- ★★★ ПРОВЕРКА: ТОЛЬКО ВЛАДЕЛЕЦ ★★★
             if not isPimOwner(touchPlayer) then
                 writeDebugLog("⚠️ Коснулся не владелец: " .. touchPlayer .. ", игнорируем")
                 goto continue_qr
@@ -5120,13 +5119,12 @@ function showQRCodePopup()
             local code = ev[3]
             local keyPlayer = ev[5] or "Неизвестный"
             
-            -- ★★★ ПРОВЕРКА: ТОЛЬКО ВЛАДЕЛЕЦ ★★★
             if not isPimOwner(keyPlayer) then
                 writeDebugLog("⚠️ Нажал клавишу не владелец: " .. keyPlayer .. ", игнорируем")
                 goto continue_qr
             end
             
-            if code == 27 then  -- ESC
+            if code == 27 then
                 break
             end
         end
@@ -5134,10 +5132,12 @@ function showQRCodePopup()
         ::continue_qr::
     end
     
-    -- ★★★ ВОЗВРАЩАЕМ РАЗРЕШЕНИЕ ★★★
-    gpu.setResolution(oldWidth, oldHeight)
+    -- ★★★ 4. ВОЗВРАЩАЕМ СТАНДАРТНОЕ РАЗРЕШЕНИЕ И ЧИСТИМ ★★★
+    gpu.setResolution(80, 25)
+    gpu.setBackground(0x000000)
+    gpu.fill(1, 1, 80, 25, " ")
     
-    -- ★★★ ВОЗВРАЩАЕМСЯ В АУТЕНТИФИКАЦИЮ ★★★
+    -- ★★★ 5. ВОЗВРАЩАЕМСЯ В АУТЕНТИФИКАЦИЮ ★★★
     currentScreen = "auth_popup"
     markDirty()
     showAuthPopup()
