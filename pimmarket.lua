@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА123335555
 -- ============================================================
 
 local function setupAutoStart()
@@ -2023,9 +2023,6 @@ playerTransactions = 0
 playerRegDate = ""
 playerAgreed = false
 currentScreen = "welcome"
-authStartTime = 0
-AUTH_TIMEOUT = 3
-alreadyAuthorized = false
 
 authCodeInput = ""
 boundPlayer = nil
@@ -2092,79 +2089,92 @@ playerHasFeedback = false
 
 
 -- ============================================================
--- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+-- ★★★ НОВАЯ СИСТЕМА ПРИВЯЗКИ АККАУНТА ★★★
 -- ============================================================
 
-function isPimOwner(playerName)
-    if not playerName or not pimOwner then 
-        return false
-    end
-    return playerName == pimOwner
-end
+-- Константы
+AUTH_CODE_LIFETIME = 300  -- 5 минут
+MAX_ATTEMPTS = 5
 
-function syncCurrentPlayer()
-    if not currentPlayer then 
-        return
+-- Глобальные переменные для аутентификации
+authCodeInput = ""
+boundPlayer = nil
+authStartTime = 0
+AUTH_TIMEOUT = 3
+
+-- Кеш для проверки привязки
+bindingCache = {
+    isBound = false,
+    lastCheck = 0,
+    checkInterval = 10,
+    pendingUpdate = false
+}
+
+-- ============================================================
+-- СТАТУСЫ И СООТВЕТСТВУЮЩИЕ СООБЩЕНИЯ (ТОЛЬКО ДЛЯ LUA)
+-- ============================================================
+
+AUTH_MESSAGES = {
+    ["SUCCESS"] = { text = "✅ Аккаунт успешно привязан!", color = colors.success },
+    ["INVALID_CODE"] = { text = "❌ Неверный код", color = colors.error },
+    ["CODE_EXPIRED"] = { text = "⏰ Срок действия кода истек", color = colors.error },
+    ["CODE_USED"] = { text = "❌ Код уже был использован", color = colors.error },
+    ["ALREADY_LINKED"] = { text = "🔒 Данный игрок уже привязан", color = colors.error },
+    ["ALREADY_LINKED_SITE"] = { text = "🔒 Этот аккаунт уже привязан к другому игроку", color = colors.error },
+    ["ALREADY_LINKED_PLAYER"] = { text = "🔒 Игрок уже привязан к другому аккаунту", color = colors.error },
+    ["NICKNAME_MISMATCH"] = { text = "❌ Ник не совпадает с ожидаемым", color = colors.error },
+    ["TOO_MANY_ATTEMPTS"] = { text = "⛔ Превышено количество попыток", color = colors.error },
+    ["MISSING_DATA"] = { text = "❌ Недостаточно данных", color = colors.error },
+    ["MISSING_USER"] = { text = "❌ Не указан пользователь", color = colors.error },
+    ["MISSING_PARAM"] = { text = "❌ Не указан параметр", color = colors.error },
+    ["NOT_BOUND"] = { text = "🔓 Аккаунт не привязан", color = colors.inactive },
+    ["UNBOUND"] = { text = "🔓 Аккаунт отвязан", color = colors.text_main },
+    ["CODE_GENERATED"] = { text = "✅ Код сгенерирован", color = colors.success },
+    ["SERVER_ERROR"] = { text = "⚠️ Ошибка сервера", color = colors.error },
+}
+
+-- ============================================================
+-- РАБОТА С ПРИВЯЗКОЙ (ОСНОВНЫЕ ФУНКЦИИ)
+-- ============================================================
+
+function saveBoundPlayer(playerName)
+    if playerName and playerName ~= "" then
+        local file = io.open("/home/bound_player.dat", "w")
+        if file then
+            file:write(playerName)
+            file:close()
+            writeDebugLog("💾 Привязка сохранена: " .. playerName)
+            return true
+        end
     end
-    
-    writeDebugLog("🔄 Синхронизация игрока: " .. currentPlayer)
-    
-    local player = playersIndex[currentPlayer]
-    if player then
-        coinBalance = player.balance or 0
-        emaBalance = player.emaBalance or 0
-        playerTransactions = player.transactions or 0
-        playerRegDate = player.regDate or ""
-        playerAgreed = player.agreed or false
-        
-        writeDebugLog("✅ Синхронизирован: Coin=" .. coinBalance .. ", EMA=" .. emaBalance)
-        return true
-    end
-    
-    writeDebugLog("⚠️ Игрок не найден при синхронизации: " .. currentPlayer)
     return false
 end
 
-function checkBindingStatus()
-    if not currentPlayer then 
-        return
-    end
-    
-    local checkSuccess, checkResponse = pcall(function()
-        return internet.request(WEB_URL .. "/api/player_binding?game_player=" .. currentPlayer, nil, {
-            ["Connection"] = "close",
-            ["Timeout"] = "3"
-        })
-    end)
-    
-    if checkSuccess and checkResponse then
-        local body = ""
-        for chunk in checkResponse do
-            body = body .. chunk
-        end
-        local data = parseJSON(body)
-        if data and data.success then
-            local wasBound = boundPlayer ~= nil
-            local isBound = data.success and data.site_user ~= nil
-            
-            if wasBound and not isBound then
-                boundPlayer = nil
-                clearBoundPlayer()
-                addLog("🔓 Привязка отозвана на сервере")
-                if currentScreen == "menu" or currentScreen == "account" then
-                    markDirty()
-                end
-            elseif not wasBound and isBound then
-                boundPlayer = currentPlayer
-                saveBoundPlayer(currentPlayer)
-                addLog("🔗 Привязка восстановлена на сервере")
-                if currentScreen == "menu" or currentScreen == "account" then
-                    markDirty()
-                end
+function loadBoundPlayer()
+    if fs.exists("/home/bound_player.dat") then
+        local file = io.open("/home/bound_player.dat", "r")
+        if file then
+            local data = file:read("*a")
+            file:close()
+            if data and data ~= "" then
+                writeDebugLog("📂 Загружена привязка: " .. data)
+                return data
             end
         end
     end
+    return nil
 end
+
+function clearBoundPlayer()
+    if fs.exists("/home/bound_player.dat") then
+        fs.remove("/home/bound_player.dat")
+        writeDebugLog("🗑️ Привязка удалена")
+    end
+end
+
+-- ============================================================
+-- ПОЛУЧЕНИЕ СТАТУСА ПРИВЯЗКИ (ОСНОВНАЯ ФУНКЦИЯ)
+-- ============================================================
 
 function getBindingStatus()
     if not currentPlayer then
@@ -2173,7 +2183,7 @@ function getBindingStatus()
         return false
     end
     
-    -- ★★★ СНАЧАЛА ПРОВЕРЯЕМ В ДАННЫХ ИГРОКА ★★★
+    -- 1. СНАЧАЛА ПРОВЕРЯЕМ В ДАННЫХ ИГРОКА (БЫСТРО)
     local player = playersIndex[currentPlayer]
     if player and player.site_user and player.site_user ~= "" then
         boundPlayer = player.site_user
@@ -2182,7 +2192,7 @@ function getBindingStatus()
         return true
     end
     
-    -- Если в данных игрока нет привязки, проверяем кеш
+    -- 2. ПРОВЕРЯЕМ КЕШ
     local now = os.time()
     if now - (bindingCache.lastCheck or 0) < bindingCache.checkInterval then
         return bindingCache.isBound
@@ -2190,23 +2200,26 @@ function getBindingStatus()
     
     bindingCache.lastCheck = now
     
-    -- ★★★ ФОНОВАЯ ПРОВЕРКА НА СЕРВЕРЕ ★★★
+    -- 3. ФОНОВАЯ ПРОВЕРКА НА СЕРВЕРЕ
     if not bindingCache.pendingUpdate then
         bindingCache.pendingUpdate = true
         event.timer(0.1, function()
             local success, response = pcall(function()
-                return internet.request(WEB_URL .. "/api/player_binding?game_player=" .. currentPlayer)
+                return internet.request(WEB_URL .. "/api/player_binding?game_player=" .. currentPlayer, nil, {
+                    ["Connection"] = "close",
+                    ["Timeout"] = "3"
+                })
             end)
-           
+            
             if success and response then
                 local body = ""
                 for chunk in response do
                     body = body .. chunk
                 end
                 local data = parseJSON(body)
-               
+                
+                -- ★★★ НА СЕРВЕРЕ ЕСТЬ ПРИВЯЗКА ★★★
                 if data and data.success and data.site_user then
-                    -- На сервере есть привязка
                     if currentPlayer and playersIndex[currentPlayer] then
                         local p = playersIndex[currentPlayer]
                         p.site_user = data.site_user
@@ -2216,8 +2229,9 @@ function getBindingStatus()
                     boundPlayer = data.site_user
                     saveBoundPlayer(data.site_user)
                     bindingCache.isBound = true
-                else
-                    -- На сервере нет привязки — ОЧИЩАЕМ ЛОКАЛЬНУЮ
+                    
+                -- ★★★ НА СЕРВЕРЕ НЕТ ПРИВЯЗКИ ★★★
+                elseif data and data.success == false then
                     if currentPlayer and playersIndex[currentPlayer] then
                         local p = playersIndex[currentPlayer]
                         if p.site_user then
@@ -2230,9 +2244,10 @@ function getBindingStatus()
                     clearBoundPlayer()
                     bindingCache.isBound = false
                 end
+                
                 bindingCache.lastCheck = os.time()
                 bindingCache.pendingUpdate = false
-               
+                
                 if currentScreen == "menu" then
                     markDirty()
                 end
@@ -2243,73 +2258,8 @@ function getBindingStatus()
             return false
         end)
     end
-   
+    
     return bindingCache.isBound
-end
-
-function checkBindingOnServer()
-    if not currentPlayer then
-        return
-    end
-    
-    writeDebugLog("🔍 Проверка привязки на сервере для: " .. currentPlayer)
-    
-    local success, response = pcall(function()
-        return internet.request(WEB_URL .. "/api/player_binding?game_player=" .. currentPlayer, nil, {
-            ["Connection"] = "close",
-            ["Timeout"] = "3"
-        })
-    end)
-    
-    if success and response then
-        local body = ""
-        for chunk in response do
-            body = body .. chunk
-        end
-        local data = parseJSON(body)
-        
-        if data and data.success and data.site_user then
-            -- На сервере есть привязка
-            writeDebugLog("✅ На сервере есть привязка: " .. data.site_user)
-            
-            local player = playersIndex[currentPlayer]
-            if player then
-                if player.site_user ~= data.site_user then
-                    player.site_user = data.site_user
-                    saveDB()
-                    writeDebugLog("🔄 Локальная привязка обновлена: " .. data.site_user)
-                end
-            end
-            
-            boundPlayer = data.site_user
-            saveBoundPlayer(data.site_user)
-            bindingCache.isBound = true
-            bindingCache.lastCheck = os.time()
-            
-        elseif data and data.success == false then
-            -- ★★★ НА СЕРВЕРЕ НЕТ ПРИВЯЗКИ — ОЧИЩАЕМ ЛОКАЛЬНУЮ ★★★
-            writeDebugLog("❌ На сервере нет привязки для: " .. currentPlayer)
-            
-            local player = playersIndex[currentPlayer]
-            if player and player.site_user then
-                player.site_user = nil
-                saveDB()
-                writeDebugLog("🗑️ Локальная привязка удалена")
-            end
-            
-            boundPlayer = nil
-            clearBoundPlayer()
-            bindingCache.isBound = false
-            bindingCache.lastCheck = os.time()
-            
-            -- ★★★ ОБНОВЛЯЕМ UI ★★★
-            if currentScreen == "menu" then
-                markDirty()
-            end
-        end
-    else
-        writeDebugLog("⚠️ Не удалось проверить привязку на сервере")
-    end
 end
 
 function forceSyncBinding()
@@ -2343,12 +2293,572 @@ function forceUpdateBindingStatus()
     getBindingStatus()
 end
 
+-- ============================================================
+-- ПРОВЕРКА КОДА НА СЕРВЕРЕ
+-- ============================================================
+
+function verifyAuthCodeOnServer(code, game_player)
+    writeDebugLog("verifyAuthCodeOnServer: code=" .. tostring(code) .. ", player=" .. tostring(game_player))
+    
+    local success, response = pcall(function()
+        return internet.request(WEB_URL .. "/api/verify_auth_code", toJson({
+            code = code,
+            game_player = game_player
+        }), {
+            ["Content-Type"] = "application/json",
+            ["Connection"] = "close",
+            ["Timeout"] = "5"
+        })
+    end)
+    
+    if not success or not response then
+        writeErrorLog("❌ Ошибка соединения с сервером")
+        return "SERVER_ERROR"
+    end
+    
+    local body = ""
+    for chunk in response do
+        body = body .. chunk
+    end    
+    local data = parseJSON(body)
+    if not data then
+        writeErrorLog("❌ Ошибка парсинга JSON: " .. body)
+        return "SERVER_ERROR"
+    end
+    
+    -- ★★★ ЕСЛИ УСПЕХ — СОХРАНЯЕМ ПРИВЯЗКУ ЛОКАЛЬНО ★★★
+    if data.success and data.status == "SUCCESS" then
+        local player = playersIndex[game_player]
+        if player then
+            player.site_user = data.site_user
+            saveDB()
+            
+            local change = {
+                id = "bind_" .. os.time() .. "_" .. math.random(100000),
+                type = "bind_player",
+                data = {
+                    player = game_player,
+                    site_user = data.site_user
+                }
+            }
+            add_pending_change(change)
+            
+            boundPlayer = data.site_user
+            saveBoundPlayer(data.site_user)
+            bindingCache.isBound = true
+            bindingCache.lastCheck = os.time()
+            
+            addLog("🔗 Аккаунт привязан: " .. boundPlayer .. " -> " .. game_player)
+            return "SUCCESS"
+        else
+            writeErrorLog("❌ Игрок не найден в локальной базе: " .. game_player)
+            return "SERVER_ERROR"
+        end
+    end
+    
+    -- ★★★ ВОЗВРАЩАЕМ ТОЛЬКО СТАТУС (БЕЗ ТЕКСТА) ★★★
+    return data.status or "SERVER_ERROR"
+end
+
+-- ============================================================
+-- ОТВЯЗКА АККАУНТА
+-- ============================================================
+
+function unbindAccount()
+    if not currentPlayer then
+        showTempMessage("Ошибка: игрок не авторизован", 2)
+        return
+    end
+    
+    local json_data = toJson({
+        game_player = currentPlayer
+    })
+    
+    local success, response = pcall(function()
+        return internet.request(WEB_URL .. "/api/unbind_player", json_data, {
+            ["Content-Type"] = "application/json; charset=utf-8",
+            ["Connection"] = "close",
+            ["Timeout"] = "5"
+        })
+    end)
+    
+    if success and response then
+        local body = ""
+        for chunk in response do
+            body = body .. chunk
+        end
+        local data = parseJSON(body)
+        
+        if data and data.success then
+            -- ★★★ УДАЛЯЕМ ПРИВЯЗКУ ИЗ ЛОКАЛЬНЫХ ДАННЫХ ★★★
+            if currentPlayer and playersIndex[currentPlayer] then
+                local player = playersIndex[currentPlayer]
+                player.site_user = nil
+                saveDB()
+                
+                local change = {
+                    id = "unbind_" .. os.time() .. "_" .. math.random(100000),
+                    type = "unbind_player",
+                    data = {
+                        player = currentPlayer
+                    }
+                }
+                add_pending_change(change)
+                
+                boundPlayer = nil
+                clearBoundPlayer()
+                bindingCache.isBound = false
+                bindingCache.lastCheck = 0
+                
+                addLog("🔓 Аккаунт отвязан: " .. currentPlayer)
+                
+                gpu.setForeground(colors.success)
+                gpu.set(28, 17, "✅ Аккаунт ОТВЯЗАН!")
+                gpu.setForeground(colors.text_main)
+                gpu.set(23, 18, "   Доступ к магазину ограничен")
+                os.sleep(2)
+                goBackToMenu()
+            else
+                gpu.setForeground(colors.error)
+                gpu.set(20, 17, "❌ Игрок не найден")
+                os.sleep(2)
+                markDirty()
+            end
+        else
+            -- ★★★ ПОКАЗЫВАЕМ СООБЩЕНИЕ ПО СТАТУСУ ★★★
+            local status = data and data.status or "SERVER_ERROR"
+            local msgData = AUTH_MESSAGES[status]
+            if msgData then
+                gpu.setForeground(msgData.color or colors.error)
+                gpu.set(20, 17, msgData.text)
+            else
+                gpu.setForeground(colors.error)
+                gpu.set(20, 17, "❌ Ошибка: " .. status)
+            end
+            os.sleep(2)
+            markDirty()
+        end
+    else
+        gpu.setForeground(colors.error)
+        gpu.set(20, 17, "❌ Ошибка соединения")
+        os.sleep(2)
+        markDirty()
+    end
+end
+
+-- ============================================================
+-- ПОПАП ПОДТВЕРЖДЕНИЯ ОТВЯЗКИ
+-- ============================================================
+
+function showUnbindConfirmPopup()
+    writeDebugLog("showUnbindConfirmPopup()")
+    
+    local popupWidth = 46
+    local popupHeight = 10
+    local popupX = math.floor((80 - popupWidth) / 2) + 1
+    local popupY = math.floor((25 - popupHeight) / 2)
+    
+    gpu.setBackground(0x000000)
+    gpu.fill(popupX - 2, popupY - 2, popupWidth + 4, popupHeight + 4, " ")
+    gpu.setBackground(0x0A0A1A)
+    gpu.fill(popupX, popupY, popupWidth, popupHeight, " ")
+    
+    gpu.setForeground(colors.error)
+    gpu.fill(popupX, popupY, popupWidth, 1, "═")
+    gpu.fill(popupX, popupY + popupHeight - 1, popupWidth, 1, "═")
+    for i = 1, popupHeight - 2 do
+        gpu.set(popupX, popupY + i, "║")
+        gpu.set(popupX + popupWidth - 1, popupY + i, "║")
+    end
+    gpu.set(popupX, popupY, "╔")
+    gpu.set(popupX + popupWidth - 1, popupY, "╗")
+    gpu.set(popupX, popupY + popupHeight - 1, "╚")
+    gpu.set(popupX + popupWidth - 1, popupY + popupHeight - 1, "╝")
+    
+    local titleText = "ПОДТВЕРЖДЕНИЕ"
+    local titleLen = unicode.len(titleText)
+    gpu.setForeground(colors.error)
+    gpu.set(popupX + math.floor((popupWidth - titleLen) / 2), popupY + 1, titleText)
+    
+    gpu.setForeground(colors.text_main)
+    gpu.set(popupX + 3, popupY + 3, "Вы действительно хотите")
+    gpu.set(popupX + 3, popupY + 4, "ОТВЯЗАТЬ аккаунт?")
+    
+    gpu.setForeground(colors.inactive)
+    gpu.set(popupX + 3, popupY + 6, "После отвязки доступ к магазину")
+    gpu.set(popupX + 3, popupY + 7, "будет ограничен до новой привязки.")
+    
+    local yesBtn = {
+        text = "[ ДА, ОТВЯЗАТЬ ]",
+        x = popupX + 5,
+        y = popupY + popupHeight - 2,
+        xs = unicode.len("[ ДА, ОТВЯЗАТЬ ]") + 2,
+        ys = 1,
+        bg = 0x441111,
+        fg = colors.error
+    }
+    local noBtn = {
+        text = "[ ОТМЕНА ]",
+        x = popupX + popupWidth - unicode.len("[ ОТМЕНА ]") - 4,
+        y = popupY + popupHeight - 2,
+        xs = unicode.len("[ ОТМЕНА ]") + 2,
+        ys = 1,
+        bg = colors.bg_button,
+        fg = colors.accent_secondary
+    }
+    drawFlexButton(yesBtn)
+    drawFlexButton(noBtn)
+    
+    while true do
+        local ev = {event.pull(0.5)}
+        
+        if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
+            writeDebugLog("👤 Игрок ушёл с PIM во время подтверждения отвязки")
+            currentScreen = "welcome"
+            markDirty()
+            break
+        end
+        
+        if ev[1] == "touch" then
+            local x, y = ev[3], ev[4]
+            
+            if isButtonClicked(noBtn, x, y) then
+                showAuthPopup()
+                break
+            end
+            
+            if isButtonClicked(yesBtn, x, y) then
+                unbindAccount()
+                break
+            end
+        end
+    end
+end
+
+-- ============================================================
+-- ОСНОВНОЙ ПОПАП АУТЕНТИФИКАЦИИ
+-- ============================================================
+
+function showAuthPopup()
+    writeDebugLog("showAuthPopup() - НОВАЯ ВЕРСИЯ")
+    currentScreen = "auth_popup"
+    authCodeInput = authCodeInput or ""
+    
+    local popupWidth = 50
+    local popupHeight = 16
+    local popupX = math.floor((80 - popupWidth) / 2) + 1
+    local popupY = math.floor((25 - popupHeight) / 2)
+    
+    -- Затемнение фона
+    gpu.setBackground(0x000000)
+    gpu.fill(1, 1, 80, 25, " ")
+    gpu.setBackground(0x0A0A1A)
+    gpu.fill(popupX, popupY, popupWidth, popupHeight, " ")
+    
+    -- Рамка
+    gpu.setForeground(0x00FFCC)
+    gpu.fill(popupX, popupY, popupWidth, 1, "─")
+    gpu.fill(popupX, popupY + popupHeight - 1, popupWidth, 1, "─")
+    for i = 1, popupHeight - 2 do
+        gpu.set(popupX, popupY + i, "│")
+        gpu.set(popupX + popupWidth - 1, popupY + i, "│")
+    end
+    gpu.set(popupX, popupY, "┌")
+    gpu.set(popupX + popupWidth - 1, popupY, "┐")
+    gpu.set(popupX, popupY + popupHeight - 1, "└")
+    gpu.set(popupX + popupWidth - 1, popupY + popupHeight - 1, "┘")
+    
+    -- Заголовок
+    gpu.setForeground(0x00FFCC)
+    gpu.set(popupX + math.floor((popupWidth - 22) / 2) + 1, popupY + 1, "🔐 АУТЕНТИФИКАЦИЯ")
+    
+    -- Информация об игроке
+    gpu.setForeground(colors.white)
+    gpu.set(popupX + 3, popupY + 3, "👤 Игрок: ")
+    gpu.setForeground(colors.accent_main)
+    gpu.set(popupX + 15, popupY + 3, currentPlayer or "Неизвестно")
+    
+    -- Проверяем привязку
+    local isBound = getBindingStatus()
+    
+    if isBound then
+        -- ★★★ УЖЕ ПРИВЯЗАН ★★★
+        gpu.setForeground(colors.success)
+        gpu.set(popupX + 3, popupY + 5, "✅ Аккаунт ПРИВЯЗАН к: " .. boundPlayer)
+        
+        gpu.setForeground(colors.text_main)
+        gpu.set(popupX + 3, popupY + 7, "   Для отвязки нажмите кнопку ниже")
+        
+        local unbindBtn = {
+            text = "[ ОТВЯЗАТЬ ]",
+            x = popupX + 5,
+            y = popupY + popupHeight - 3,
+            xs = unicode.len("[ ОТВЯЗАТЬ ]") + 2,
+            ys = 1,
+            bg = 0x441111,
+            fg = colors.error
+        }
+        drawFlexButton(unbindBtn)
+        
+        local closeBtn = {
+            text = "[ ЗАКРЫТЬ ]",
+            x = popupX + popupWidth - 13,
+            y = popupY + popupHeight - 3,
+            xs = 10,
+            ys = 1,
+            bg = colors.bg_button,
+            fg = colors.accent_secondary
+        }
+        drawFlexButton(closeBtn)
+        
+        while currentScreen == "auth_popup" do
+            local ev = {event.pull(0.5)}
+            
+            if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
+                writeDebugLog("👤 Игрок ушёл с PIM во время аутентификации")
+                currentScreen = "welcome"
+                markDirty()
+                break
+            end
+            
+            if ev[1] == "touch" then
+                local x, y = ev[3], ev[4]
+                
+                if isButtonClicked(closeBtn, x, y) then
+                    goBackToMenu()
+                    break
+                end
+                
+                if isButtonClicked(unbindBtn, x, y) then
+                    showUnbindConfirmPopup()
+                    break
+                end
+            end
+        end
+        
+    else
+        -- ★★★ НЕ ПРИВЯЗАН - ПОКАЗЫВАЕМ ПОЛЕ ДЛЯ ВВОДА КОДА ★★★
+        gpu.setForeground(colors.text_main)
+        gpu.set(popupX + 3, popupY + 5, "📋 Введите код из браузера:")
+        gpu.setForeground(colors.inactive)
+        gpu.set(popupX + 3, popupY + 6, "   (код отображается на сайте)")
+        
+        -- Поле ввода кода
+        gpu.setBackground(0x000000)
+        gpu.fill(popupX + 5, popupY + 8, popupWidth - 10, 3, " ")
+        gpu.setBackground(0x1A1A2E)
+        gpu.fill(popupX + 6, popupY + 9, popupWidth - 12, 1, " ")
+        
+        gpu.setForeground(0x00FFAA)
+        local displayCode = authCodeInput or ""
+        if #displayCode < 6 then
+            displayCode = displayCode .. "_"
+        end
+        local codeX = popupX + 6 + math.floor((popupWidth - 12 - unicode.len(displayCode)) / 2)
+        gpu.set(codeX, popupY + 9, displayCode)
+        gpu.setBackground(0x0A0A1A)
+        
+        -- Кнопки
+        local closeBtn = {
+            text = "[ ЗАКРЫТЬ ]",
+            x = popupX + popupWidth - 12,
+            y = popupY + popupHeight - 3,
+            xs = 10,
+            ys = 1,
+            bg = colors.bg_button,
+            fg = colors.error
+        }
+        local confirmBtn = {
+            text = "[ ПОДТВЕРДИТЬ ]",
+            x = popupX + 3,
+            y = popupY + popupHeight - 3,
+            xs = 13,
+            ys = 1,
+            bg = colors.bg_button,
+            fg = colors.success
+        }
+        
+        drawFlexButton(closeBtn)
+        drawFlexButton(confirmBtn)
+        
+        local isEditing = true
+        while currentScreen == "auth_popup" and isEditing do
+            local ev = {event.pull(0.5)}
+            
+            if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
+                writeDebugLog("👤 Игрок ушёл с PIM во время аутентификации")
+                currentScreen = "welcome"
+                markDirty()
+                break
+            end
+            
+            -- Обработка касаний
+            if ev[1] == "touch" then
+                local x, y = ev[3], ev[4]
+                
+                if isButtonClicked(closeBtn, x, y) then
+                    isEditing = false
+                    goBackToMenu()
+                    break
+                end
+                
+                if isButtonClicked(confirmBtn, x, y) then
+                    if authCodeInput and #authCodeInput == 6 then
+                        isEditing = false
+                        local status = verifyAuthCodeOnServer(authCodeInput, currentPlayer)
+                        if status == "SUCCESS" then
+                            -- ★★★ УСПЕХ! ★★★
+                            gpu.setForeground(colors.success)
+                            gpu.set(popupX + 3, popupY + 13, "✅ Аккаунт успешно привязан!")
+                            os.sleep(1.5)
+                            forceSyncBinding()
+                            clear()
+                            currentScreen = "menu"
+                            forceRender()
+                            break
+                        else
+                            -- ★★★ ПОКАЗЫВАЕМ СООБЩЕНИЕ ПО СТАТУСУ ★★★
+                            local msgData = AUTH_MESSAGES[status]
+                            if msgData then
+                                gpu.setForeground(msgData.color or colors.error)
+                                gpu.set(popupX + 3, popupY + 13, msgData.text)
+                            else
+                                gpu.setForeground(colors.error)
+                                gpu.set(popupX + 3, popupY + 13, "❌ Ошибка: " .. status)
+                            end
+                            os.sleep(2)
+                            -- Очищаем сообщение
+                            gpu.setBackground(0x0A0A1A)
+                            gpu.fill(popupX + 3, popupY + 13, popupWidth - 6, 1, " ")
+                            -- Сбрасываем ввод
+                            authCodeInput = ""
+                            markDirty()
+                            isEditing = true
+                        end
+                    else
+                        gpu.setForeground(colors.error)
+                        gpu.set(popupX + 3, popupY + 13, " Введите 6-значный код!")
+                        os.sleep(1.5)
+                        gpu.setBackground(0x0A0A1A)
+                        gpu.fill(popupX + 3, popupY + 13, popupWidth - 6, 1, " ")
+                        markDirty()
+                    end
+                    break
+                end
+                
+            -- Обработка клавиатуры
+            elseif ev[1] == "key_down" then
+                local ch = ev[3]
+                
+                if ch == 13 then  -- Enter
+                    if authCodeInput and #authCodeInput == 6 then
+                        isEditing = false
+                        local status = verifyAuthCodeOnServer(authCodeInput, currentPlayer)
+                        if status == "SUCCESS" then
+                            gpu.setForeground(colors.success)
+                            gpu.set(popupX + 3, popupY + 13, "✅ Аккаунт успешно привязан!")
+                            os.sleep(1.5)
+                            forceSyncBinding()
+                            clear()
+                            currentScreen = "menu"
+                            forceRender()
+                            break
+                        else
+                            local msgData = AUTH_MESSAGES[status]
+                            if msgData then
+                                gpu.setForeground(msgData.color or colors.error)
+                                gpu.set(popupX + 3, popupY + 13, msgData.text)
+                            else
+                                gpu.setForeground(colors.error)
+                                gpu.set(popupX + 3, popupY + 13, "❌ Ошибка: " .. status)
+                            end
+                            os.sleep(2)
+                            gpu.setBackground(0x0A0A1A)
+                            gpu.fill(popupX + 3, popupY + 13, popupWidth - 6, 1, " ")
+                            authCodeInput = ""
+                            markDirty()
+                            isEditing = true
+                        end
+                    else
+                        gpu.setForeground(colors.error)
+                        gpu.set(popupX + 3, popupY + 13, " Введите 6-значный код!")
+                        os.sleep(1.5)
+                        gpu.setBackground(0x0A0A1A)
+                        gpu.fill(popupX + 3, popupY + 13, popupWidth - 6, 1, " ")
+                        markDirty()
+                    end
+                    break
+                    
+                elseif ch == 8 then  -- Backspace
+                    authCodeInput = unicode.sub(authCodeInput or "", 1, -2)
+                    markDirty()
+                    
+                elseif ch >= 48 and ch <= 57 then  -- Цифры 0-9
+                    if unicode.len(authCodeInput or "") < 6 then
+                        authCodeInput = (authCodeInput or "") .. unicode.char(ch)
+                        markDirty()
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- ============================================================
+-- ТАЙМЕР ПЕРИОДИЧЕСКОЙ ПРОВЕРКИ ПРИВЯЗКИ
+-- ============================================================
+
 createTimer(30, function()
     if not TRANSACTION_LOCK then
-        checkBindingOnServer()  
+        getBindingStatus()
     end
     return true
 end, true)
+
+-- ============================================================
+-- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+-- ============================================================
+
+function isPimOwner(playerName)
+    if not playerName or not pimOwner then 
+        return false
+    end
+    return playerName == pimOwner
+end
+
+function syncCurrentPlayer()
+    if not currentPlayer then 
+        return
+    end
+    
+    writeDebugLog("🔄 Синхронизация игрока: " .. currentPlayer)
+    
+    local player = playersIndex[currentPlayer]
+    if player then
+        coinBalance = player.balance or 0
+        emaBalance = player.emaBalance or 0
+        playerTransactions = player.transactions or 0
+        playerRegDate = player.regDate or ""
+        playerAgreed = player.agreed or false
+        
+        writeDebugLog("✅ Синхронизирован: Coin=" .. coinBalance .. ", EMA=" .. emaBalance)
+        return true
+    end
+    
+    writeDebugLog("⚠️ Игрок не найден при синхронизации: " .. currentPlayer)
+    return false
+end
+
+
+function forceUpdateBindingStatus()
+    if not currentPlayer then
+        return
+    end
+    bindingCache.lastCheck = 0
+    bindingCache.isBound = false
+    bindingCache.pendingUpdate = false
+    getBindingStatus()
+end
 
 function updateSelectorDisplay(item)
     if not selector then 
@@ -2542,41 +3052,6 @@ function loadSellItems()
 end
 
 BOUND_PLAYER_FILE = "/home/bound_player.dat"
-
-function saveBoundPlayer(playerName)
-    if playerName and playerName ~= "" then
-        local file = io.open(BOUND_PLAYER_FILE, "w")
-        if file then
-            file:write(playerName)
-            file:close()
-            writeDebugLog("💾 Привязка сохранена: " .. playerName)
-            return true
-        end
-    end
-    return false
-end
-
-function loadBoundPlayer()
-    if fs.exists(BOUND_PLAYER_FILE) then
-        local file = io.open(BOUND_PLAYER_FILE, "r")
-        if file then
-            local data = file:read("*a")
-            file:close()
-            if data and data ~= "" then
-                writeDebugLog("📂 Загружена привязка: " .. data)
-                return data
-            end
-        end
-    end
-    return nil
-end
-
-function clearBoundPlayer()
-    if fs.exists(BOUND_PLAYER_FILE) then
-        fs.remove(BOUND_PLAYER_FILE)
-        writeDebugLog("🗑️ Привязка удалена")
-    end
-end
 
 -- ============================================================
 -- СКАН И ИЗЪЯТИЕ
@@ -4217,475 +4692,10 @@ end
 -- ★★★ АУТЕНТИФИКАЦИЯ (ПРИВЯЗКА АККАУНТА) ★★★
 -- ============================================================
 
-function showAuthPopup()
-    writeDebugLog("showAuthPopup()")
-    currentScreen = "auth_popup"
-    authCodeInput = authCodeInput or ""
-    
-    local popupWidth = 50
-    local popupHeight = 16
-    local popupX = math.floor((80 - popupWidth) / 2) + 1
-    local popupY = math.floor((25 - popupHeight) / 2)
-    
-    gpu.setBackground(0x000000)
-    gpu.fill(1, 1, 80, 25, " ")
-    gpu.setBackground(0x0A0A1A)
-    gpu.fill(popupX, popupY, popupWidth, popupHeight, " ")
-    
-    gpu.setForeground(0x00FFCC)
-    gpu.fill(popupX, popupY, popupWidth, 1, "─")
-    gpu.fill(popupX, popupY + popupHeight - 1, popupWidth, 1, "─")
-    for i = 1, popupHeight - 2 do
-        gpu.set(popupX, popupY + i, "│")
-        gpu.set(popupX + popupWidth - 1, popupY + i, "│")
-    end
-    gpu.set(popupX, popupY, "┌")
-    gpu.set(popupX + popupWidth - 1, popupY, "┐")
-    gpu.set(popupX, popupY + popupHeight - 1, "└")
-    gpu.set(popupX + popupWidth - 1, popupY + popupHeight - 1, "┘")
-    
-    gpu.setForeground(0x00FFCC)
-    gpu.set(popupX + math.floor((popupWidth - 22) / 2) + 1, popupY + 1, "🔐 АУТЕНТИФИКАЦИЯ")
-    
-    gpu.setForeground(colors.white)
-    gpu.set(popupX + 3, popupY + 3, "👤 Игрок: ")
-    gpu.setForeground(colors.accent_main)
-    gpu.set(popupX + 15, popupY + 3, currentPlayer or "Неизвестно")
-    
-    local savedBound = loadBoundPlayer()
-    local isBound = (boundPlayer and boundPlayer ~= "") or (savedBound and savedBound ~= "")
-    
-    if isBound then
-        local displayName = boundPlayer or savedBound
-        
-        gpu.setForeground(colors.success)
-        gpu.set(popupX + 3, popupY + 5, "✅ Аккаунт ПРИВЯЗАН к: " .. displayName)
-        
-        gpu.setForeground(colors.text_main)
-        gpu.set(popupX + 3, popupY + 7, "   Для отвязки нажмите кнопку ниже")
-        
-        local unbindBtn = {
-            text = "[ ОТВЯЗАТЬ ]",
-            x = popupX + 5,
-            y = popupY + popupHeight - 3,
-            xs = unicode.len("[ ОТВЯЗАТЬ ]") + 2,
-            ys = 1,
-            bg = 0x441111,
-            fg = colors.error
-        }
-        drawFlexButton(unbindBtn)
-        
-        local closeBtn = {
-            text = "[ ЗАКРЫТЬ ]",
-            x = popupX + popupWidth - 13,
-            y = popupY + popupHeight - 3,
-            xs = 10,
-            ys = 1,
-            bg = colors.bg_button,
-            fg = colors.accent_secondary
-        }
-        drawFlexButton(closeBtn)
-        
-        while currentScreen == "auth_popup" do
-            local ev = {event.pull(0.5)}
-            
-            if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
-                writeDebugLog("👤 Игрок ушёл с PIM во время аутентификации")
-                currentScreen = "welcome"
-                markDirty()
-                break
-            end
-            
-            if ev[1] == "touch" then
-                local x, y = ev[3], ev[4]
-                
-                if isButtonClicked(closeBtn, x, y) then
-                    goBackToMenu()
-                    break
-                end
-                
-                if isButtonClicked(unbindBtn, x, y) then
-                    showUnbindConfirmPopup()
-                    break
-                end
-            end
-        end
-        
-    else
-        gpu.setForeground(colors.text_main)
-        gpu.set(popupX + 3, popupY + 5, "📋 Введите код из браузера:")
-        gpu.setForeground(colors.inactive)
-        gpu.set(popupX + 3, popupY + 6, "   (код отображается на сайте)")
-        
-        gpu.setBackground(0x000000)
-        gpu.fill(popupX + 5, popupY + 8, popupWidth - 10, 3, " ")
-        gpu.setBackground(0x1A1A2E)
-        gpu.fill(popupX + 6, popupY + 9, popupWidth - 12, 1, " ")
-        
-        gpu.setForeground(0x00FFAA)
-        local displayCode = authCodeInput or ""
-        if #displayCode < 6 then
-            displayCode = displayCode .. "_"
-        end
-        local codeX = popupX + 6 + math.floor((popupWidth - 12 - unicode.len(displayCode)) / 2)
-        gpu.set(codeX, popupY + 9, displayCode)
-        gpu.setBackground(0x0A0A1A)
-        
-        local closeBtn = {
-            text = "[ ЗАКРЫТЬ ]",
-            x = popupX + popupWidth - 12,
-            y = popupY + popupHeight - 3,
-            xs = 10,
-            ys = 1,
-            bg = colors.bg_button,
-            fg = colors.error
-        }
-        local confirmBtn = {
-            text = "[ ПОДТВЕРДИТЬ ]",
-            x = popupX + 3,
-            y = popupY + popupHeight - 3,
-            xs = 13,
-            ys = 1,
-            bg = colors.bg_button,
-            fg = colors.success
-        }
-        
-        drawFlexButton(closeBtn)
-        drawFlexButton(confirmBtn)
-        
-        local isEditing = true
-        while currentScreen == "auth_popup" and isEditing do
-            local ev = {event.pull(0.5)}
-            
-            if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
-                writeDebugLog("👤 Игрок ушёл с PIM во время аутентификации")
-                currentScreen = "welcome"
-                markDirty()
-                break
-            end
-            
-            if ev[1] == "touch" then
-                local x, y = ev[3], ev[4]
-                
-                if isButtonClicked(closeBtn, x, y) then
-                    isEditing = false
-                    goBackToMenu()
-                    break
-                end
-                
-                if isButtonClicked(confirmBtn, x, y) then
-                    if authCodeInput and #authCodeInput == 6 then
-                        isEditing = false
-                        local success = verifyAuthCode(authCodeInput)
-                        if success then
-                            -- ★★★ ОЧИЩАЕМ ЭКРАН И ПЕРЕРИСОВЫВАЕМ МЕНЮ ★★★
-                            forceSyncBinding()
-                            clear()  -- ← ПОЛНОСТЬЮ ОЧИЩАЕМ ЭКРАН
-                            currentScreen = "menu"
-                            -- ★★★ НЕ ВЫЗЫВАЕМ goBackToMenu() — ОНА УЖЕ ЕСТЬ ★★★
-                            forceRender()  -- ← ПРИНУДИТЕЛЬНАЯ ПЕРЕРИСОВКА
-                            break
-                        else
-                            isEditing = true
-                            markDirty()
-                        end
-                    else
-                        gpu.setForeground(colors.error)
-                        gpu.set(popupX + 3, popupY + 13, " Введите 6-значный код!")
-                        os.sleep(1.5)
-                        markDirty()
-                    end
-                    break
-                end
-                
-            elseif ev[1] == "key_down" then
-                local ch = ev[3]
-                
-                if ch == 13 then
-                    if authCodeInput and #authCodeInput == 6 then
-                        isEditing = false
-                        local success = verifyAuthCode(authCodeInput)
-                        if success then
-                            -- ★★★ ОЧИЩАЕМ ЭКРАН И ПЕРЕРИСОВЫВАЕМ МЕНЮ ★★★
-                            forceSyncBinding()
-                            clear()  -- ← ПОЛНОСТЬЮ ОЧИЩАЕМ ЭКРАН
-                            currentScreen = "menu"
-                            forceRender()  -- ← ПРИНУДИТЕЛЬНАЯ ПЕРЕРИСОВКА
-                            break
-                        else
-                            isEditing = true
-                            markDirty()
-                        end
-                    else
-                        gpu.setForeground(colors.error)
-                        gpu.set(popupX + 3, popupY + 13, " Введите 6-значный код!")
-                        os.sleep(1.5)
-                        markDirty()
-                    end
-                    break
-                    
-                elseif ch == 8 then  -- Backspace
-                    authCodeInput = unicode.sub(authCodeInput or "", 1, -2)
-                    markDirty()
-                    
-                elseif ch >= 48 and ch <= 57 then  -- Цифры 0-9
-                    if unicode.len(authCodeInput or "") < 6 then
-                        authCodeInput = (authCodeInput or "") .. unicode.char(ch)
-                        markDirty()
-                    end
-                end
-            end
-        end
-    end
-end
 
-function showUnbindConfirmPopup()
-    writeDebugLog("showUnbindConfirmPopup()")
-    
-    local popupWidth = 46
-    local popupHeight = 10
-    local popupX = math.floor((80 - popupWidth) / 2) + 1
-    local popupY = math.floor((25 - popupHeight) / 2)
-    
-    gpu.setBackground(0x000000)
-    gpu.fill(popupX - 2, popupY - 2, popupWidth + 4, popupHeight + 4, " ")
-    gpu.setBackground(0x0A0A1A)
-    gpu.fill(popupX, popupY, popupWidth, popupHeight, " ")
-    
-    gpu.setForeground(colors.error)
-    gpu.fill(popupX, popupY, popupWidth, 1, "═")
-    gpu.fill(popupX, popupY + popupHeight - 1, popupWidth, 1, "═")
-    for i = 1, popupHeight - 2 do
-        gpu.set(popupX, popupY + i, "║")
-        gpu.set(popupX + popupWidth - 1, popupY + i, "║")
-    end
-    gpu.set(popupX, popupY, "╔")
-    gpu.set(popupX + popupWidth - 1, popupY, "╗")
-    gpu.set(popupX, popupY + popupHeight - 1, "╚")
-    gpu.set(popupX + popupWidth - 1, popupY + popupHeight - 1, "╝")
-    
-    local titleText = "ПОДТВЕРЖДЕНИЕ"
-    local titleLen = unicode.len(titleText)
-    gpu.setForeground(colors.error)
-    gpu.set(popupX + math.floor((popupWidth - titleLen) / 2), popupY + 1, titleText)
-    
-    gpu.setForeground(colors.text_main)
-    gpu.set(popupX + 3, popupY + 3, "Вы действительно хотите")
-    gpu.set(popupX + 3, popupY + 4, "ОТВЯЗАТЬ аккаунт?")
-    
-    gpu.setForeground(colors.inactive)
-    gpu.set(popupX + 3, popupY + 6, "После отвязки доступ к магазину")
-    gpu.set(popupX + 3, popupY + 7, "будет ограничен до новой привязки.")
-    
-    local yesBtn = {
-        text = "[ ДА, ОТВЯЗАТЬ ]",
-        x = popupX + 5,
-        y = popupY + popupHeight - 2,
-        xs = unicode.len("[ ДА, ОТВЯЗАТЬ ]") + 2,
-        ys = 1,
-        bg = 0x441111,
-        fg = colors.error
-    }
-    local noBtn = {
-        text = "[ ОТМЕНА ]",
-        x = popupX + popupWidth - unicode.len("[ ОТМЕНА ]") - 4,
-        y = popupY + popupHeight - 2,
-        xs = unicode.len("[ ОТМЕНА ]") + 2,
-        ys = 1,
-        bg = colors.bg_button,
-        fg = colors.accent_secondary
-    }
-    drawFlexButton(yesBtn)
-    drawFlexButton(noBtn)
-    
-    while true do
-        local ev = {event.pull(0.5)}
-        
-        if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
-            writeDebugLog("👤 Игрок ушёл с PIM во время подтверждения отвязки")
-            currentScreen = "welcome"
-            markDirty()
-            break
-        end
-        
-        if ev[1] == "touch" then
-            local x, y = ev[3], ev[4]
-            
-            if isButtonClicked(noBtn, x, y) then
-                showAuthPopup()
-                break
-            end
-            
-            if isButtonClicked(yesBtn, x, y) then
-                unbindAccount()
-                break
-            end
-        end
-    end
-end
 
-function unbindAccount()
-    if not currentPlayer then
-        showTempMessage("Ошибка: игрок не авторизован", 2)
-        return
-    end
-    
-    local json_data = toJson({
-        site_user = currentPlayer
-    })
-    
-    local success, response = pcall(function()
-        return internet.request(WEB_URL .. "/api/unbind_player", json_data, {
-            ["Content-Type"] = "application/json; charset=utf-8",
-            ["Connection"] = "close",
-            ["Timeout"] = "5"
-        })
-    end)
-    
-    if success and response then
-        local body = ""
-        for chunk in response do
-            body = body .. chunk
-        end
-        local data = parseJSON(body)
-        
-        if data and data.success then
-            -- ★★★ УДАЛЯЕМ ПРИВЯЗКУ ИЗ ДАННЫХ ИГРОКА ★★★
-            if currentPlayer and playersIndex[currentPlayer] then
-                local player = playersIndex[currentPlayer]
-                player.site_user = nil
-                saveDBDeferred()
-                
-                local change = {
-                    id = "unbind_" .. os.time() .. "_" .. math.random(100000),
-                    type = "unbind_player",
-                    data = {
-                        player = currentPlayer
-                    }
-                }
-                add_pending_change(change)
-                
-                boundPlayer = nil
-                clearBoundPlayer()
-                bindingCache.isBound = false
-                bindingCache.lastCheck = 0
-                
-                addLog("🔓 Аккаунт отвязан: " .. currentPlayer)
-                
-                gpu.setForeground(colors.success)
-                gpu.set(28, 17, "✅ Аккаунт ОТВЯЗАН!")
-                gpu.setForeground(colors.text_main)
-                gpu.set(23, 18, "   Доступ к магазину ограничен")
-                os.sleep(2)
-                goBackToMenu()
-            else
-                gpu.setForeground(colors.error)
-                gpu.set(20, 17, "❌ Игрок не найден")
-                os.sleep(2)
-                markDirty()
-            end
-        else
-            local errorMsg = (data and data.error) or "Ошибка отвязки"
-            gpu.setForeground(colors.error)
-            gpu.set(20, 17, "❌ " .. errorMsg)
-            os.sleep(2)
-            markDirty()
-        end
-    else
-        gpu.setForeground(colors.error)
-        gpu.set(20, 17, "❌ Ошибка соединения")
-        os.sleep(2)
-        markDirty()
-    end
-end
 
-function verifyAuthCode(code)
-    drawCenteredText(15, "Проверка кода...", colors.accent_secondary)
-    os.sleep(0.5)
-    
-    local success, response = pcall(function()
-        return internet.request(WEB_URL .. "/api/verify_auth_code", toJson({
-            code = code,
-            game_player = currentPlayer
-        }), {
-            ["Content-Type"] = "application/json",
-            ["Connection"] = "close",
-            ["Timeout"] = "5"
-        })
-    end)
-    
-    if success and response then
-        local body = ""
-        for chunk in response do
-            body = body .. chunk
-        end
-        local data = parseJSON(body)
-        
-        if data and data.success then
-            -- ★★★ СОХРАНЯЕМ ПРИВЯЗКУ ★★★
-            if currentPlayer and playersIndex[currentPlayer] then
-                local player = playersIndex[currentPlayer]
-                player.site_user = data.player
-                saveDB()  -- ✅ МГНОВЕННОЕ СОХРАНЕНИЕ
-                
-                local change = {
-                    id = "bind_" .. os.time() .. "_" .. math.random(100000),
-                    type = "bind_player",
-                    data = {
-                        player = currentPlayer,
-                        site_user = data.player
-                    }
-                }
-                add_pending_change(change)
-                
-                boundPlayer = data.player
-                saveBoundPlayer(data.player)
-                bindingCache.isBound = true
-                bindingCache.lastCheck = os.time()
-                
-                addLog("🔗 Аккаунт привязан: " .. boundPlayer .. " -> " .. currentPlayer)
-                
-                -- ★★★ ПОКАЗЫВАЕМ СООБЩЕНИЕ ОБ УСПЕХЕ ★★★
-                gpu.setForeground(colors.success)
-                gpu.set(20, 14, "✅ Аккаунт успешно привязан!")
-                gpu.setForeground(colors.text_main)
-                gpu.set(18, 15, "Теперь вы можете пользоваться магазином")
-                
-                syncCurrentPlayer()
-                os.sleep(2)
-                
-                -- ★★★ НЕ ВЫЗЫВАЕМ goBackToMenu() ЗДЕСЬ ★★★
-                -- Просто возвращаем true
-                return true
-            else
-                gpu.setForeground(colors.error)
-                gpu.set(20, 14, "❌ Ошибка: игрок не найден")
-                os.sleep(2)
-                markDirty()
-                return false
-            end
-        else
-            local errorMsg = (data and data.error) or "Ошибка привязки"
-            gpu.setForeground(colors.error)
-            gpu.set(20, 14, "❌ " .. errorMsg)
-            
-            if data and data.bound then
-                gpu.setForeground(colors.text_main)
-                gpu.set(15, 15, "Этот игрок уже привязан к другому аккаунту")
-            end
-            
-            os.sleep(2)
-            markDirty()
-            return false
-        end
-    else
-        gpu.setForeground(colors.error)
-        gpu.set(20, 14, "❌ Ошибка соединения с сервером")
-        os.sleep(2)
-        markDirty()
-        return false
-    end
-end
+
 
 function showQRCodePopup()
     writeDebugLog("showQRCodePopup()")
