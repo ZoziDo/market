@@ -1,3 +1,9 @@
+-- ============================================================
+-- PIM MARKET - ПОЛНАЯ СИСТЕМА УПРАВЛЕНИЯ ТОВАРАМИ
+-- Автоматическая синхронизация с веб-интерфейсом
+-- Версия 2.0 (с интегрированной синхронизацией)
+-- ============================================================
+
 local component = require("component")
 local event = require("event")
 local gpu = component.gpu
@@ -11,7 +17,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА
 -- ============================================================
 
 local function setupAutoStart()
@@ -179,28 +185,22 @@ end
 -- ★★★ GRACEFUL SHUTDOWN - ПЛАВНОЕ ЗАВЕРШЕНИЕ ★★★
 -- ============================================================
 
--- Флаг, что мы в процессе завершения
 isShuttingDown = false
 
--- Функция для безопасного сохранения всех данных
 function saveAllData()
     writeDebugLog("💾 Сохранение всех данных...")
     
-    -- 1. Сохраняем игроков
     if dbDirty then
         saveDB()
         writeDebugLog("   ✅ Игроки сохранены")
     end
     
-    -- 2. Сохраняем статистику
     saveGlobalStats()
     writeDebugLog("   ✅ Статистика сохранена")
     
-    -- 3. Отправляем все логи
     flushLogQueue()
     writeDebugLog("   ✅ Логи отправлены")
     
-    -- 4. Сохраняем pending изменения
     if #pending_buffer > 0 then
         save_pending_buffer()
         writeDebugLog("   ✅ Буфер изменений сохранён")
@@ -209,15 +209,13 @@ function saveAllData()
     writeDebugLog("💾 Все данные сохранены!")
 end
 
--- Функция для асинхронного сохранения (не блокирует GUI)
 function asyncSaveData()
     if isShuttingDown then
-        return  -- Уже сохраняем
+        return
     end
     
     isShuttingDown = true
     
-    -- Сохраняем в фоне через 0.1 секунду
     event.timer(0.1, function()
         pcall(saveAllData)
         isShuttingDown = false
@@ -225,34 +223,23 @@ function asyncSaveData()
     end)
 end
 
--- Функция для принудительного сохранения (блокирует до завершения)
 function forceSaveData()
     isShuttingDown = true
     saveAllData()
     isShuttingDown = false
 end
 
--- ★★★ КОНЕЦ БЛОКА GRACEFUL SHUTDOWN ★★★      
-
--- ============================================================
--- ★★★ ОБРАБОТЧИК ВЫКЛЮЧЕНИЯ КОМПЬЮТЕРА ★★★
--- ============================================================
-
--- Слушаем событие выключения (если есть)
 event.listen("computer_shutdown", function()
     writeErrorLog("⏻ Компьютер выключается! Сохраняем данные...")
     forceSaveData()
     writeErrorLog("✅ Данные сохранены перед выключением")
 end)
 
--- Также сохраняем при завершении процесса
 event.listen("terminate", function()
     writeErrorLog("⏻ Процесс завершается! Сохраняем данные...")
     forceSaveData()
     writeErrorLog("✅ Данные сохранены перед завершением")
 end)
-
--- ★★★ КОНЕЦ БЛОКА ОБРАБОТЧИКА ★★★            
 
 -- ============================================================
 -- ★★★ ЗАЩИТА ОТ ЗАВИСАНИЙ ★★★
@@ -281,10 +268,8 @@ end
 function safeExit()
     writeDebugLog("🚪 Безопасный выход")
     
-    -- ★★★ 1. МГНОВЕННО ПОМЕЧАЕМ, ЧТО ВЫХОДИМ ★★★
     isShuttingDown = true
     
-    -- ★★★ 2. ЛОГГИРУЕМ ВЫХОД ИГРОКА ★★★
     if currentPlayer ~= nil then
         addLog("👤 Выход: " .. currentPlayer)
         writeDebugLog("👤 Выход игрока: " .. tostring(currentPlayer))
@@ -292,7 +277,6 @@ function safeExit()
         writeDebugLog("🚪 Выход без игрока")
     end
     
-    -- ★★★ 3. СБРАСЫВАЕМ ВСЕ ПЕРЕМЕННЫЕ (МГНОВЕННО) ★★★
     currentPlayer = nil
     currentToken = nil
     alreadyAuthorized = false
@@ -306,7 +290,6 @@ function safeExit()
         writeDebugLog("🔓 Блокировка сброшена при выходе")
     end
     
-    -- ★★★ 4. СБРАСЫВАЕМ ВСЕ UI ПЕРЕМЕННЫЕ ★★★
     selectedItem = nil
     hoveredIndex = 0
     selectedIndex = 0
@@ -331,25 +314,19 @@ function safeExit()
         tempMessageTimer = nil
     end
     
-    -- ★★★ 5. СБРАСЫВАЕМ СЕЛЕКТОР ★★★
     pcall(updateSelectorDisplay, nil)
     pcall(selector.setSlot, 0, nil)
     pcall(selector.setSlot, 1, nil)
     
-    -- ★★★ 6. ОСТАНАВЛИВАЕМ ВСЕ ТАЙМЕРЫ ★★★
     clearAllTimers()
     writeDebugLog("⏹️ Все таймеры остановлены")
     
-    -- ★★★ 7. МГНОВЕННО РИСУЕМ ЭКРАН ПРИВЕТСТВИЯ ★★★
     drawWelcomeScreen()
     writeDebugLog("🖥️ Экран приветствия отображён")
     
-    -- ★★★ 8. АСИНХРОННО СОХРАНЯЕМ ДАННЫЕ (В ФОНЕ) ★★★
-    -- Это НЕ БЛОКИРУЕТ GUI!
     asyncSaveData()
     writeDebugLog("💾 Запущено фоновое сохранение данных")
     
-    -- ★★★ 9. СБРАСЫВАЕМ ФЛАГ ВЫХОДА ★★★
     isShuttingDown = false
     
     writeDebugLog("✅ Безопасный выход завершён")
@@ -452,7 +429,6 @@ function flushLogQueue()
     
     if not success then
         writeDebugLog("⚠️ Не удалось отправить логи: " .. tostring(err))
-        -- Логи остаются в очереди для повторной отправки
         return
     end
     
@@ -553,7 +529,6 @@ function forceRender()
 end
 
 function renderCurrentScreen()
-    -- ★★★ ПОПАПЫ ★★★
     if showInsufficientPopup then
         drawInsufficientPopup()
         drawTempMessage()
@@ -1190,7 +1165,6 @@ if fs.exists(DB_PATH) then
     end
 end
 
--- ★★★ ИНИЦИАЛИЗИРУЕМ ИНДЕКС ПОСЛЕ ЗАГРУЗКИ ИГРОКОВ ★★★
 syncPlayerIndex()
 
 -- ============================================================
@@ -1384,11 +1358,8 @@ function parseJSON(json_str)
     return result
 end  
 
--- ★★★ ПРОВЕРЯЕМ ПРИВЯЗКИ ПРИ ЗАПУСКЕ ★★★
--- Проверяем всех игроков на наличие привязок и сверяем с сервером
 for name, player in pairs(players) do
     if player.site_user and player.site_user ~= "" then
-        -- Проверяем на сервере
         local success, response = pcall(function()
             return internet.request(WEB_URL .. "/api/player_binding?site_user=" .. player.site_user, nil, {
                 ["Connection"] = "close",
@@ -1403,7 +1374,6 @@ for name, player in pairs(players) do
             end
             local data = parseJSON(body)
             
-            -- Если на сервере нет привязки - очищаем локально
             if not data or not data.success then
                 player.site_user = nil
                 writeDebugLog("🗑️ Очищена привязка для " .. name .. " (не найдена на сервере)")
@@ -1413,7 +1383,6 @@ for name, player in pairs(players) do
     end
 end
 
--- Сохраняем после проверки
 if dbDirty then
     saveDB()
 end
@@ -1552,9 +1521,6 @@ function addTransaction(type, playerName, item, qty, value_coin, value_ema)
     end
     saveGlobalStats()
     
-    -- ★★★ ID БУДЕТ ПРИСВОЕН НА СЕРВЕРЕ ★★★
-    -- НЕ ГЕНЕРИРУЕМ ID ЗДЕСЬ!
-    
     local transactionRecord = {
         time = getRealTimeHM(),
         type = type,
@@ -1562,7 +1528,6 @@ function addTransaction(type, playerName, item, qty, value_coin, value_ema)
         qty = qty or 0,
         coin = value_coin or 0,
         ema = value_ema or 0
-        -- id ОТСУТСТВУЕТ — СЕРВЕР ПРИСВОИТ
     }
     
     table.insert(transactions, {
@@ -1861,7 +1826,6 @@ function getPlayerOnPim()
     local pim = component.proxy(pimAddr)
     local player = nil
     
-    -- Пробуем разные методы получения игрока
     if pim.getPlayer then
         local ok, result = pcall(pim.getPlayer, pim)
         if ok and result and result ~= "" then
@@ -2020,10 +1984,75 @@ feedbacks = {}
 feedbacksPage = 1
 feedbacksTotalPages = 1
 feedbackInput = ""
-feedbackRating = 5  -- ★★★ НОВАЯ ПЕРЕМЕННАЯ ДЛЯ РЕЙТИНГА ★★★
+feedbackRating = 5
 feedbackEditMode = false
 playerHasFeedback = false
 
+-- ============================================================
+-- ★★★ ВЕРСИОНИРОВАНИЕ ТОВАРОВ ★★★
+-- ============================================================
+
+ITEMS_VERSION_FILE = "/home/items_version.dat"
+
+function getItemsVersion()
+    if fs.exists(ITEMS_VERSION_FILE) then
+        local file = io.open(ITEMS_VERSION_FILE, "r")
+        if file then
+            local data = file:read("*a")
+            file:close()
+            local version = tonumber(data) or 0
+            return version
+        end
+    end
+    return 0
+end
+
+function setItemsVersion(version)
+    local file = io.open(ITEMS_VERSION_FILE, "w")
+    if file then
+        file:write(tostring(version))
+        file:close()
+        return true
+    end
+    return false
+end
+
+function incrementItemsVersion()
+    local current = getItemsVersion()
+    local newVersion = current + 1
+    setItemsVersion(newVersion)
+    writeDebugLog("📦 Версия товаров увеличена: " .. current .. " -> " .. newVersion)
+    return newVersion
+end
+
+function forceSyncItems()
+    writeDebugLog("🔄 forceSyncItems() - принудительная синхронизация товаров")
+    
+    -- Сбрасываем кэш
+    cachedBuyItems = nil
+    cacheTimestamp = 0
+    
+    -- Перезагружаем товары
+    if currentShopMode == "buy" then
+        loadBuyItems(true)
+        if currentScreen == "shop_buy" then
+            markDirty()
+        end
+    else
+        loadSellItems()
+        if currentScreen == "shop_sell" then
+            markDirty()
+        end
+    end
+    
+    -- Обновляем селектор
+    if selectedItem then
+        updateSelectorDisplay(selectedItem)
+    end
+    
+    addLog("🔄 Синхронизация товаров выполнена")
+    writeDebugLog("✅ forceSyncItems() завершена")
+end
 
 -- ============================================================
 -- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
@@ -2107,7 +2136,6 @@ function getBindingStatus()
         return false
     end
     
-    -- ★★★ СНАЧАЛА ПРОВЕРЯЕМ В ДАННЫХ ИГРОКА ★★★
     local player = playersIndex[currentPlayer]
     if player and player.site_user and player.site_user ~= "" then
         boundPlayer = player.site_user
@@ -2116,7 +2144,6 @@ function getBindingStatus()
         return true
     end
     
-    -- Если в данных игрока нет привязки, проверяем кеш
     local now = os.time()
     if now - (bindingCache.lastCheck or 0) < bindingCache.checkInterval then
         return bindingCache.isBound
@@ -2124,7 +2151,6 @@ function getBindingStatus()
     
     bindingCache.lastCheck = now
     
-    -- ★★★ ФОНОВАЯ ПРОВЕРКА НА СЕРВЕРЕ ★★★
     if not bindingCache.pendingUpdate then
         bindingCache.pendingUpdate = true
         event.timer(0.1, function()
@@ -2140,7 +2166,6 @@ function getBindingStatus()
                 local data = parseJSON(body)
                
                 if data and data.success and data.site_user then
-                    -- На сервере есть привязка
                     if currentPlayer and playersIndex[currentPlayer] then
                         local p = playersIndex[currentPlayer]
                         p.site_user = data.site_user
@@ -2151,7 +2176,6 @@ function getBindingStatus()
                     saveBoundPlayer(data.site_user)
                     bindingCache.isBound = true
                 else
-                    -- На сервере нет привязки — ОЧИЩАЕМ ЛОКАЛЬНУЮ
                     if currentPlayer and playersIndex[currentPlayer] then
                         local p = playersIndex[currentPlayer]
                         if p.site_user then
@@ -2203,7 +2227,6 @@ function checkBindingOnServer()
         local data = parseJSON(body)
         
         if data and data.success and data.site_user then
-            -- На сервере есть привязка
             writeDebugLog("✅ На сервере есть привязка: " .. data.site_user)
             
             local player = playersIndex[currentPlayer]
@@ -2221,7 +2244,6 @@ function checkBindingOnServer()
             bindingCache.lastCheck = os.time()
             
         elseif data and data.success == false then
-            -- ★★★ НА СЕРВЕРЕ НЕТ ПРИВЯЗКИ — ОЧИЩАЕМ ЛОКАЛЬНУЮ ★★★
             writeDebugLog("❌ На сервере нет привязки для: " .. currentPlayer)
             
             local player = playersIndex[currentPlayer]
@@ -2236,7 +2258,6 @@ function checkBindingOnServer()
             bindingCache.isBound = false
             bindingCache.lastCheck = os.time()
             
-            -- ★★★ ОБНОВЛЯЕМ UI ★★★
             if currentScreen == "menu" then
                 markDirty()
             end
@@ -2251,7 +2272,6 @@ function forceSyncBinding()
         return
     end
     
-    -- Сначала проверяем в данных игрока
     local player = playersIndex[currentPlayer]
     if player and player.site_user and player.site_user ~= "" then
         boundPlayer = player.site_user
@@ -2260,7 +2280,6 @@ function forceSyncBinding()
         return
     end
     
-    -- Если нет - запускаем фоновую проверку
     bindingCache.lastCheck = 0
     bindingCache.isBound = false
     bindingCache.pendingUpdate = false
@@ -2632,7 +2651,7 @@ function redrawSearchField()
     gpu.setForeground(colors.accent_secondary)
     local textX = clearX + math.floor((clearWidth - unicode.len(clearText)) / 2)
     gpu.set(textX, 3, clearText)
-    gpu.setBackground(colors.bg_main)  -- ★★★ ВАЖНО: ВОССТАНАВЛИВАЕМ ФОН ★★★
+    gpu.setBackground(colors.bg_main)
 end
 
 function drawBuyStatic()
@@ -2827,12 +2846,10 @@ function getFilteredItems()
         ::continue::
     end
 
-    -- ★★★ ВОССТАНАВЛИВАЕМ СОРТИРОВКУ ★★★
     table.sort(filtered, function(a, b)
         return sortableName(a.displayName) < sortableName(b.displayName)
     end)
 
-    -- ★★★ ВОССТАНАВЛИВАЕМ ВЫЧИСЛЕНИЕ maxItemWidth ★★★
     maxItemWidth = 0
     for _, item in ipairs(filtered) do
         local len = unicode.len(item.displayName or item.internalName or "")
@@ -2879,8 +2896,6 @@ function drawBuyItemsList()
     if selectedItem then
         updateSelectorDisplay(selectedItem)
     end
-    
-    -- ★★★ НЕ ПЕРЕРИСОВЫВАЕМ КНОПКИ ЗДЕСЬ ★★★
 end
 
 function smoothScroll(steps)
@@ -2922,16 +2937,7 @@ function smoothScroll(steps)
     drawScrollBar()
 end
 
-function drawBuyButtons()
-    writeDebugFile("========== drawBuyButtons() ==========")
-    local backButton = {
-        text = "[ НАЗАД ]",
-        x = 37, y = 24,
-        xs = unicode.len("[ НАЗАД ]") + 2,
-        ys = 1,
-        bg = colors.bg_button,
-        fg = colors.accent_secondary
-    }
+function drawBuyButton()
     local nextButton = {}
     if currentShopMode == "buy" then
         nextButton.text = "[ КУПИТЬ ]"
@@ -2944,29 +2950,30 @@ function drawBuyButtons()
     nextButton.y = 24
     nextButton.ys = 1
     nextButton.bg = colors.bg_button
-    nextButton.fg = colors.inactive
-
-    writeDebugFile("🔍 selectedItem = " .. tostring(selectedItem))
-    if selectedItem then
-        writeDebugFile("   displayName = " .. tostring(selectedItem.displayName))
-        writeDebugFile("   qty = " .. tostring(selectedItem.qty))
-        writeDebugFile("   currentShopMode = " .. tostring(currentShopMode))
-    else
-        writeDebugFile("   selectedItem = nil")
-    end
-
-    if selectedItem and (currentShopMode ~= "buy" or selectedItem.qty > 0) then
+    
+    local isActive = selectedItem and (currentShopMode ~= "buy" or selectedItem.qty > 0)
+    if isActive then
         nextButton.fg = colors.accent_secondary
-        writeDebugFile("✅ Кнопка АКТИВНА")
     else
         nextButton.fg = colors.inactive
-        writeDebugFile("❌ Кнопка НЕ АКТИВНА")
     end
-
-    drawFlexButton(backButton)
+    
     drawFlexButton(nextButton)
+end
+
+function drawBuyButtons()
+    local backButton = {
+        text = "[ НАЗАД ]",
+        x = 37, y = 24,
+        xs = unicode.len("[ НАЗАД ]") + 2,
+        ys = 1,
+        bg = colors.bg_button,
+        fg = colors.accent_secondary
+    }
+    
+    drawFlexButton(backButton)
+    drawBuyButton()
     drawTempMessage()
-    writeDebugFile("========================================")
 end
 
 -- ============================================================
@@ -3100,37 +3107,31 @@ function drawMainMenu()
         gpu.setForeground(colors.tomato)
         gpu.set(balanceX + unicode.len("Баланс: ") + unicode.len(string.format("%.2f", coin) .. " Coina ₵") + unicode.len(" | "), 5, "ЭМЫ: " .. string.format("%.2f", ema) .. " ۞")
         
-        -- ★★★ СТАТУС ПРИВЯЗКИ С ПОЛОСКАМИ ★★★
         local isBound = getBindingStatus()
         
         local boundText = ""
-        local textColor = colors.error  -- По умолчанию красный
+        local textColor = colors.error
         
         if isBound then
             boundText = " АККАУНТ ПРИВЯЗАН "
-            textColor = colors.green_bright  -- ★★★ ЗЕЛЁНЫЙ 0x3BFF18 ★★★
+            textColor = colors.green_bright
         else
             boundText = " АККАУНТ НЕ ПРИВЯЗАН "
-            textColor = colors.error        -- ★★★ КРАСНЫЙ ★★★
+            textColor = colors.error
         end
         
-        -- ★★★ РИСУЕМ ПОЛОСКИ С ТЕКСТОМ ПОСЕРЕДИНЕ ★★★
         local line = string.rep("═", 15)
         local fullStr = line .. boundText .. line
         local x = math.floor((80 - unicode.len(fullStr)) / 2) + 1
         
-        -- ★★★ ПОЛОСКИ ВСЕГДА accent_main ★★★
         local frameColor = colors.accent_main
         
-        -- Левая полоска
         gpu.setForeground(frameColor)
         gpu.set(x, 2, line)
         
-        -- ★★★ ТЕКСТ - ЗЕЛЁНЫЙ ИЛИ КРАСНЫЙ ★★★
         gpu.setForeground(textColor)
         gpu.set(x + unicode.len(line), 2, boundText)
         
-        -- Правая полоска
         gpu.setForeground(frameColor)
         gpu.set(x + unicode.len(line) + unicode.len(boundText), 2, line)
 
@@ -3293,9 +3294,8 @@ function drawReportScreen()
         return
     end
 
-    -- ★★★ ПОЛЕ ВВОДА ПОД ТЕКСТОМ (y = 9) ★★★
     gpu.setBackground(colors.bg_input)
-    gpu.fill(11, 9, 59, 3, " ")  -- x: 11, y: 9 (под текстом)
+    gpu.fill(11, 9, 59, 3, " ")
     gpu.setForeground(colors.text_bright)
     if reportInput and reportInput ~= "" then
         gpu.set(12, 10, unicode.sub(reportInput, -58))
@@ -3305,7 +3305,6 @@ function drawReportScreen()
     end
     gpu.setBackground(colors.bg_main)
 
-    -- ★★★ КНОПКА ОТПРАВИТЬ ПОД ПОЛЕМ ВВОДА (y = 14) ★★★
     local sendBtn = {x=33, y=14, xs=17, ys=1, text="[ ОТПРАВИТЬ ]", bg=colors.bg_button, fg=colors.success}
     local backButton = {
         text = "[ НАЗАД ]",
@@ -3319,51 +3318,6 @@ function drawReportScreen()
     drawFlexButton(backButton)
     gpu.setForeground(colors.text_main)
     drawCenteredText(16, "Ограничение: 1 репорт в сутки (сброс в 00:00 МСК)", colors.error)
-    drawTempMessage()
-end
-
--- ============================================================
--- КНОПКИ МАГАЗИНА
--- ============================================================
-
-function drawBuyButton()
-    local nextButton = {}
-    if currentShopMode == "buy" then
-        nextButton.text = "[ КУПИТЬ ]"
-        nextButton.xs = unicode.len(nextButton.text) + 2
-    else
-        nextButton.text = "[ ПРОДАТЬ ]"
-        nextButton.xs = unicode.len(nextButton.text) + 2
-    end
-    nextButton.x = 59
-    nextButton.y = 24
-    nextButton.ys = 1
-    nextButton.bg = colors.bg_button
-    
-    -- Определяем активна ли кнопка
-    local isActive = selectedItem and (currentShopMode ~= "buy" or selectedItem.qty > 0)
-    if isActive then
-        nextButton.fg = colors.accent_secondary
-    else
-        nextButton.fg = colors.inactive
-    end
-    
-    -- Рисуем только эту кнопку
-    drawFlexButton(nextButton)
-end
-
-function drawBuyButtons()
-    local backButton = {
-        text = "[ НАЗАД ]",
-        x = 37, y = 24,
-        xs = unicode.len("[ НАЗАД ]") + 2,
-        ys = 1,
-        bg = colors.bg_button,
-        fg = colors.accent_secondary
-    }
-    
-    drawFlexButton(backButton)
-    drawBuyButton()  -- Используем новую функцию для кнопки Купить/Продать
     drawTempMessage()
 end
 
@@ -3589,12 +3543,10 @@ function drawFeedbacksList()
         end
     end
     
-    -- ★★★ ОБНОВЛЯЕМ playerHasFeedback ИЗ ЛОКАЛЬНЫХ ДАННЫХ ★★★
     if currentPlayer then
         local player = playersIndex[currentPlayer]
         if player then
             playerHasFeedback = player.hasFeedback or false
-            -- Проверяем, есть ли отзыв от этого игрока в списке
             local found = false
             for _, fb in ipairs(feedbacks) do
                 if fb.name == currentPlayer then
@@ -3616,7 +3568,7 @@ function drawFeedbacksList()
     drawScreenBorder()
 
     local function drawStars(x, y, rating)
-        local starColor = 0xFFD700  -- Золотой цвет
+        local starColor = 0xFFD700
         local emptyColor = colors.inactive
         for i = 1, 5 do
             if i <= rating then
@@ -3641,21 +3593,6 @@ function drawFeedbacksList()
     gpu.setForeground(colors.accent_main)
     gpu.set(x + unicode.len(line) + unicode.len(title), 2, line2)
 
-    -- ★★★ ФУНКЦИЯ ДЛЯ ОТРИСОВКИ ЗВЁЗД ★★★
-    local function drawStars(x, y, rating)
-        local starColor = 0xFFD700  -- Золотой цвет
-        local emptyColor = colors.inactive
-        for i = 1, 5 do
-            if i <= rating then
-                gpu.setForeground(starColor)
-                gpu.set(x + (i - 1) * 2, y, "★")
-            else
-                gpu.setForeground(emptyColor)
-                gpu.set(x + (i - 1) * 2, y, "☆")
-            end
-        end
-    end
-
     if #feedbacks == 0 then
         drawCenteredText(10, "Пока нет ни одного отзыва.", colors.text_main)
         drawCenteredText(11, "Будьте первым, кто оставит отзыв!", colors.accent_main)
@@ -3677,11 +3614,9 @@ function drawFeedbacksList()
                 gpu.setBackground(colors.bg_secondary)
                 gpu.fill(6, y+1, 68, 2, " ")
 
-                -- Имя
                 gpu.setForeground(colors.accent_main)
                 gpu.set(7, y+1, fb.name or "Аноним")
                 
-                -- Время
                 gpu.setForeground(colors.inactive)
                 local timeStr = fb.time or ""
                 local timeX = 7 + unicode.len(fb.name or "Аноним") + 2
@@ -3689,13 +3624,11 @@ function drawFeedbacksList()
                     gpu.set(timeX, y+1, timeStr)
                 end
 
-                -- ★★★ ЗВЁЗДЫ ★★★
                 drawStars(7, y+2, rating)
 
-                -- Текст отзыва
                 gpu.setForeground(colors.text_bright)
                 local shortText = unicode.sub(fb.text or "", 1, 60)
-                local textX = 7 + 12  -- Отступ после звёзд
+                local textX = 7 + 12
                 if textX + unicode.len(shortText) < 75 then
                     gpu.set(textX, y+2, shortText)
                 else
@@ -3746,7 +3679,6 @@ function drawFeedbackInputScreen()
     drawCenteredText(7, "Ваше имя: " .. (currentPlayer or "Игрок"), colors.accent_main)
     drawCenteredText(9, "Оцените магазин:", colors.text_main)
 
-    -- ★★★ РИСУЕМ ЗВЁЗДЫ ★★★
     local starsY = 11
     local starsX = 30
     gpu.setForeground(colors.accent_secondary)
@@ -3754,24 +3686,22 @@ function drawFeedbackInputScreen()
     for i = 1, 5 do
         local starX = starsX + unicode.len("Рейтинг: ") + (i - 1) * 3
         if i <= feedbackRating then
-            gpu.setForeground(0xFFD700)  -- Золотые звёзды
+            gpu.setForeground(0xFFD700)
             gpu.set(starX, starsY, "★")
         else
-            gpu.setForeground(colors.inactive)  -- Серые звёзды
+            gpu.setForeground(colors.inactive)
             gpu.set(starX, starsY, "☆")
         end
     end
 
-    -- ★★★ ПОДСКАЗКА ДЛЯ ВЫБОРА ЗВЁЗД ★★★
     gpu.setForeground(colors.inactive)
     drawCenteredText(13, "Нажмите 1-5 для выбора рейтинга", colors.inactive)
 
     gpu.setForeground(colors.text_main)
     drawCenteredText(15, "Оставьте свой отзыв о магазине:", colors.text_main)
 
-    -- ★★★ ПОЛЕ ВВОДА (ИСПРАВЛЕНО: feedbackInput, правильные координаты) ★★★
     gpu.setBackground(colors.bg_input)
-    gpu.fill(11, 17, 59, 3, " ")  -- y = 17 (под текстом "Оставьте свой отзыв")
+    gpu.fill(11, 17, 59, 3, " ")
     gpu.setForeground(colors.text_bright)
     if feedbackEditMode then
         if feedbackInput and feedbackInput ~= "" then
@@ -3797,8 +3727,6 @@ function drawFeedbackInputScreen()
     drawFlexButton(sendBtn)
     drawTempMessage()
 end
-
-
 
 function drawInsufficientPopup()
     writeDebugLog("drawInsufficientPopup()")
@@ -4046,7 +3974,7 @@ function goToPurchase(item)
     end
     purchaseItem = item
     purchaseQuantity = 1
-    currentScreen = "purchase"  -- <-- ДОБАВИТЬ ЭТУ СТРОКУ!
+    currentScreen = "purchase"
     writeDebugFile("✅ purchaseItem установлен: " .. tostring(purchaseItem.displayName))
     writeDebugFile("✅ currentScreen = " .. currentScreen)
     markDirty()
@@ -4294,12 +4222,10 @@ function showAuthPopup()
                         isEditing = false
                         local success = verifyAuthCode(authCodeInput)
                         if success then
-                            -- ★★★ ОЧИЩАЕМ ЭКРАН И ПЕРЕРИСОВЫВАЕМ МЕНЮ ★★★
                             forceSyncBinding()
-                            clear()  -- ← ПОЛНОСТЬЮ ОЧИЩАЕМ ЭКРАН
+                            clear()
                             currentScreen = "menu"
-                            -- ★★★ НЕ ВЫЗЫВАЕМ goBackToMenu() — ОНА УЖЕ ЕСТЬ ★★★
-                            forceRender()  -- ← ПРИНУДИТЕЛЬНАЯ ПЕРЕРИСОВКА
+                            forceRender()
                             break
                         else
                             isEditing = true
@@ -4322,11 +4248,10 @@ function showAuthPopup()
                         isEditing = false
                         local success = verifyAuthCode(authCodeInput)
                         if success then
-                            -- ★★★ ОЧИЩАЕМ ЭКРАН И ПЕРЕРИСОВЫВАЕМ МЕНЮ ★★★
                             forceSyncBinding()
-                            clear()  -- ← ПОЛНОСТЬЮ ОЧИЩАЕМ ЭКРАН
+                            clear()
                             currentScreen = "menu"
-                            forceRender()  -- ← ПРИНУДИТЕЛЬНАЯ ПЕРЕРИСОВКА
+                            forceRender()
                             break
                         else
                             isEditing = true
@@ -4340,11 +4265,11 @@ function showAuthPopup()
                     end
                     break
                     
-                elseif ch == 8 then  -- Backspace
+                elseif ch == 8 then
                     authCodeInput = unicode.sub(authCodeInput or "", 1, -2)
                     markDirty()
                     
-                elseif ch >= 48 and ch <= 57 then  -- Цифры 0-9
+                elseif ch >= 48 and ch <= 57 then
                     if unicode.len(authCodeInput or "") < 6 then
                         authCodeInput = (authCodeInput or "") .. unicode.char(ch)
                         markDirty()
@@ -4466,7 +4391,6 @@ function unbindAccount()
         local data = parseJSON(body)
         
         if data and data.success then
-            -- ★★★ УДАЛЯЕМ ПРИВЯЗКУ ИЗ ДАННЫХ ИГРОКА ★★★
             if currentPlayer and playersIndex[currentPlayer] then
                 local player = playersIndex[currentPlayer]
                 player.site_user = nil
@@ -4538,11 +4462,10 @@ function verifyAuthCode(code)
         local data = parseJSON(body)
         
         if data and data.success then
-            -- ★★★ СОХРАНЯЕМ ПРИВЯЗКУ ★★★
             if currentPlayer and playersIndex[currentPlayer] then
                 local player = playersIndex[currentPlayer]
                 player.site_user = data.player
-                saveDB()  -- ✅ МГНОВЕННОЕ СОХРАНЕНИЕ
+                saveDB()
                 
                 local change = {
                     id = "bind_" .. os.time() .. "_" .. math.random(100000),
@@ -4561,7 +4484,6 @@ function verifyAuthCode(code)
                 
                 addLog("🔗 Аккаунт привязан: " .. boundPlayer .. " -> " .. currentPlayer)
                 
-                -- ★★★ ПОКАЗЫВАЕМ СООБЩЕНИЕ ОБ УСПЕХЕ ★★★
                 gpu.setForeground(colors.success)
                 gpu.set(20, 14, "✅ Аккаунт успешно привязан!")
                 gpu.setForeground(colors.text_main)
@@ -4570,8 +4492,6 @@ function verifyAuthCode(code)
                 syncCurrentPlayer()
                 os.sleep(2)
                 
-                -- ★★★ НЕ ВЫЗЫВАЕМ goBackToMenu() ЗДЕСЬ ★★★
-                -- Просто возвращаем true
                 return true
             else
                 gpu.setForeground(colors.error)
@@ -4863,13 +4783,7 @@ function performSell()
     currentScreen = "shop_sell"
     showSellPopup = false
     markDirty()
-    
 end
-
-
--- ============================================================
--- ИНКРЕМЕНТАЛЬНОЕ ПРИМЕНЕНИЕ ИЗМЕНЕНИЙ (ДЛЯ ТОВАРОВ)
--- ============================================================
 
 function performBuy()
     if not playerAgreed then
@@ -4993,7 +4907,7 @@ function performBuy()
     end
 
     if extracted == 0 then
-        showInventoryFullPopupAndWait()  -- ✅ НОВАЯ ФУНКЦИЯ
+        showInventoryFullPopupAndWait()
         unlockTransactions()
         return
     end
@@ -5023,7 +4937,7 @@ function performBuy()
         partialItem = item
         showPartialPopup = true
         unlockTransactions()
-        showPartialPopupAndWait()  -- ✅ НОВАЯ ФУНКЦИЯ
+        showPartialPopupAndWait()
         return
     end
 
@@ -5070,7 +4984,6 @@ function performBuy()
     currentScreen = "shop_buy"
     markDirty()
     
-    -- ★★★ ЛОГИ В КОНЦЕ ★★★
     writeDebugFile("========================================")
     writeDebugFile("✅ performBuy() ЗАВЕРШЕНА")
     writeDebugFile("   extracted=" .. tostring(extracted))
@@ -5081,7 +4994,7 @@ function performBuy()
 end
 
 -- ============================================================
--- ИНКРЕМЕНТАЛЬНОЕ ПРИМЕНЕНИЕ ИЗМЕНЕНИЙ (ДЛЯ ТОВАРОВ)
+-- ★★★ ИНКРЕМЕНТАЛЬНОЕ ПРИМЕНЕНИЕ ИЗМЕНЕНИЙ (ДЛЯ ТОВАРОВ) ★★★
 -- ============================================================
 
 function applyIncrementalChanges(itemsFile, changes, itemType)
@@ -5262,12 +5175,15 @@ function applyIncrementalChanges(itemsFile, changes, itemType)
         end
     end
 
+    -- ★★★ УВЕЛИЧИВАЕМ ВЕРСИЮ ПОСЛЕ ИЗМЕНЕНИЙ ★★★
+    incrementItemsVersion()
+    
     broadcastUpdate()
     return true
-end  -- <-- ВОТ ЭТОТ end БЫЛ ПРОПУЩЕН!
+end
 
 -- ============================================================
--- ★★★ ИСПРАВЛЕННЫЙ checkWebCommands ★★★
+-- ★★★ ОБРАБОТЧИК КОМАНД С САЙТА ★★★
 -- ============================================================
 
 function checkWebCommands()
@@ -5355,7 +5271,6 @@ function checkWebCommands()
             writeDebugFile("🔧 Выполняем команду: " .. (cmd.command or "unknown"))
             writeDebugFile("📨 Данные команды: " .. serialization.serialize(d))
         
-            -- ★★★ UPDATE_PLAYER / SET_BALANCE ★★★
             if cmd.command == "update_player" or cmd.command == "set_balance" then
                 writeDebugFile("📥 Получена команда update_player")
                 local playerName = d.name or d.player
@@ -5382,7 +5297,6 @@ function checkWebCommands()
                     addLog("💰 Баланс обновлён: " .. playerName)
                     markDirty()
                     
-                    -- ★★★ ЕСЛИ ЭТО ТЕКУЩИЙ ИГРОК - ОБНОВЛЯЕМ ЛОКАЛЬНЫЕ ПЕРЕМЕННЫЕ ★★★
                     if currentPlayer == playerName then
                         coinBalance = player.balance
                         emaBalance = player.emaBalance
@@ -5443,6 +5357,14 @@ function checkWebCommands()
                     add_pending_change(item_change)
                 end
                 sendResult(ok, ok and "Магазин обновлён" or "Ошибка обновления shop_items")
+                goto continue
+            end
+            
+            -- ★★★ НОВАЯ КОМАНДА: ПРИНУДИТЕЛЬНАЯ СИНХРОНИЗАЦИЯ ТОВАРОВ ★★★
+            if cmd.command == "sync_items" then
+                writeDebugLog("🔄 Получена команда sync_items")
+                forceSyncItems()
+                sendResult(true, "Товары синхронизированы")
                 goto continue
             end
             
@@ -5534,14 +5456,12 @@ function checkWebCommands()
                         end
                     end
                     
-                -- ★★★ НОВАЯ КОМАНДА: ВКЛ/ВЫКЛ АВТОЗАПУСКА ★★★
                 elseif action == "toggle_autostart" then
                     writeDebugFile("🔄 ПЕРЕКЛЮЧЕНИЕ АВТОЗАПУСКА")
                     
                     local shrcPath = "/home/.shrc"
                     local autostartEnabled = false
                     
-                    -- Проверяем, есть ли автозапуск
                     if fs.exists(shrcPath) then
                         local file = io.open(shrcPath, "r")
                         if file then
@@ -5556,7 +5476,6 @@ function checkWebCommands()
                     local newStatus = false
                     
                     if autostartEnabled then
-                        -- Отключаем автозапуск
                         if fs.exists(shrcPath) then
                             if fs.exists(shrcPath .. ".bak") then
                                 fs.remove(shrcPath .. ".bak")
@@ -5567,7 +5486,6 @@ function checkWebCommands()
                             newStatus = false
                         end
                     else
-                        -- Включаем автозапуск
                         if fs.exists(shrcPath .. ".bak") then
                             if fs.exists(shrcPath) then
                                 fs.remove(shrcPath)
@@ -5592,7 +5510,6 @@ function checkWebCommands()
                         end
                     end
                     
-                    -- ★★★ ВОЗВРАЩАЕМ НОВЫЙ СТАТУС ★★★
                     sendResult(true, newStatus and "Автозапуск включён" or "Автозапуск отключён", {autostart_enabled = newStatus})
                     
                     goto continue
@@ -5602,16 +5519,12 @@ function checkWebCommands()
                     sendResult(true, "Перезапуск скрипта...")
                     os.sleep(0.5)
                     
-                    -- Сохраняем все данные перед перезапуском
                     forceSaveData()
                     
-                    -- Запускаем новый экземпляр скрипта
                     local scriptPath = "/home/pimmarket.lua"
                     if fs.exists(scriptPath) then
-                        -- Запускаем новый процесс
                         local pid = shell.execute("lua " .. scriptPath .. " &")
                         writeDebugLog("✅ Новый процесс запущен: " .. tostring(pid))
-                        -- Завершаем текущий процесс
                         os.exit(0)
                     else
                         writeDebugLog("❌ Скрипт не найден: " .. scriptPath)
@@ -5741,7 +5654,6 @@ function checkWebCommands()
                 local feedback = d.feedback
                 writeDebugFile("📝 Новый отзыв от " .. (feedback and feedback.name or "?"))
                 
-                -- ★★★ ОБНОВЛЯЕМ ЛОКАЛЬНЫЙ ФАЙЛ ★★★
                 local feedbacks = {}
                 if fs.exists(FEEDBACKS_PATH) then
                     local file = io.open(FEEDBACKS_PATH, "r")
@@ -5755,7 +5667,6 @@ function checkWebCommands()
                     end
                 end
                 
-                -- Проверяем, нет ли уже такого отзыва
                 local exists = false
                 for _, fb in ipairs(feedbacks) do
                     if fb.name == feedback.name and fb.text == feedback.text then
@@ -5765,7 +5676,6 @@ function checkWebCommands()
                 end
                 
                 if not exists then
-                    -- ★★★ ДОБАВЛЯЕМ РЕЙТИНГ ★★★
                     if not feedback.rating then
                         feedback.rating = 5
                     end
@@ -5782,7 +5692,6 @@ function checkWebCommands()
                 goto continue
             end
 
-            -- ★★★ ОБРАБОТКА ПРИНЯТИЯ СОГЛАШЕНИЯ — ОТДЕЛЬНЫЙ БЛОК! ★★★
             if cmd.command == "agree" then
                 writeDebugFile("📝 Получена команда agree для: " .. (d.name or "?"))
                 local playerName = d.name
@@ -5793,7 +5702,7 @@ function checkWebCommands()
                 
                 local player = getOrCreatePlayer(playerName)
                 player.agreed = true
-                saveDB()  -- ★★★ СОХРАНЯЕМ ★★★
+                saveDB()
                 
                 addLog("📝 " .. playerName .. " принял пользовательское соглашение")
                 sendResult(true, "Соглашение принято")
@@ -5811,6 +5720,60 @@ function checkWebCommands()
         writeErrorLog("❌ Критическая ошибка в checkWebCommands: " .. tostring(err))
     end
 end
+
+-- ============================================================
+-- ★★★ ТАЙМЕР АВТОСИНХРОНИЗАЦИИ ТОВАРОВ ★★★
+-- ============================================================
+
+function autoSyncCheck()
+    if TRANSACTION_LOCK then
+        writeDebugLog("⏳ Автосинхронизация пропущена (транзакция активна)")
+        return
+    end
+    
+    -- Проверяем версию товаров на сервере
+    local success, response = pcall(function()
+        return internet.request(WEB_URL .. "/api/items_version", nil, {
+            ["Connection"] = "close",
+            ["Timeout"] = 2
+        })
+    end)
+    
+    if not success or not response then
+        writeDebugLog("⚠️ Не удалось проверить версию товаров")
+        return
+    end
+    
+    local body = ""
+    for chunk in response do
+        body = body .. chunk
+    end
+    
+    local data = parseJSON(body)
+    if not data or not data.version then
+        writeDebugLog("⚠️ Некорректный ответ от /api/items_version")
+        return
+    end
+    
+    local serverVersion = data.version
+    local localVersion = getItemsVersion()
+    
+    writeDebugLog("📦 Версия товаров: локальная=" .. localVersion .. ", серверная=" .. serverVersion)
+    
+    if serverVersion > localVersion then
+        writeDebugLog("🔄 Обнаружена новая версия товаров, выполняем синхронизацию")
+        forceSyncItems()
+        setItemsVersion(serverVersion)
+    end
+end
+
+-- ★★★ ТАЙМЕР АВТОСИНХРОНИЗАЦИИ (КАЖДЫЕ 30 СЕКУНД) ★★★
+createTimer(30, function()
+    if not TRANSACTION_LOCK then
+        pcall(autoSyncCheck)
+    end
+    return true
+end, true)
 
 -- ============================================================
 -- ТАЙМЕР ДЛЯ ПОЛУЧЕНИЯ КОМАНД С САЙТА 
@@ -5879,7 +5842,7 @@ if not drawAgreementScreen then
 end
 
 -- ============================================================
--- ★★★ ПОПАП ПРОДАЖИ (УЛУЧШЕННЫЙ) ★★★
+-- ★★★ ПОПАПЫ (УЛУЧШЕННЫЕ) ★★★
 -- ============================================================
 
 function showSellPopupAndWait()
@@ -5912,20 +5875,16 @@ function showSellPopupAndWait()
                 break
             elseif isButtonClicked(noBtn, x, y) then
                 showSellPopup = false
-                forceRender()  -- ✅ ВМЕСТО markDirty()
+                forceRender()
                 break
             elseif not (x >= popupX and x < popupX + popupWidth and y >= popupY and y < popupY + popupHeight) then
                 showSellPopup = false
-                forceRender()  -- ✅ ВМЕСТО markDirty()
+                forceRender()
                 break
             end
         end
     end
 end
-
--- ============================================================
--- ★★★ ПОПАП ЧАСТИЧНОЙ ВЫДАЧИ (УЛУЧШЕННЫЙ) ★★★
--- ============================================================
 
 function showPartialPopupAndWait()
     showPartialPopup = true
@@ -5959,22 +5918,18 @@ function showPartialPopupAndWait()
             
             if isButtonClicked(okBtn, x, y) then
                 showPartialPopup = false
-                forceRender()  -- ✅ ВМЕСТО markDirty()
+                forceRender()
                 break
             end
             
             if not (x >= popupX and x < popupX + popupWidth and y >= popupY and y < popupY + popupHeight) then
                 showPartialPopup = false
-                forceRender()  -- ✅ ВМЕСТО markDirty()
+                forceRender()
                 break
             end
         end
     end
 end
-
--- ============================================================
--- ★★★ ПОПАП ИНВЕНТАРЬ ПОЛОН (УЛУЧШЕННЫЙ) ★★★
--- ============================================================
 
 function showInventoryFullPopupAndWait()
     showInventoryFullPopup = true
@@ -6008,22 +5963,18 @@ function showInventoryFullPopupAndWait()
             
             if isButtonClicked(okBtn, x, y) then
                 showInventoryFullPopup = false
-                forceRender()  -- ✅ ВМЕСТО markDirty()
+                forceRender()
                 break
             end
             
             if not (x >= popupX and x < popupX + popupWidth and y >= popupY and y < popupY + popupHeight) then
                 showInventoryFullPopup = false
-                forceRender()  -- ✅ ВМЕСТО markDirty()
+                forceRender()
                 break
             end
         end
     end
 end
-
--- ============================================================
--- ★★★ ПОПАП НЕДОСТАТОЧНО СРЕДСТВ (УЛУЧШЕННЫЙ) ★★★
--- ============================================================
 
 function showInsufficientPopupAndWait()
     showInsufficientPopup = true
@@ -6057,13 +6008,13 @@ function showInsufficientPopupAndWait()
             
             if isButtonClicked(okBtn, x, y) then
                 showInsufficientPopup = false
-                forceRender()  -- ✅ ВМЕСТО markDirty()
+                forceRender()
                 break
             end
             
             if not (x >= popupX and x < popupX + popupWidth and y >= popupY and y < popupY + popupHeight) then
                 showInsufficientPopup = false
-                forceRender()  -- ✅ ВМЕСТО markDirty()
+                forceRender()
                 break
             end
         end
@@ -6126,32 +6077,25 @@ function main()
                 elseif ch == 8 then
                     searchInput = unicode.sub(searchInput or "", 1, -2)
                     shopSearch = searchInput or ""
-                    -- ★★★ ПЕРЕРИСОВЫВАЕМ ТОЛЬКО СПИСОК ★★★
                     filteredItems = getFilteredItems()
                     drawBuyItemsList()
                     redrawSearchField()
                     
-                    -- ★★★ НОВОЕ: ПРОВЕРЯЕМ, ЕСЛИ ПОИСК ПУСТ - СБРАСЫВАЕМ ВЫБОР ★★★
                     if shopSearch == "" then
-                        -- Если поиск пустой, сбрасываем выбранный товар
                         if selectedItem ~= nil then
                             selectedItem = nil
                             selectedIndex = 0
-                            -- ★★★ ОБНОВЛЯЕМ КНОПКУ (СТАНОВИТСЯ НЕАКТИВНОЙ) ★★★
                             drawBuyButton()
                         end
                     end
                 elseif ch >= 32 then
                     searchInput = (searchInput or "") .. unicode.char(ch)
                     shopSearch = searchInput or ""
-                    -- ★★★ ПЕРЕРИСОВЫВАЕМ ТОЛЬКО СПИСОК ★★★
                     filteredItems = getFilteredItems()
                     drawBuyItemsList()
                     redrawSearchField()
                     
-                    -- ★★★ НОВОЕ: ЕСЛИ ВВЕЛИ НОВЫЙ СИМВОЛ - СБРАСЫВАЕМ ВЫБОР ★★★
                     if selectedItem ~= nil then
-                        -- Проверяем, есть ли выбранный товар в отфильтрованном списке
                         local stillVisible = false
                         for _, item in ipairs(filteredItems) do
                             if item == selectedItem then
@@ -6160,7 +6104,6 @@ function main()
                             end
                         end
                         if not stillVisible then
-                            -- Если товар не виден в поиске - сбрасываем выбор
                             selectedItem = nil
                             selectedIndex = 0
                             drawBuyButton()
@@ -6172,18 +6115,15 @@ function main()
                 local ch = ev[3]
                 if ch == 13 then
                     if feedbackInput and feedbackInput ~= "" then
-                        -- ★★★ ОТПРАВЛЯЕМ ОТЗЫВ С РЕЙТИНГОМ ★★★
                         local feedbackData = {
                             name = currentPlayer or "Аноним",
                             text = feedbackInput,
                             time = getRealTimeString(),
-                            rating = feedbackRating or 5  -- ★★★ ДОБАВЛЯЕМ РЕЙТИНГ ★★★
+                            rating = feedbackRating or 5
                         }
                         
-                        -- ★★★ 1. ОТПРАВЛЯЕМ НА СЕРВЕР ★★★
                         sendToWeb("/api/new_feedback", toJson(feedbackData))
                         
-                        -- ★★★ 2. СОХРАНЯЕМ ЛОКАЛЬНО ★★★
                         local feedbacks = {}
                         if fs.exists(FEEDBACKS_PATH) then
                             local file = io.open(FEEDBACKS_PATH, "r")
@@ -6203,7 +6143,6 @@ function main()
                             file:close()
                         end
                         
-                        -- ★★★ 3. ОБНОВЛЯЕМ ДАННЫЕ ИГРОКА ★★★
                         playerHasFeedback = true
                         if currentPlayer and playersIndex[currentPlayer] then
                             local player = playersIndex[currentPlayer]
@@ -6227,15 +6166,14 @@ function main()
                     end
                     feedbackEditMode = false
                     feedbackInput = ""
-                    feedbackRating = 5  -- ★★★ СБРАСЫВАЕМ РЕЙТИНГ ★★★
+                    feedbackRating = 5
                     currentScreen = "feedbacks"
                     markDirty()
                 elseif ch == 8 then
                     feedbackInput = unicode.sub(feedbackInput or "", 1, -2)
                     markDirty()
-                -- ★★★ ОБРАБОТКА КЛАВИШ 1-5 ДЛЯ РЕЙТИНГА ★★★
-                elseif ch >= 49 and ch <= 53 then  -- Клавиши 1,2,3,4,5
-                    feedbackRating = ch - 48  -- Преобразуем ASCII код в число
+                elseif ch >= 49 and ch <= 53 then
+                    feedbackRating = ch - 48
                     markDirty()
                 elseif ch >= 32 then
                     if unicode.len(feedbackInput or "") < 200 then
@@ -6260,15 +6198,12 @@ function main()
             local y = tonumber(ev[4]) or 0
             local playerName = ev[6] or "Неизвестный"
             
-            -- ★★★ ПРОВЕРЯЕМ, ЧТО ИГРОК ВСЁ ЕЩЁ НА PIM ★★★
             if not isPimOwner(playerName) then
                 goto continue
             end
 
-            -- ★★★ ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: ЕСЛИ ИГРОК СМЕНИЛСЯ ★★★
             if currentPlayer and playerName ~= currentPlayer then
                 writeDebugLog("⚠️ Игрок сменился! Было: " .. currentPlayer .. ", стало: " .. playerName)
-                -- Сбрасываем состояние старого игрока
                 if currentPlayer then
                     safeExit()
                 end
@@ -6349,13 +6284,11 @@ function main()
                     local item = filteredItems[clickedIndex]
                     
                     if item and (currentShopMode ~= "buy" or item.qty > 0) then
-                        -- ★★★ ИСПРАВЛЕНИЕ: ОБНОВЛЯЕМ ТОЛЬКО ВЫБРАННЫЙ РЯД ★★★
                         local oldSelectedIndex = selectedIndex
                         selectedIndex = clickedIndex
                         selectedItem = item
                         hoveredIndex = 0
                         
-                        -- Перерисовываем только старый и новый ряды
                         if oldSelectedIndex > 0 and oldSelectedIndex ~= clickedIndex then
                             local oldRow = oldSelectedIndex - listScroll + 1
                             if oldRow >= 1 and oldRow <= visibleRows then
@@ -6366,13 +6299,11 @@ function main()
                             end
                         end
                         
-                        -- Перерисовываем новый ряд (с подсветкой)
                         local newRow = clickedIndex - listScroll + 1
                         if newRow >= 1 and newRow <= visibleRows then
                             drawSingleRow(6 + newRow, item, false, true, clickedIndex)
                         end
                         
-                        -- ★★★ ОБНОВЛЯЕМ КНОПКУ "КУПИТЬ/ПРОДАТЬ" ★★★
                         drawBuyButton()
                         
                         updateSelectorDisplay(selectedItem)
@@ -6408,12 +6339,10 @@ function main()
                     filteredItems = getFilteredItems()
                     drawBuyItemsList()
                     redrawSearchField()
-                    -- ★★★ ОБНОВЛЯЕМ КНОПКУ (ТОВАР НЕ ВЫБРАН - СЕРАЯ) ★★★
                     drawBuyButton()
                     goto continue
                 end
 
-                -- ★★★ ОСТАЛЬНЫЕ КНОПКИ ОБРАБАТЫВАЕМ КАК ОБЫЧНО ★★★
                 local backButton = {
                     text = "[ НАЗАД ]",
                     x = 37, y = 24,
@@ -6433,7 +6362,6 @@ function main()
                     goto continue
                 end
 
-                -- ★★★ ОБРАБОТКА КЛИКА ПО КНОПКЕ "КУПИТЬ/ПРОДАТЬ" ★★★
                 local nextButton = {}
                 if currentShopMode == "buy" then
                     nextButton.text = "[ КУПИТЬ ]"
@@ -6447,7 +6375,6 @@ function main()
                 nextButton.ys = 1
                 nextButton.bg = colors.bg_button
                 
-                -- Определяем активна ли кнопка
                 local isActive = selectedItem and (currentShopMode ~= "buy" or selectedItem.qty > 0)
                 if isActive then
                     nextButton.fg = colors.accent_secondary
@@ -6464,7 +6391,6 @@ function main()
                             if (needCoin > 0 and coinBalance < needCoin) or (needEma > 0 and emaBalance < needEma) then
                                 insufficientBalanceCoin = coinBalance
                                 insufficientBalanceEma = emaBalance
-                                -- ★★★ ВЫЗЫВАЕМ НОВУЮ ФУНКЦИЮ ★★★
                                 showInsufficientPopupAndWait()
                                 goto continue
                             end
@@ -6489,7 +6415,6 @@ function main()
             end
 
             if showSellPopup and currentScreen == "sell_scan" then
-                -- Уже обрабатывается в showSellPopupAndWait()
                 goto continue
             end
 
@@ -6611,19 +6536,15 @@ function main()
                     goto continue
                 end
                 
-                -- ★★★ ПРОВЕРЯЕМ, НЕ ДОЛЖНА ЛИ КНОПКА БЫТЬ СКРЫТА ★★★
                 local showAddButton = not playerHasFeedback
                 
-                -- ★★★ ЕСЛИ КНОПКА ДОЛЖНА БЫТЬ СКРЫТА - НЕ ОБРАБАТЫВАЕМ КЛИК ★★★
                 if showAddButton then
                     local addBtn = {x=36, y=24, xs=14, ys=1}
                     if isButtonClicked(addBtn, x, y) then
-                        -- ★★★ ПРОВЕРЯЕМ ЗАНОВО ★★★
                         if currentPlayer then
                             local player = playersIndex[currentPlayer]
                             if player then
                                 playerHasFeedback = player.hasFeedback or false
-                                -- ★★★ ПРОВЕРЯЕМ В ФАЙЛЕ ОТЗЫВОВ ★★★
                                 if not playerHasFeedback then
                                     local feedbacks = {}
                                     if fs.exists(FEEDBACKS_PATH) then
@@ -6649,7 +6570,6 @@ function main()
                             end
                         end
                         
-                        -- ★★★ ЕСЛИ ОТЗЫВ УЖЕ ЕСТЬ - ПОКАЗЫВАЕМ СООБЩЕНИЕ ★★★
                         if playerHasFeedback then
                             showTempMessage("Вы уже оставляли отзыв!", 2)
                         else
@@ -6678,25 +6598,22 @@ function main()
                 if isButtonClicked({x=20, y=24, xs=12, ys=1}, x, y) then
                     feedbackEditMode = false
                     feedbackInput = ""
-                    feedbackRating = 5  -- ★★★ СБРАСЫВАЕМ РЕЙТИНГ ★★★
+                    feedbackRating = 5
                     currentScreen = "feedbacks"
                     markDirty()
                     goto continue
                 end
                 
                 if isButtonClicked({x=46, y=24, xs=15, ys=1}, x, y) and feedbackInput and feedbackInput ~= "" then
-                    -- ★★★ ОТПРАВЛЯЕМ ОТЗЫВ С РЕЙТИНГОМ ★★★
                     local feedbackData = {
                         name = currentPlayer or "Аноним",
                         text = feedbackInput,
                         time = getRealTimeString(),
-                        rating = feedbackRating or 5  -- ★★★ ДОБАВЛЯЕМ РЕЙТИНГ ★★★
+                        rating = feedbackRating or 5
                     }
                     
-                    -- ★★★ 1. ОТПРАВЛЯЕМ НА СЕРВЕР ★★★
                     sendToWeb("/api/new_feedback", toJson(feedbackData))
                     
-                    -- ★★★ 2. СОХРАНЯЕМ ЛОКАЛЬНО ★★★
                     local feedbacks = {}
                     if fs.exists(FEEDBACKS_PATH) then
                         local file = io.open(FEEDBACKS_PATH, "r")
@@ -6716,7 +6633,6 @@ function main()
                         file:close()
                     end
                     
-                    -- ★★★ 3. ОБНОВЛЯЕМ ДАННЫЕ ИГРОКА ★★★
                     playerHasFeedback = true
                     if currentPlayer and playersIndex[currentPlayer] then
                         local player = playersIndex[currentPlayer]
@@ -6739,7 +6655,7 @@ function main()
                     showTempMessage("✅ Отзыв отправлен! Спасибо!", 10)
                     feedbackEditMode = false
                     feedbackInput = ""
-                    feedbackRating = 5  -- ★★★ СБРАСЫВАЕМ РЕЙТИНГ ★★★
+                    feedbackRating = 5
                     currentScreen = "feedbacks"
                     markDirty()
                     goto continue
@@ -6767,7 +6683,7 @@ function main()
                     local player = playersIndex[currentPlayer]
                     if player then
                         player.agreed = true
-                        saveDB()  -- ✅ МГНОВЕННОЕ СОХРАНЕНИЕ НА ДИСК
+                        saveDB()
                         writeDebugLog("💾 Соглашение сохранено для " .. currentPlayer)
                     end
                     showTempMessage("✅ Спасибо! Теперь вам доступен магазин.", 2)
@@ -6805,14 +6721,12 @@ function main()
             end
         end
  
-
         if e == "scroll" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
             local playerName = ev[6] or "Неизвестный"
             if not isPimOwner(playerName) then
                 goto continue
             end
 
-            -- ★★★ ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: ЕСЛИ ИГРОК СМЕНИЛСЯ ★★★
             if currentPlayer and playerName ~= currentPlayer then
                 writeDebugLog("⚠️ Игрок сменился (scroll)! Было: " .. currentPlayer .. ", стало: " .. playerName)
                 if currentPlayer then
@@ -6838,7 +6752,6 @@ function main()
                 goto continue
             end
 
-            -- ★★★ ПРОВЕРЯЕМ, ЧТО ИГРОК ВСЁ ЕЩЁ НА PIM ★★★
             local pimPlayer = getPlayerOnPim()
             if not pimPlayer or pimPlayer == "" then
                 goto continue
@@ -6879,12 +6792,10 @@ function main()
                 goto continue
             end
             
-            -- ★★★ ПРОВЕРЯЕМ, ЧТО ИГРОК ВСЁ ЕЩЁ НА PIM ★★★
             if not isPimOwner(playerName) then
                 goto continue
             end
 
-            -- ★★★ ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: ЕСЛИ ИГРОК СМЕНИЛСЯ ★★★
             if currentPlayer and playerName ~= currentPlayer then
                 writeDebugLog("⚠️ Игрок сменился (key)! Было: " .. currentPlayer .. ", стало: " .. playerName)
                 if currentPlayer then
@@ -6917,32 +6828,25 @@ function main()
                 elseif ch == 8 then
                     searchInput = unicode.sub(searchInput or "", 1, -2)
                     shopSearch = searchInput or ""
-                    -- ★★★ ПЕРЕРИСОВЫВАЕМ ТОЛЬКО СПИСОК ★★★
                     filteredItems = getFilteredItems()
                     drawBuyItemsList()
                     redrawSearchField()
                     
-                    -- ★★★ НОВОЕ: ПРОВЕРЯЕМ, ЕСЛИ ПОИСК ПУСТ - СБРАСЫВАЕМ ВЫБОР ★★★
                     if shopSearch == "" then
-                        -- Если поиск пустой, сбрасываем выбранный товар
                         if selectedItem ~= nil then
                             selectedItem = nil
                             selectedIndex = 0
-                            -- ★★★ ОБНОВЛЯЕМ КНОПКУ (СТАНОВИТСЯ НЕАКТИВНОЙ) ★★★
                             drawBuyButton()
                         end
                     end
                 elseif ch >= 32 then
                     searchInput = (searchInput or "") .. unicode.char(ch)
                     shopSearch = searchInput or ""
-                    -- ★★★ ПЕРЕРИСОВЫВАЕМ ТОЛЬКО СПИСОК ★★★
                     filteredItems = getFilteredItems()
                     drawBuyItemsList()
                     redrawSearchField()
                     
-                    -- ★★★ НОВОЕ: ЕСЛИ ВВЕЛИ НОВЫЙ СИМВОЛ - СБРАСЫВАЕМ ВЫБОР ★★★
                     if selectedItem ~= nil then
-                        -- Проверяем, есть ли выбранный товар в отфильтрованном списке
                         local stillVisible = false
                         for _, item in ipairs(filteredItems) do
                             if item == selectedItem then
@@ -6951,7 +6855,6 @@ function main()
                             end
                         end
                         if not stillVisible then
-                            -- Если товар не виден в поиске - сбрасываем выбор
                             selectedItem = nil
                             selectedIndex = 0
                             drawBuyButton()
@@ -7013,11 +6916,9 @@ function main()
                 goto continue
             end
             
-            -- ★★★ ЕСЛИ УЖЕ ЕСТЬ ИГРОК, НО ПРИШЁЛ НОВЫЙ - СБРАСЫВАЕМ СТАРОГО ★★★
             if currentPlayer and currentPlayer ~= "" and currentPlayer ~= playerName then
                 writeDebugLog("⚠️ Пришёл новый игрок, сбрасываем старого: " .. currentPlayer .. " -> " .. playerName)
                 
-                -- Сбрасываем состояние старого игрока ПРИНУДИТЕЛЬНО
                 isShuttingDown = true
                 currentPlayer = nil
                 currentToken = nil
@@ -7063,7 +6964,6 @@ function main()
                 drawWelcomeScreen()
                 isShuttingDown = false
                 
-                -- ★★★ ОБНОВЛЯЕМ pimOwner НА НОВОГО ИГРОКА ★★★
                 pimOwner = playerName
             end
             
@@ -7257,13 +7157,10 @@ function main()
             local playerName = ev[2] or "Игрок"
             writeDebugLog("player_off: " .. playerName)
             
-            -- ★★★ ПРОВЕРЯЕМ, ДЕЙСТВИТЕЛЬНО ЛИ ИГРОК УШЁЛ ★★★
             if currentPlayer and playerName == currentPlayer then
-                -- Спрашиваем у PIM, кто сейчас стоит на плите
                 local currentOnPim = getPlayerOnPim()
                 writeDebugLog("🔍 На PIM сейчас: " .. tostring(currentOnPim))
                 
-                -- Если PIM говорит, что тот же игрок всё ещё стоит — игнорируем событие
                 if currentOnPim and currentOnPim == currentPlayer then
                     writeDebugLog("⚠️ PIM говорит, что игрок всё ещё стоит, игнорируем player_off")
                     goto continue
@@ -7329,7 +7226,5 @@ while running do
     end
 end
 
-
--- ★★★ ПРИ ВЫХОДЕ ИЗ ЦИКЛА - СОХРАНЯЕМ ДАННЫЕ ★★★
 forceSaveData()
 writeErrorLog("🔴 Терминал #1 завершил работу")
