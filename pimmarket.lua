@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА123335555
 -- ============================================================
 
 local function setupAutoStart()
@@ -644,7 +644,9 @@ function renderCurrentScreen()
             drawAgreementScreen()
         end
     elseif currentScreen == "auth_popup" then
+    if not qrPopupActive then
         showAuthPopup()
+    end
     elseif currentScreen == "qr_popup" then
 
     end
@@ -2150,6 +2152,7 @@ playerTransactions = 0
 playerRegDate = ""
 playerAgreed = false
 currentScreen = "welcome"
+qrPopupActive = false
 
 authCodeInput = ""
 boundPlayer = nil
@@ -4973,6 +4976,10 @@ end
 
 function showQRCodePopup()
     writeDebugLog("showQRCodePopup()")
+    
+    -- ★★★ УСТАНАВЛИВАЕМ ФЛАГ ★★★
+    qrPopupActive = true
+    
     currentScreen = "qr_popup"
     
     -- ★★★ 1. ЗАПОМИНАЕМ СТАРОЕ РАЗРЕШЕНИЕ ★★★
@@ -5142,6 +5149,9 @@ function showQRCodePopup()
     currentScreen = "auth_popup"
     markDirty()
     showAuthPopup()
+    
+    -- ★★★ СБРАСЫВАЕМ ФЛАГ ★★★
+    qrPopupActive = false
 end
 
 function decodeBase64(data)
