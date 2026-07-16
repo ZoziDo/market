@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333111767
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333
 -- ============================================================
 
 local function setupAutoStart()
@@ -2668,16 +2668,6 @@ end
 
 function showAuthPopup()
     writeDebugLog("showAuthPopup() - НОВАЯ ВЕРСИЯ")
-    
-    -- ★★★ ПРОВЕРКА: КТО СТОИТ НА PIM ★★★
-    local currentOnPim = getPlayerOnPim()
-    if not currentOnPim or currentOnPim == "" then
-        writeDebugLog("⚠️ Никто не стоит на PIM, но показываем попап")
-        -- ★★★ НЕ ВОЗВРАЩАЕМСЯ, А РИСУЕМ ПОПАП ★★★
-        -- (но с сообщением что нет игрока)
-    end
-    
-    -- ★★★ ВСЕГДА УСТАНАВЛИВАЕМ ЭКРАН И РИСУЕМ ПОПАП ★★★
     currentScreen = "auth_popup"
     authCodeInput = authCodeInput or ""
     
@@ -2715,48 +2705,6 @@ function showAuthPopup()
     gpu.setForeground(colors.accent_main)
     gpu.set(popupX + 15, popupY + 3, currentPlayer or "Неизвестно")
     
-    -- Если никто не стоит на PIM - показываем предупреждение
-    if not currentOnPim or currentOnPim == "" then
-        gpu.setForeground(colors.error)
-        gpu.set(popupX + 3, popupY + 5, "⚠️ Встаньте на PIM для аутентификации")
-        
-        local closeBtn = {
-            text = "[ ЗАКРЫТЬ ]",
-            x = popupX + math.floor((popupWidth - 10) / 2),
-            y = popupY + popupHeight - 3,
-            xs = 10,
-            ys = 1,
-            bg = colors.bg_button,
-            fg = colors.accent_secondary
-        }
-        drawFlexButton(closeBtn)
-        
-        while currentScreen == "auth_popup" do
-            local ev = {event.pull(0.5)}
-            
-            if ev[1] == "touch" then
-                local x, y = ev[3], ev[4]
-                if isButtonClicked(closeBtn, x, y) then
-                    goBackToMenu()
-                    break
-                end
-            end
-        end
-        return
-    end
-    
-    -- ★★★ ЕСЛИ ИГРОК СМЕНИЛСЯ ★★★
-    if currentPlayer and currentOnPim ~= currentPlayer then
-        writeDebugLog("⚠️ На PIM другой игрок, обновляем currentPlayer")
-        currentPlayer = currentOnPim
-        syncCurrentPlayer()
-        -- Перерисовываем информацию об игроке
-        gpu.setForeground(colors.white)
-        gpu.set(popupX + 3, popupY + 3, "👤 Игрок: ")
-        gpu.setForeground(colors.accent_main)
-        gpu.set(popupX + 15, popupY + 3, currentPlayer or "Неизвестно")
-    end
-    
     -- Проверяем привязку
     local isBound = getBindingStatus()
     
@@ -2793,24 +2741,6 @@ function showAuthPopup()
         while currentScreen == "auth_popup" do
             local ev = {event.pull(0.5)}
             
-            -- ★★★ ПРОВЕРКА: ВСЁ ЕЩЁ ЛИ ТОТ ЖЕ ИГРОК ★★★
-            local currentOnPimCheck = getPlayerOnPim()
-            if not currentOnPimCheck or currentOnPimCheck == "" then
-                writeDebugLog("⚠️ Игрок ушёл с PIM, закрываем аутентификацию")
-                authCodeInput = ""
-                currentScreen = "welcome"
-                markDirty()
-                break
-            end
-            
-            if currentPlayer and currentOnPimCheck ~= currentPlayer then
-                writeDebugLog("⚠️ Игрок сменился, закрываем аутентификацию")
-                authCodeInput = ""
-                currentScreen = "welcome"
-                markDirty()
-                break
-            end
-            
             if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
                 writeDebugLog("👤 Игрок ушёл с PIM во время аутентификации")
                 authCodeInput = ""
@@ -2821,13 +2751,6 @@ function showAuthPopup()
             
             if ev[1] == "touch" then
                 local x, y = ev[3], ev[4]
-                local touchPlayer = ev[6] or "Неизвестный"
-                
-                -- ★★★ ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: КТО НАЖАЛ ★★★
-                if currentPlayer and touchPlayer ~= currentPlayer then
-                    writeDebugLog("⚠️ Коснулся другой игрок: " .. touchPlayer .. ", игнорируем")
-                    goto continue_auth_bound
-                end
                 
                 if isButtonClicked(closeBtn, x, y) then
                     authCodeInput = ""
@@ -2841,8 +2764,6 @@ function showAuthPopup()
                     break
                 end
             end
-            
-            ::continue_auth_bound::
         end
         
     else
@@ -2912,32 +2833,6 @@ function showAuthPopup()
         while currentScreen == "auth_popup" and isEditing do
             local ev = {event.pull(0.5)}
             
-            -- ★★★ ПРОВЕРКА: ВСЁ ЕЩЁ ЛИ ТОТ ЖЕ ИГРОК ★★★
-            local currentOnPimCheck = getPlayerOnPim()
-            if not currentOnPimCheck or currentOnPimCheck == "" then
-                writeDebugLog("⚠️ Игрок ушёл с PIM, закрываем аутентификацию")
-                authCodeInput = ""
-                if cursorTimer then
-                    event.cancel(cursorTimer)
-                    cursorTimer = nil
-                end
-                currentScreen = "welcome"
-                markDirty()
-                break
-            end
-            
-            if currentPlayer and currentOnPimCheck ~= currentPlayer then
-                writeDebugLog("⚠️ Игрок сменился, закрываем аутентификацию")
-                authCodeInput = ""
-                if cursorTimer then
-                    event.cancel(cursorTimer)
-                    cursorTimer = nil
-                end
-                currentScreen = "welcome"
-                markDirty()
-                break
-            end
-            
             if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
                 writeDebugLog("👤 Игрок ушёл с PIM во время аутентификации")
                 authCodeInput = ""
@@ -2953,13 +2848,6 @@ function showAuthPopup()
             -- Обработка касаний
             if ev[1] == "touch" then
                 local x, y = ev[3], ev[4]
-                local touchPlayer = ev[6] or "Неизвестный"
-                
-                -- ★★★ ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: КТО НАЖАЛ ★★★
-                if currentPlayer and touchPlayer ~= currentPlayer then
-                    writeDebugLog("⚠️ Коснулся другой игрок: " .. touchPlayer .. ", игнорируем")
-                    goto continue_auth
-                end
                 
                 if isButtonClicked(closeBtn, x, y) then
                     isEditing = false
@@ -3027,13 +2915,6 @@ function showAuthPopup()
             -- Обработка клавиатуры
             elseif ev[1] == "key_down" then
                 local ch = ev[3]
-                local keyPlayer = ev[5] or "Неизвестный"
-                
-                -- ★★★ ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: КТО НАЖАЛ КЛАВИШУ ★★★
-                if currentPlayer and keyPlayer ~= currentPlayer then
-                    writeDebugLog("⚠️ Нажал клавишу другой игрок: " .. keyPlayer .. ", игнорируем")
-                    goto continue_auth
-                end
                 
                 if ch == 13 then
                     if authCodeInput and #authCodeInput == 6 then
@@ -3115,8 +2996,6 @@ function showAuthPopup()
                     end
                 end
             end
-            
-            ::continue_auth::
         end
         
         if cursorTimer then
