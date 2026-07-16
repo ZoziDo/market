@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА1211111
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА
 -- ============================================================
 
 local function setupAutoStart()
@@ -276,34 +276,6 @@ function unlockTransactions()
         end
         return false
     end)
-end
-
--- ============================================================
--- ★★★ ВЕРСИОНИРОВАНИЕ ТОВАРОВ ★★★
--- ============================================================
-
-ITEMS_VERSION_FILE = "/home/items_version.dat"
-currentItemsVersion = 0
-lastCheckedVersion = 0
-
-function loadItemsVersion()
-    if fs.exists(ITEMS_VERSION_FILE) then
-        local file = io.open(ITEMS_VERSION_FILE, "r")
-        if file then
-            local data = file:read("*a")
-            file:close()
-            if data then
-                local version = tonumber(data)
-                if version then
-                    currentItemsVersion = version
-                    writeDebugLog("📂 Загружена версия товаров: " .. currentItemsVersion)
-                    return currentItemsVersion
-                end
-            end
-        end
-    end
-    currentItemsVersion = 0
-    return 0
 end
 
 function saveItemsVersion(version)
@@ -997,6 +969,34 @@ globalStats = { totalReports = 0, totalBuys = 0, totalSells = 0, totalRevenue = 
 transactions = {}
 pending_buffer = {}
 retry_delay = 10
+
+-- ============================================================
+-- ★★★ ВЕРСИОНИРОВАНИЕ ТОВАРОВ ★★★
+-- ============================================================
+
+ITEMS_VERSION_FILE = "/home/items_version.dat"
+currentItemsVersion = 0
+lastCheckedVersion = 0
+
+function loadItemsVersion()
+    if fs.exists(ITEMS_VERSION_FILE) then
+        local file = io.open(ITEMS_VERSION_FILE, "r")
+        if file then
+            local data = file:read("*a")
+            file:close()
+            if data then
+                local version = tonumber(data)
+                if version then
+                    currentItemsVersion = version
+                    writeDebugLog("📂 Загружена версия товаров: " .. currentItemsVersion)
+                    return currentItemsVersion
+                end
+            end
+        end
+    end
+    currentItemsVersion = 0
+    return 0
+end
 
 -- ============================================================
 -- ★★★ ИНДЕКСЫ ДЛЯ БЫСТРОГО ПОИСКА ИГРОКОВ ★★★
