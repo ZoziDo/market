@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА123335555
 -- ============================================================
 
 local function setupAutoStart()
@@ -5670,6 +5670,29 @@ function checkWebCommands()
                     add_pending_change(item_change)
                 end
                 sendResult(ok, ok and "Товары покупки обновлены" or "Ошибка обновления buy_items")
+                goto continue
+            end
+
+            if cmd.command == "send_buy_items" then
+                writeDebugLog("📦 Получена команда send_buy_items")
+                
+                -- ★★★ ОТПРАВЛЯЕМ АКТУАЛЬНЫЕ ТОВАРЫ ★★★
+                local buyItems = {}
+                if fs.exists("/home/buy_items.lua") then
+                    local ok, data = pcall(dofile, "/home/buy_items.lua")
+                    if ok and type(data) == "table" then 
+                        buyItems = data 
+                        writeDebugLog("📦 Загружены buy_items: " .. #buyItems .. " товаров")
+                    end
+                end
+                
+                -- ★★★ ОТПРАВЛЯЕМ ТОЛЬКО BUY_ITEMS ★★★
+                sendToWeb("/api/update", toJson({
+                    buy_items = buyItems,
+                    force_update = true
+                }))
+                
+                sendResult(true, "Buy items отправлены")
                 goto continue
             end
 
