@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333111767
 -- ============================================================
 
 local function setupAutoStart()
@@ -2672,26 +2672,12 @@ function showAuthPopup()
     -- ★★★ ПРОВЕРКА: КТО СТОИТ НА PIM ★★★
     local currentOnPim = getPlayerOnPim()
     if not currentOnPim or currentOnPim == "" then
-        writeDebugLog("⚠️ Никто не стоит на PIM, закрываем аутентификацию")
-        currentScreen = "welcome"
-        markDirty()
-        return
+        writeDebugLog("⚠️ Никто не стоит на PIM, но показываем попап")
+        -- ★★★ НЕ ВОЗВРАЩАЕМСЯ, А РИСУЕМ ПОПАП ★★★
+        -- (но с сообщением что нет игрока)
     end
     
-    if currentPlayer and currentOnPim ~= currentPlayer then
-        writeDebugLog("⚠️ На PIM другой игрок, обновляем currentPlayer")
-        currentPlayer = currentOnPim
-        syncCurrentPlayer()
-    end
-    
-    -- ★★★ ЕСЛИ ИГРОК СМЕНИЛСЯ - ВЫХОДИМ ИЗ ПОПАПА ★★★
-    if currentPlayer and currentOnPim ~= currentPlayer then
-        writeDebugLog("⚠️ Игрок сменился, закрываем аутентификацию")
-        currentScreen = "welcome"
-        markDirty()
-        return
-    end
-    
+    -- ★★★ ВСЕГДА УСТАНАВЛИВАЕМ ЭКРАН И РИСУЕМ ПОПАП ★★★
     currentScreen = "auth_popup"
     authCodeInput = authCodeInput or ""
     
@@ -2728,6 +2714,48 @@ function showAuthPopup()
     gpu.set(popupX + 3, popupY + 3, "👤 Игрок: ")
     gpu.setForeground(colors.accent_main)
     gpu.set(popupX + 15, popupY + 3, currentPlayer or "Неизвестно")
+    
+    -- Если никто не стоит на PIM - показываем предупреждение
+    if not currentOnPim or currentOnPim == "" then
+        gpu.setForeground(colors.error)
+        gpu.set(popupX + 3, popupY + 5, "⚠️ Встаньте на PIM для аутентификации")
+        
+        local closeBtn = {
+            text = "[ ЗАКРЫТЬ ]",
+            x = popupX + math.floor((popupWidth - 10) / 2),
+            y = popupY + popupHeight - 3,
+            xs = 10,
+            ys = 1,
+            bg = colors.bg_button,
+            fg = colors.accent_secondary
+        }
+        drawFlexButton(closeBtn)
+        
+        while currentScreen == "auth_popup" do
+            local ev = {event.pull(0.5)}
+            
+            if ev[1] == "touch" then
+                local x, y = ev[3], ev[4]
+                if isButtonClicked(closeBtn, x, y) then
+                    goBackToMenu()
+                    break
+                end
+            end
+        end
+        return
+    end
+    
+    -- ★★★ ЕСЛИ ИГРОК СМЕНИЛСЯ ★★★
+    if currentPlayer and currentOnPim ~= currentPlayer then
+        writeDebugLog("⚠️ На PIM другой игрок, обновляем currentPlayer")
+        currentPlayer = currentOnPim
+        syncCurrentPlayer()
+        -- Перерисовываем информацию об игроке
+        gpu.setForeground(colors.white)
+        gpu.set(popupX + 3, popupY + 3, "👤 Игрок: ")
+        gpu.setForeground(colors.accent_main)
+        gpu.set(popupX + 15, popupY + 3, currentPlayer or "Неизвестно")
+    end
     
     -- Проверяем привязку
     local isBound = getBindingStatus()
