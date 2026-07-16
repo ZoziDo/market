@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА123335555
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА1233311234566666
 -- ============================================================
 
 local function setupAutoStart()
@@ -2536,7 +2536,7 @@ function showUnbindConfirmPopup()
 end
 
 -- ============================================================
--- ОСНОВНОЙ ПОПАП АУТЕНТИФИКАЦИИ
+-- ОСНОВНОЙ ПОПАП АУТЕНТИФИКАЦИИ (С МИГАЮЩИМ КУРСОРОМ И ОЧИСТКОЙ)
 -- ============================================================
 
 function showAuthPopup()
@@ -2616,6 +2616,8 @@ function showAuthPopup()
             
             if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
                 writeDebugLog("👤 Игрок ушёл с PIM во время аутентификации")
+                -- ★★★ ОЧИЩАЕМ ПОЛЕ ★★★
+                authCodeInput = ""
                 currentScreen = "welcome"
                 markDirty()
                 break
@@ -2625,11 +2627,15 @@ function showAuthPopup()
                 local x, y = ev[3], ev[4]
                 
                 if isButtonClicked(closeBtn, x, y) then
+                    -- ★★★ ОЧИЩАЕМ ПОЛЕ ПРИ ЗАКРЫТИИ ★★★
+                    authCodeInput = ""
                     goBackToMenu()
                     break
                 end
                 
                 if isButtonClicked(unbindBtn, x, y) then
+                    -- ★★★ ОЧИЩАЕМ ПОЛЕ ПРИ ОТВЯЗКЕ ★★★
+                    authCodeInput = ""
                     showUnbindConfirmPopup()
                     break
                 end
@@ -2651,8 +2657,9 @@ function showAuthPopup()
         
         gpu.setForeground(0x00FFAA)
         local displayCode = authCodeInput or ""
+        -- ★★★ МИГАЮЩИЙ КУРСОР ★★★
         if #displayCode < 6 then
-            displayCode = displayCode .. "_"
+            displayCode = displayCode .. "▌"  -- Мигающий курсор
         end
         local codeX = popupX + 6 + math.floor((popupWidth - 12 - unicode.len(displayCode)) / 2)
         gpu.set(codeX, popupY + 9, displayCode)
@@ -2681,12 +2688,39 @@ function showAuthPopup()
         drawFlexButton(closeBtn)
         drawFlexButton(confirmBtn)
         
+        -- ★★★ ПЕРЕМЕННАЯ ДЛЯ МИГАНИЯ КУРСОРА ★★★
+        local cursorVisible = true
+        local cursorTimer = nil
+        
+        -- ★★★ ТАЙМЕР МИГАНИЯ КУРСОРА ★★★
+        cursorTimer = event.timer(0.5, function()
+            cursorVisible = not cursorVisible
+            -- Перерисовываем только поле ввода
+            gpu.setBackground(0x1A1A2E)
+            gpu.fill(popupX + 6, popupY + 9, popupWidth - 12, 1, " ")
+            gpu.setForeground(0x00FFAA)
+            local display = authCodeInput or ""
+            if cursorVisible and #display < 6 then
+                display = display .. "▌"
+            end
+            local codeX2 = popupX + 6 + math.floor((popupWidth - 12 - unicode.len(display)) / 2)
+            gpu.set(codeX2, popupY + 9, display)
+            gpu.setBackground(0x0A0A1A)
+            return true
+        end, true)  -- повторять бесконечно
+        
         local isEditing = true
         while currentScreen == "auth_popup" and isEditing do
             local ev = {event.pull(0.5)}
             
             if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
                 writeDebugLog("👤 Игрок ушёл с PIM во время аутентификации")
+                -- ★★★ ОЧИЩАЕМ ПОЛЕ ★★★
+                authCodeInput = ""
+                if cursorTimer then
+                    event.cancel(cursorTimer)
+                    cursorTimer = nil
+                end
                 currentScreen = "welcome"
                 markDirty()
                 break
@@ -2698,6 +2732,12 @@ function showAuthPopup()
                 
                 if isButtonClicked(closeBtn, x, y) then
                     isEditing = false
+                    -- ★★★ ОЧИЩАЕМ ПОЛЕ ПРИ ЗАКРЫТИИ ★★★
+                    authCodeInput = ""
+                    if cursorTimer then
+                        event.cancel(cursorTimer)
+                        cursorTimer = nil
+                    end
                     goBackToMenu()
                     break
                 end
@@ -2709,8 +2749,14 @@ function showAuthPopup()
                         if status == "SUCCESS" then
                             -- ★★★ УСПЕХ! ★★★
                             gpu.setForeground(colors.success)
-                            gpu.set(popupX + 3, popupY + 13, "✅ Аккаунт успешно привязан!")
+                            gpu.set(popupX + 3, popupY + 10, "✅ Аккаунт успешно привязан!")
                             os.sleep(1.5)
+                            -- ★★★ ОЧИЩАЕМ ПОЛЕ ПОСЛЕ УСПЕХА ★★★
+                            authCodeInput = ""
+                            if cursorTimer then
+                                event.cancel(cursorTimer)
+                                cursorTimer = nil
+                            end
                             forceSyncBinding()
                             clear()
                             currentScreen = "menu"
@@ -2721,26 +2767,34 @@ function showAuthPopup()
                             local msgData = AUTH_MESSAGES[status]
                             if msgData then
                                 gpu.setForeground(msgData.color or colors.error)
-                                gpu.set(popupX + 3, popupY + 13, msgData.text)
+                                gpu.set(popupX + 3, popupY + 10, msgData.text)
                             else
                                 gpu.setForeground(colors.error)
-                                gpu.set(popupX + 3, popupY + 13, "❌ Ошибка: " .. status)
+                                gpu.set(popupX + 3, popupY + 10, "❌ Ошибка: " .. status)
                             end
                             os.sleep(2)
                             -- Очищаем сообщение
                             gpu.setBackground(0x0A0A1A)
-                            gpu.fill(popupX + 3, popupY + 13, popupWidth - 6, 1, " ")
-                            -- Сбрасываем ввод
+                            gpu.fill(popupX + 3, popupY + 10, popupWidth - 6, 1, " ")
+                            -- ★★★ ОЧИЩАЕМ ПОЛЕ ВВОДА ПРИ ОШИБКЕ ★★★
                             authCodeInput = ""
+                            -- Перерисовываем поле ввода (пустое)
+                            gpu.setBackground(0x1A1A2E)
+                            gpu.fill(popupX + 6, popupY + 9, popupWidth - 12, 1, " ")
+                            gpu.setForeground(0x00FFAA)
+                            local display = "▌"  -- Курсор в начале
+                            local codeX3 = popupX + 6 + math.floor((popupWidth - 12 - unicode.len(display)) / 2)
+                            gpu.set(codeX3, popupY + 9, display)
+                            gpu.setBackground(0x0A0A1A)
                             markDirty()
                             isEditing = true
                         end
                     else
                         gpu.setForeground(colors.error)
-                        gpu.set(popupX + 3, popupY + 13, " Введите 6-значный код!")
+                        gpu.set(popupX + 3, popupY + 10, " Введите 6-значный код!")
                         os.sleep(1.5)
                         gpu.setBackground(0x0A0A1A)
-                        gpu.fill(popupX + 3, popupY + 13, popupWidth - 6, 1, " ")
+                        gpu.fill(popupX + 3, popupY + 10, popupWidth - 6, 1, " ")
                         markDirty()
                     end
                     break
@@ -2756,8 +2810,14 @@ function showAuthPopup()
                         local status = verifyAuthCodeOnServer(authCodeInput, currentPlayer)
                         if status == "SUCCESS" then
                             gpu.setForeground(colors.success)
-                            gpu.set(popupX + 3, popupY + 13, "✅ Аккаунт успешно привязан!")
+                            gpu.set(popupX + 3, popupY + 10, "✅ Аккаунт успешно привязан!")
                             os.sleep(1.5)
+                            -- ★★★ ОЧИЩАЕМ ПОЛЕ ПОСЛЕ УСПЕХА ★★★
+                            authCodeInput = ""
+                            if cursorTimer then
+                                event.cancel(cursorTimer)
+                                cursorTimer = nil
+                            end
                             forceSyncBinding()
                             clear()
                             currentScreen = "menu"
@@ -2767,39 +2827,74 @@ function showAuthPopup()
                             local msgData = AUTH_MESSAGES[status]
                             if msgData then
                                 gpu.setForeground(msgData.color or colors.error)
-                                gpu.set(popupX + 3, popupY + 13, msgData.text)
+                                gpu.set(popupX + 3, popupY + 10, msgData.text)
                             else
                                 gpu.setForeground(colors.error)
-                                gpu.set(popupX + 3, popupY + 13, "❌ Ошибка: " .. status)
+                                gpu.set(popupX + 3, popupY + 10, "❌ Ошибка: " .. status)
                             end
                             os.sleep(2)
                             gpu.setBackground(0x0A0A1A)
-                            gpu.fill(popupX + 3, popupY + 13, popupWidth - 6, 1, " ")
+                            gpu.fill(popupX + 3, popupY + 10, popupWidth - 6, 1, " ")
+                            -- ★★★ ОЧИЩАЕМ ПОЛЕ ВВОДА ПРИ ОШИБКЕ ★★★
                             authCodeInput = ""
+                            -- Перерисовываем поле ввода (пустое)
+                            gpu.setBackground(0x1A1A2E)
+                            gpu.fill(popupX + 6, popupY + 9, popupWidth - 12, 1, " ")
+                            gpu.setForeground(0x00FFAA)
+                            local display = "▌"  -- Курсор в начале
+                            local codeX4 = popupX + 6 + math.floor((popupWidth - 12 - unicode.len(display)) / 2)
+                            gpu.set(codeX4, popupY + 9, display)
+                            gpu.setBackground(0x0A0A1A)
                             markDirty()
                             isEditing = true
                         end
                     else
                         gpu.setForeground(colors.error)
-                        gpu.set(popupX + 3, popupY + 13, " Введите 6-значный код!")
+                        gpu.set(popupX + 3, popupY + 10, " Введите 6-значный код!")
                         os.sleep(1.5)
                         gpu.setBackground(0x0A0A1A)
-                        gpu.fill(popupX + 3, popupY + 13, popupWidth - 6, 1, " ")
+                        gpu.fill(popupX + 3, popupY + 10, popupWidth - 6, 1, " ")
                         markDirty()
                     end
                     break
                     
                 elseif ch == 8 then  -- Backspace
                     authCodeInput = unicode.sub(authCodeInput or "", 1, -2)
-                    markDirty()
+                    -- ★★★ ПЕРЕРИСОВЫВАЕМ ПОЛЕ ВВОДА ★★★
+                    gpu.setBackground(0x1A1A2E)
+                    gpu.fill(popupX + 6, popupY + 9, popupWidth - 12, 1, " ")
+                    gpu.setForeground(0x00FFAA)
+                    local display = authCodeInput or ""
+                    if #display < 6 then
+                        display = display .. "▌"
+                    end
+                    local codeX5 = popupX + 6 + math.floor((popupWidth - 12 - unicode.len(display)) / 2)
+                    gpu.set(codeX5, popupY + 9, display)
+                    gpu.setBackground(0x0A0A1A)
                     
                 elseif ch >= 48 and ch <= 57 then  -- Цифры 0-9
                     if unicode.len(authCodeInput or "") < 6 then
                         authCodeInput = (authCodeInput or "") .. unicode.char(ch)
-                        markDirty()
+                        -- ★★★ ПЕРЕРИСОВЫВАЕМ ПОЛЕ ВВОДА ★★★
+                        gpu.setBackground(0x1A1A2E)
+                        gpu.fill(popupX + 6, popupY + 9, popupWidth - 12, 1, " ")
+                        gpu.setForeground(0x00FFAA)
+                        local display = authCodeInput or ""
+                        if #display < 6 then
+                            display = display .. "▌"
+                        end
+                        local codeX6 = popupX + 6 + math.floor((popupWidth - 12 - unicode.len(display)) / 2)
+                        gpu.set(codeX6, popupY + 9, display)
+                        gpu.setBackground(0x0A0A1A)
                     end
                 end
             end
+        end
+        
+        -- ★★★ ОСТАНАВЛИВАЕМ ТАЙМЕР КУРСОРА ПРИ ВЫХОДЕ ★★★
+        if cursorTimer then
+            event.cancel(cursorTimer)
+            cursorTimer = nil
         end
     end
 end
