@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА1233355555
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333
 -- ============================================================
 
 local function setupAutoStart()
@@ -4972,6 +4972,11 @@ end
 
 function showQRCodePopup()
     writeDebugLog("showQRCodePopup()")
+    
+    -- ★★★ СОХРАНЯЕМ ССЫЛКУ НА ТЕКУЩЕГО ИГРОКА ★★★
+    local myPlayer = currentPlayer
+    local myPimOwner = pimOwner
+    
     currentScreen = "qr_popup"
     
     -- ★★★ СОХРАНЯЕМ СТАРОЕ РАЗРЕШЕНИЕ ★★★
@@ -5004,7 +5009,7 @@ function showQRCodePopup()
     gpu.set(titleX, 2, titleText)
     
     -- Игрок
-    local playerText = "Игрок: " .. (currentPlayer or "?")
+    local playerText = "Игрок: " .. (myPlayer or "?")
     local playerX = 80 - math.floor(#playerText / 2)   
     gpu.setForeground(colors.white)
     gpu.set(playerX, 4, playerText)
@@ -5096,34 +5101,48 @@ function showQRCodePopup()
     }
     drawFlexButton(closeBtn)
     
-    -- ★★★ ЦИКЛ ОЖИДАНИЯ С ОБРАБОТКОЙ УХОДА ИГРОКА ★★★
+    -- ★★★ ЦИКЛ ОЖИДАНИЯ ★★★
     while currentScreen == "qr_popup" do
         local ev = {event.pull(0.5)}
         
-        -- ★★★ ПРОВЕРКА: ИГРОК УШЁЛ С PIM ★★★
-        if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
-            writeDebugLog("👤 Игрок ушёл с PIM во время QR-кода")
-            -- Восстанавливаем разрешение
-            gpu.setResolution(oldWidth, oldHeight)
-            -- Выходим в приветствие
-            safeExit()
-            return
-        end
-        
-        -- ★★★ ПРОВЕРКА: ВСЁ ЕЩЁ ЛИ ТОТ ЖЕ ИГРОК ★★★
+        -- ★★★ ПРОВЕРЯЕМ, НЕ УШЁЛ ЛИ ИГРОК С PIM ★★★
+        -- Это главная проверка! Смотрим, кто сейчас на PIM
         local currentOnPim = getPlayerOnPim()
+        
+        -- Если на PIM никого нет - закрываем QR
         if not currentOnPim or currentOnPim == "" then
-            writeDebugLog("⚠️ Игрок ушёл с PIM, закрываем QR-код")
+            writeDebugLog("⚠️ На PIM никого нет, закрываем QR-код")
             gpu.setResolution(oldWidth, oldHeight)
-            safeExit()
+            currentScreen = "welcome"
+            markDirty()
+            drawWelcomeScreen()
             return
         end
         
-        if currentPlayer and currentOnPim ~= currentPlayer then
-            writeDebugLog("⚠️ Игрок сменился, закрываем QR-код")
+        -- Если на PIM другой игрок (не тот, что открыл QR) - закрываем
+        if myPlayer and currentOnPim ~= myPlayer then
+            writeDebugLog("⚠️ Игрок сменился, закрываем QR-код: " .. myPlayer .. " -> " .. currentOnPim)
             gpu.setResolution(oldWidth, oldHeight)
-            safeExit()
+            currentScreen = "welcome"
+            markDirty()
+            drawWelcomeScreen()
             return
+        end
+        
+        -- ★★★ ОБРАБОТКА СОБЫТИЯ player_off ★★★
+        if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
+            local offPlayer = ev[2] or "Игрок"
+            writeDebugLog("👤 player_off: " .. offPlayer)
+            
+            -- Если ушёл тот игрок, который открыл QR
+            if myPlayer and offPlayer == myPlayer then
+                writeDebugLog("👤 Игрок ушёл с PIM, закрываем QR-код")
+                gpu.setResolution(oldWidth, oldHeight)
+                currentScreen = "welcome"
+                markDirty()
+                drawWelcomeScreen()
+                return
+            end
         end
         
         if ev[1] == "touch" then
