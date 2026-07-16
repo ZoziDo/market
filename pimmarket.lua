@@ -1,6 +1,6 @@
 -- ============================================================
 -- ★★★ PIM MARKET - АВТОМАТИЧЕСКАЯ СИНХРОНИЗАЦИЯ ★★★
--- Версия: 2.0 (с автообновлением товаров).1
+-- Версия: 2.0 (с автообновлением товаров)
 -- ============================================================
 
 local component = require("component")
@@ -1625,8 +1625,9 @@ syncPlayerIndex()
 -- Проверяем привязки при запуске
 for name, player in pairs(players) do
     if player.site_user and player.site_user ~= "" then
+        local url = "https://zozido.pythonanywhere.com/api/player_binding?site_user=" .. player.site_user
         local success, response = pcall(function()
-            return internet.request(WEB_URL .. "/api/player_binding?site_user=" .. player.site_user, nil, {
+            return internet.request(url, nil, {
                 ["Connection"] = "close",
                 ["Timeout"] = "2"
             })
