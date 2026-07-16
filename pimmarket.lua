@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА1233355551
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА
 -- ============================================================
 
 local function setupAutoStart()
@@ -4974,6 +4974,10 @@ function showQRCodePopup()
     writeDebugLog("showQRCodePopup()")
     currentScreen = "qr_popup"
     
+    -- ★★★ ОЧИЩАЕМ ЭКРАН ПЕРЕД РИСОВАНИЕМ ★★★
+    gpu.setBackground(0x000000)
+    gpu.fill(1, 1, 160, 50, " ")
+    
     local oldWidth, oldHeight = gpu.getResolution()
     gpu.setResolution(160, 50)
     
@@ -5069,11 +5073,16 @@ function showQRCodePopup()
     gpu.setForeground(colors.text_main)
     gpu.set(bottomHintX, 48, bottomHint)
     
+    -- ★★★ РАССЧИТЫВАЕМ КНОПКУ ЦЕНТРИРОВАННО ★★★
+    local closeText = "[ ЗАКРЫТЬ ]"
+    local closeLen = unicode.len(closeText) + 2
+    local closeX = 80 - math.floor(closeLen / 2)
+    
     local closeBtn = {
-        text = "[ ЗАКРЫТЬ ]",
-        x = 80 - 6,
+        text = closeText,
+        x = closeX,
         y = 49,
-        xs = 12,
+        xs = closeLen,
         ys = 1,
         bg = colors.bg_button,
         fg = colors.accent_secondary
@@ -5085,6 +5094,13 @@ function showQRCodePopup()
         
         if ev[1] == "touch" then
             local x, y = ev[3], ev[4]
+            local touchPlayer = ev[6] or "Неизвестный"
+            
+            -- ★★★ ПРОВЕРКА: ТОЛЬКО ВЛАДЕЛЕЦ ★★★
+            if not isPimOwner(touchPlayer) then
+                writeDebugLog("⚠️ Коснулся не владелец: " .. touchPlayer .. ", игнорируем")
+                goto continue_qr
+            end
             
             if isButtonClicked(closeBtn, x, y) then
                 break
@@ -5092,14 +5108,27 @@ function showQRCodePopup()
             
         elseif ev[1] == "key_down" then
             local code = ev[3]
-            if code == 27 then
+            local keyPlayer = ev[5] or "Неизвестный"
+            
+            -- ★★★ ПРОВЕРКА: ТОЛЬКО ВЛАДЕЛЕЦ ★★★
+            if not isPimOwner(keyPlayer) then
+                writeDebugLog("⚠️ Нажал клавишу не владелец: " .. keyPlayer .. ", игнорируем")
+                goto continue_qr
+            end
+            
+            if code == 27 then  -- ESC
                 break
             end
         end
+        
+        ::continue_qr::
     end
     
     gpu.setResolution(oldWidth, oldHeight)
+    -- ★★★ ВОЗВРАЩАЕМСЯ В АУТЕНТИФИКАЦИЮ ★★★
+    currentScreen = "auth_popup"
     markDirty()
+    showAuthPopup()
 end
 
 function decodeBase64(data)
