@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА1211111
 -- ============================================================
 
 local function setupAutoStart()
@@ -276,6 +276,72 @@ function unlockTransactions()
         end
         return false
     end)
+end
+
+-- ============================================================
+-- ★★★ ВЕРСИОНИРОВАНИЕ ТОВАРОВ ★★★
+-- ============================================================
+
+ITEMS_VERSION_FILE = "/home/items_version.dat"
+currentItemsVersion = 0
+lastCheckedVersion = 0
+
+function loadItemsVersion()
+    if fs.exists(ITEMS_VERSION_FILE) then
+        local file = io.open(ITEMS_VERSION_FILE, "r")
+        if file then
+            local data = file:read("*a")
+            file:close()
+            if data then
+                local version = tonumber(data)
+                if version then
+                    currentItemsVersion = version
+                    writeDebugLog("📂 Загружена версия товаров: " .. currentItemsVersion)
+                    return currentItemsVersion
+                end
+            end
+        end
+    end
+    currentItemsVersion = 0
+    return 0
+end
+
+function saveItemsVersion(version)
+    local file = io.open(ITEMS_VERSION_FILE, "w")
+    if file then
+        file:write(tostring(version))
+        file:close()
+        currentItemsVersion = version
+        writeDebugLog("💾 Сохранена версия товаров: " .. version)
+        return true
+    end
+    return false
+end
+
+function checkServerVersion()
+    -- Проверяем версию на сервере
+    local success, response = pcall(function()
+        return internet.request(WEB_URL .. "/api/items_version", nil, {
+            ["Connection"] = "close",
+            ["Timeout"] = 3
+        })
+    end)
+    
+    if success and response then
+        local body = ""
+        for chunk in response do
+            body = body .. chunk
+        end
+        local data = parseJSON(body)
+        if data and data.version then
+            local serverVersion = tonumber(data.version) or 0
+            if serverVersion > currentItemsVersion then
+                writeDebugLog("🔄 Обнаружена новая версия товаров: " .. serverVersion .. " (текущая: " .. currentItemsVersion .. ")")
+                return serverVersion
+            end
+        end
+    end
+    return nil
 end
 
 function safeExit()
@@ -5267,6 +5333,63 @@ function applyIncrementalChanges(itemsFile, changes, itemType)
 end  -- <-- ВОТ ЭТОТ end БЫЛ ПРОПУЩЕН!
 
 -- ============================================================
+-- ★★★ ПРИНУДИТЕЛЬНАЯ СИНХРОНИЗАЦИЯ ТОВАРОВ ★★★
+-- ============================================================
+
+function forceSyncItems()
+    writeDebugLog("🔄 Принудительная синхронизация товаров...")
+    
+    -- 1. Сбрасываем кэш
+    cachedBuyItems = nil
+    cacheTimestamp = 0
+    
+    -- 2. Перезагружаем buy_items
+    loadBuyItems(true)
+    
+    -- 3. Перезагружаем sell_items
+    loadSellItems()
+    
+    -- 4. Сбрасываем фильтры и выбор
+    if currentScreen == "shop_buy" or currentScreen == "shop_sell" then
+        filteredItems = getFilteredItems()
+        selectedItem = nil
+        selectedIndex = 0
+        hoveredIndex = 0
+        listScroll = 1
+        markDirty()
+    end
+    
+    -- 5. Обновляем версию
+    local serverVersion = checkServerVersion()
+    if serverVersion then
+        saveItemsVersion(serverVersion)
+        writeDebugLog("✅ Версия обновлена до: " .. serverVersion)
+    end
+    
+    -- 6. Отправляем подтверждение
+    sendToWeb("/api/sync_items", toJson({
+        status = "synced",
+        version = currentItemsVersion,
+        time = getRealTimeHM()
+    }))
+    
+    writeDebugLog("✅ Синхронизация завершена")
+    return true
+end
+
+-- Таймер автосинхронизации (каждые 30 секунд)
+createTimer(30, function()
+    if not TRANSACTION_LOCK and currentPlayer then
+        local serverVersion = checkServerVersion()
+        if serverVersion and serverVersion > currentItemsVersion then
+            writeDebugLog("🔄 Автосинхронизация: новая версия " .. serverVersion)
+            forceSyncItems()
+        end
+    end
+    return true
+end, true)
+
+-- ============================================================
 -- ★★★ ИСПРАВЛЕННЫЙ checkWebCommands ★★★
 -- ============================================================
 
@@ -5424,6 +5547,29 @@ function checkWebCommands()
                     add_pending_change(item_change)
                 end
                 sendResult(ok, ok and "Товары покупки обновлены" or "Ошибка обновления buy_items")
+                goto continue
+            end
+
+            -- ★★★ СИНХРОНИЗАЦИЯ ТОВАРОВ ★★★
+            if cmd.command == "sync_items" then
+                writeDebugLog("📥 Получена команда sync_items")
+                local force = d.force or false
+                local version = d.version or 0
+                
+                if force or version > currentItemsVersion then
+                    local success = forceSyncItems()
+                    if success then
+                        if version > 0 then
+                            saveItemsVersion(version)
+                        end
+                        sendResult(true, "Синхронизация выполнена, версия " .. (version or currentItemsVersion))
+                    else
+                        sendResult(false, "Ошибка синхронизации")
+                    end
+                else
+                    writeDebugLog("ℹ️ Версия актуальна (" .. currentItemsVersion .. "), синхронизация не требуется")
+                    sendResult(true, "Версия актуальна")
+                end
                 goto continue
             end
             
@@ -6068,6 +6214,24 @@ function showInsufficientPopupAndWait()
             end
         end
     end
+end
+
+-- ============================================================
+-- ★★★ ЗАГРУЗКА ВЕРСИИ ПРИ СТАРТЕ ★★★
+-- ============================================================
+
+loadItemsVersion()
+writeDebugLog("📂 Текущая версия товаров: " .. currentItemsVersion)
+
+-- Проверяем свежую версию на сервере при старте
+local serverVersion = checkServerVersion()
+if serverVersion and serverVersion > currentItemsVersion then
+    writeDebugLog("🔄 При старте обнаружена новая версия: " .. serverVersion)
+    -- Откладываем синхронизацию на 2 секунды, чтобы система загрузилась
+    event.timer(2, function()
+        forceSyncItems()
+        return false
+    end)
 end
 
 -- ============================================================
