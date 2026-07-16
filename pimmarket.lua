@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА123331111
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333
 -- ============================================================
 
 local function setupAutoStart()
@@ -403,7 +403,7 @@ WEB_URL = "https://zozido.pythonanywhere.com"
 
 lastSentQuantities = {}      -- Хранит последние отправленные количества товаров
 lastSentTime = 0             -- Время последней успешной отправки
-MIN_SEND_INTERVAL = 60       -- Минимальный интервал между отправками (60 секунд)
+MIN_SEND_INTERVAL = 600      -- Минимальный интервал между отправками (600 секунд)
 
 function toJson(val)
     if type(val) == "string" then
@@ -1962,7 +1962,7 @@ function sendStats()
 end
 
 -- ★★★ ТАЙМЕР С УВЕЛИЧЕННЫМ ИНТЕРВАЛОМ (2 МИНУТЫ) ★★★
-createTimer(120, function()  -- ← 120 секунд = 2 минуты
+createTimer(600, function()  -- ← 600 секунд = 10 минут
     if not TRANSACTION_LOCK then
         pcall(sendStats)
     end
