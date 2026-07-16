@@ -1,6 +1,6 @@
 -- ============================================================
 -- ★★★ PIM MARKET - АВТОМАТИЧЕСКАЯ СИНХРОНИЗАЦИЯ ★★★
--- Версия: 2.0 (с автообновлением товаров)
+-- Версия: 2.0 (с автообновлением товаров).
 -- ============================================================
 
 local component = require("component")
@@ -2291,8 +2291,11 @@ function checkBindingStatus()
         return
     end
     
+    -- ★★★ ИСПРАВЛЕНО: URL В КАВЫЧКАХ ★★★
+    local url = "https://zozido.pythonanywhere.com/api/player_binding?game_player=" .. currentPlayer
+    
     local checkSuccess, checkResponse = pcall(function()
-        return internet.request(WEB_URL .. "/api/player_binding?game_player=" .. currentPlayer, nil, {
+        return internet.request(url, nil, {
             ["Connection"] = "close",
             ["Timeout"] = "3"
         })
