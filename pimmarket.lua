@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333666
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА123331111
 -- ============================================================
 
 local function setupAutoStart()
@@ -399,6 +399,11 @@ end
 -- ============================================================
 
 WEB_URL = "https://zozido.pythonanywhere.com"
+
+
+lastSentQuantities = {}      -- Хранит последние отправленные количества товаров
+lastSentTime = 0             -- Время последней успешной отправки
+MIN_SEND_INTERVAL = 60       -- Минимальный интервал между отправками (60 секунд)
 
 function toJson(val)
     if type(val) == "string" then
@@ -1762,8 +1767,48 @@ function saveBuyItemsWithQty()
     return true
 end
 
+
 function sendStats()
     writeDebugLog("📊 sendStats() начат (резервный дамп)")
+    
+    -- ★★★ ПРОВЕРЯЕМ, ПРОШЛО ЛИ ДОСТАТОЧНО ВРЕМЕНИ ★★★
+    local now = os.time()
+    if now - lastSentTime < MIN_SEND_INTERVAL then
+        writeDebugLog("⏳ Прошло " .. (now - lastSentTime) .. "с, минимальный интервал " .. MIN_SEND_INTERVAL .. "с, пропускаем")
+        return
+    end
+    
+    -- ★★★ ПРОВЕРЯЕМ, ИЗМЕНИЛИСЬ ЛИ КОЛИЧЕСТВА ★★★
+    local hasChanges = false
+    if component.isAvailable("me_interface") then
+        local me = component.me_interface
+        local rawItems = me.getItemsInNetwork()
+        
+        local currentQuantities = {}
+        for _, meItem in ipairs(rawItems) do
+            local key = meItem.name .. ":" .. (meItem.damage or 0)
+            currentQuantities[key] = meItem.size or 0
+        end
+        
+        -- Сравниваем с последними отправленными
+        for key, qty in pairs(currentQuantities) do
+            if lastSentQuantities[key] ~= qty then
+                hasChanges = true
+                break
+            end
+        end
+        
+        -- Если нет изменений - пропускаем отправку
+        if not hasChanges then
+            writeDebugLog("📊 Нет изменений в количествах, пропускаем отправку")
+            return
+        end
+        
+        -- Сохраняем новые количества
+        lastSentQuantities = currentQuantities
+        lastSentTime = now
+        writeDebugLog("📊 Обнаружены изменения, отправляем статистику")
+    end
     
     local sysInfo = {}
     local ok, result = pcall(getSystemInfo)
@@ -1851,21 +1896,20 @@ function sendStats()
                 local me = component.me_interface
                 local rawItems = me.getItemsInNetwork()
                 
+                -- Создаём карту количеств из МЭ
                 local meQuantities = {}
                 for _, meItem in ipairs(rawItems) do
                     local key = meItem.name .. ":" .. (meItem.damage or 0)
                     meQuantities[key] = meItem.size or 0
                 end
                 
+                -- Добавляем qty к каждому товару
                 for _, item in ipairs(buyItems) do
                     local key = item.internalName .. ":" .. (item.damage or 0)
                     item.qty = meQuantities[key] or 0
                 end
                 
                 writeDebugLog("📦 Добавлены количества из МЭ")
-                
-                -- ★★★ ★★★ СОХРАНЯЕМ В ФАЙЛ ★★★ ★★★
-                saveBuyItemsWithQty()
             else
                 writeErrorLog("⚠️ ME интерфейс недоступен, qty = 0")
                 for _, item in ipairs(buyItems) do
@@ -1917,12 +1961,24 @@ function sendStats()
     sendToWeb("/api/update", jsonData)
 end
 
-createTimer(60, function()
+-- ★★★ ТАЙМЕР С УВЕЛИЧЕННЫМ ИНТЕРВАЛОМ (2 МИНУТЫ) ★★★
+createTimer(120, function()  -- ← 120 секунд = 2 минуты
     if not TRANSACTION_LOCK then
         pcall(sendStats)
     end
     return true
 end, true)
+
+-- ★★★ ТАЙМЕР ДЛЯ СИСТЕМНОЙ ИНФОРМАЦИИ (5 МИНУТ) ★★★
+createTimer(300, function()  -- ← 300 секунд = 5 минут
+    if not TRANSACTION_LOCK then
+        local sysInfo = getSystemInfo()
+        sendToWeb("/api/system_info", toJson(sysInfo))
+        writeDebugLog("📊 Отправлены системные данные отдельным пакетом")
+    end
+    return true
+end, true)
+
 
 createTimer(120, function()
     if not TRANSACTION_LOCK then
@@ -2612,6 +2668,30 @@ end
 
 function showAuthPopup()
     writeDebugLog("showAuthPopup() - НОВАЯ ВЕРСИЯ")
+    
+    -- ★★★ ПРОВЕРКА: КТО СТОИТ НА PIM ★★★
+    local currentOnPim = getPlayerOnPim()
+    if not currentOnPim or currentOnPim == "" then
+        writeDebugLog("⚠️ Никто не стоит на PIM, закрываем аутентификацию")
+        currentScreen = "welcome"
+        markDirty()
+        return
+    end
+    
+    if currentPlayer and currentOnPim ~= currentPlayer then
+        writeDebugLog("⚠️ На PIM другой игрок, обновляем currentPlayer")
+        currentPlayer = currentOnPim
+        syncCurrentPlayer()
+    end
+    
+    -- ★★★ ЕСЛИ ИГРОК СМЕНИЛСЯ - ВЫХОДИМ ИЗ ПОПАПА ★★★
+    if currentPlayer and currentOnPim ~= currentPlayer then
+        writeDebugLog("⚠️ Игрок сменился, закрываем аутентификацию")
+        currentScreen = "welcome"
+        markDirty()
+        return
+    end
+    
     currentScreen = "auth_popup"
     authCodeInput = authCodeInput or ""
     
@@ -2685,9 +2765,26 @@ function showAuthPopup()
         while currentScreen == "auth_popup" do
             local ev = {event.pull(0.5)}
             
+            -- ★★★ ПРОВЕРКА: ВСЁ ЕЩЁ ЛИ ТОТ ЖЕ ИГРОК ★★★
+            local currentOnPimCheck = getPlayerOnPim()
+            if not currentOnPimCheck or currentOnPimCheck == "" then
+                writeDebugLog("⚠️ Игрок ушёл с PIM, закрываем аутентификацию")
+                authCodeInput = ""
+                currentScreen = "welcome"
+                markDirty()
+                break
+            end
+            
+            if currentPlayer and currentOnPimCheck ~= currentPlayer then
+                writeDebugLog("⚠️ Игрок сменился, закрываем аутентификацию")
+                authCodeInput = ""
+                currentScreen = "welcome"
+                markDirty()
+                break
+            end
+            
             if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
                 writeDebugLog("👤 Игрок ушёл с PIM во время аутентификации")
-                -- ★★★ ОЧИЩАЕМ ПОЛЕ ★★★
                 authCodeInput = ""
                 currentScreen = "welcome"
                 markDirty()
@@ -2696,21 +2793,28 @@ function showAuthPopup()
             
             if ev[1] == "touch" then
                 local x, y = ev[3], ev[4]
+                local touchPlayer = ev[6] or "Неизвестный"
+                
+                -- ★★★ ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: КТО НАЖАЛ ★★★
+                if currentPlayer and touchPlayer ~= currentPlayer then
+                    writeDebugLog("⚠️ Коснулся другой игрок: " .. touchPlayer .. ", игнорируем")
+                    goto continue_auth_bound
+                end
                 
                 if isButtonClicked(closeBtn, x, y) then
-                    -- ★★★ ОЧИЩАЕМ ПОЛЕ ПРИ ЗАКРЫТИИ ★★★
                     authCodeInput = ""
                     goBackToMenu()
                     break
                 end
                 
                 if isButtonClicked(unbindBtn, x, y) then
-                    -- ★★★ ОЧИЩАЕМ ПОЛЕ ПРИ ОТВЯЗКЕ ★★★
                     authCodeInput = ""
                     showUnbindConfirmPopup()
                     break
                 end
             end
+            
+            ::continue_auth_bound::
         end
         
     else
@@ -2728,9 +2832,8 @@ function showAuthPopup()
         
         gpu.setForeground(0x00FFAA)
         local displayCode = authCodeInput or ""
-        -- ★★★ МИГАЮЩИЙ КУРСОР ★★★
         if #displayCode < 6 then
-            displayCode = displayCode .. "▌"  -- Мигающий курсор
+            displayCode = displayCode .. "▌"
         end
         local codeX = popupX + 6 + math.floor((popupWidth - 12 - unicode.len(displayCode)) / 2)
         gpu.set(codeX, popupY + 9, displayCode)
@@ -2759,14 +2862,11 @@ function showAuthPopup()
         drawFlexButton(closeBtn)
         drawFlexButton(confirmBtn)
         
-        -- ★★★ ПЕРЕМЕННАЯ ДЛЯ МИГАНИЯ КУРСОРА ★★★
         local cursorVisible = true
         local cursorTimer = nil
         
-        -- ★★★ ТАЙМЕР МИГАНИЯ КУРСОРА ★★★
         cursorTimer = event.timer(0.5, function()
             cursorVisible = not cursorVisible
-            -- Перерисовываем только поле ввода
             gpu.setBackground(0x1A1A2E)
             gpu.fill(popupX + 6, popupY + 9, popupWidth - 12, 1, " ")
             gpu.setForeground(0x00FFAA)
@@ -2778,15 +2878,40 @@ function showAuthPopup()
             gpu.set(codeX2, popupY + 9, display)
             gpu.setBackground(0x0A0A1A)
             return true
-        end, math.huge)  -- ✅ Исправлено!
+        end, math.huge)
         
         local isEditing = true
         while currentScreen == "auth_popup" and isEditing do
             local ev = {event.pull(0.5)}
             
+            -- ★★★ ПРОВЕРКА: ВСЁ ЕЩЁ ЛИ ТОТ ЖЕ ИГРОК ★★★
+            local currentOnPimCheck = getPlayerOnPim()
+            if not currentOnPimCheck or currentOnPimCheck == "" then
+                writeDebugLog("⚠️ Игрок ушёл с PIM, закрываем аутентификацию")
+                authCodeInput = ""
+                if cursorTimer then
+                    event.cancel(cursorTimer)
+                    cursorTimer = nil
+                end
+                currentScreen = "welcome"
+                markDirty()
+                break
+            end
+            
+            if currentPlayer and currentOnPimCheck ~= currentPlayer then
+                writeDebugLog("⚠️ Игрок сменился, закрываем аутентификацию")
+                authCodeInput = ""
+                if cursorTimer then
+                    event.cancel(cursorTimer)
+                    cursorTimer = nil
+                end
+                currentScreen = "welcome"
+                markDirty()
+                break
+            end
+            
             if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
                 writeDebugLog("👤 Игрок ушёл с PIM во время аутентификации")
-                -- ★★★ ОЧИЩАЕМ ПОЛЕ ★★★
                 authCodeInput = ""
                 if cursorTimer then
                     event.cancel(cursorTimer)
@@ -2800,10 +2925,16 @@ function showAuthPopup()
             -- Обработка касаний
             if ev[1] == "touch" then
                 local x, y = ev[3], ev[4]
+                local touchPlayer = ev[6] or "Неизвестный"
+                
+                -- ★★★ ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: КТО НАЖАЛ ★★★
+                if currentPlayer and touchPlayer ~= currentPlayer then
+                    writeDebugLog("⚠️ Коснулся другой игрок: " .. touchPlayer .. ", игнорируем")
+                    goto continue_auth
+                end
                 
                 if isButtonClicked(closeBtn, x, y) then
                     isEditing = false
-                    -- ★★★ ОЧИЩАЕМ ПОЛЕ ПРИ ЗАКРЫТИИ ★★★
                     authCodeInput = ""
                     if cursorTimer then
                         event.cancel(cursorTimer)
@@ -2818,11 +2949,9 @@ function showAuthPopup()
                         isEditing = false
                         local status = verifyAuthCodeOnServer(authCodeInput, currentPlayer)
                         if status == "SUCCESS" then
-                            -- ★★★ УСПЕХ! ★★★
                             gpu.setForeground(colors.success)
                             gpu.set(popupX + 3, popupY + 10, "✅ Аккаунт успешно привязан!")
                             os.sleep(1.5)
-                            -- ★★★ ОЧИЩАЕМ ПОЛЕ ПОСЛЕ УСПЕХА ★★★
                             authCodeInput = ""
                             if cursorTimer then
                                 event.cancel(cursorTimer)
@@ -2834,7 +2963,6 @@ function showAuthPopup()
                             forceRender()
                             break
                         else
-                            -- ★★★ ПОКАЗЫВАЕМ СООБЩЕНИЕ ПО СТАТУСУ ★★★
                             local msgData = AUTH_MESSAGES[status]
                             if msgData then
                                 gpu.setForeground(msgData.color or colors.error)
@@ -2844,16 +2972,13 @@ function showAuthPopup()
                                 gpu.set(popupX + 3, popupY + 10, "❌ Ошибка: " .. status)
                             end
                             os.sleep(2)
-                            -- Очищаем сообщение
                             gpu.setBackground(0x0A0A1A)
                             gpu.fill(popupX + 3, popupY + 10, popupWidth - 6, 1, " ")
-                            -- ★★★ ОЧИЩАЕМ ПОЛЕ ВВОДА ПРИ ОШИБКЕ ★★★
                             authCodeInput = ""
-                            -- Перерисовываем поле ввода (пустое)
                             gpu.setBackground(0x1A1A2E)
                             gpu.fill(popupX + 6, popupY + 9, popupWidth - 12, 1, " ")
                             gpu.setForeground(0x00FFAA)
-                            local display = "▌"  -- Курсор в начале
+                            local display = "▌"
                             local codeX3 = popupX + 6 + math.floor((popupWidth - 12 - unicode.len(display)) / 2)
                             gpu.set(codeX3, popupY + 9, display)
                             gpu.setBackground(0x0A0A1A)
@@ -2874,8 +2999,15 @@ function showAuthPopup()
             -- Обработка клавиатуры
             elseif ev[1] == "key_down" then
                 local ch = ev[3]
+                local keyPlayer = ev[5] or "Неизвестный"
                 
-                if ch == 13 then  -- Enter
+                -- ★★★ ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: КТО НАЖАЛ КЛАВИШУ ★★★
+                if currentPlayer and keyPlayer ~= currentPlayer then
+                    writeDebugLog("⚠️ Нажал клавишу другой игрок: " .. keyPlayer .. ", игнорируем")
+                    goto continue_auth
+                end
+                
+                if ch == 13 then
                     if authCodeInput and #authCodeInput == 6 then
                         isEditing = false
                         local status = verifyAuthCodeOnServer(authCodeInput, currentPlayer)
@@ -2883,7 +3015,6 @@ function showAuthPopup()
                             gpu.setForeground(colors.success)
                             gpu.set(popupX + 3, popupY + 10, "✅ Аккаунт успешно привязан!")
                             os.sleep(1.5)
-                            -- ★★★ ОЧИЩАЕМ ПОЛЕ ПОСЛЕ УСПЕХА ★★★
                             authCodeInput = ""
                             if cursorTimer then
                                 event.cancel(cursorTimer)
@@ -2906,13 +3037,11 @@ function showAuthPopup()
                             os.sleep(2)
                             gpu.setBackground(0x0A0A1A)
                             gpu.fill(popupX + 3, popupY + 10, popupWidth - 6, 1, " ")
-                            -- ★★★ ОЧИЩАЕМ ПОЛЕ ВВОДА ПРИ ОШИБКЕ ★★★
                             authCodeInput = ""
-                            -- Перерисовываем поле ввода (пустое)
                             gpu.setBackground(0x1A1A2E)
                             gpu.fill(popupX + 6, popupY + 9, popupWidth - 12, 1, " ")
                             gpu.setForeground(0x00FFAA)
-                            local display = "▌"  -- Курсор в начале
+                            local display = "▌"
                             local codeX4 = popupX + 6 + math.floor((popupWidth - 12 - unicode.len(display)) / 2)
                             gpu.set(codeX4, popupY + 9, display)
                             gpu.setBackground(0x0A0A1A)
@@ -2929,9 +3058,8 @@ function showAuthPopup()
                     end
                     break
                     
-                elseif ch == 8 then  -- Backspace
+                elseif ch == 8 then
                     authCodeInput = unicode.sub(authCodeInput or "", 1, -2)
-                    -- ★★★ ПЕРЕРИСОВЫВАЕМ ПОЛЕ ВВОДА ★★★
                     gpu.setBackground(0x1A1A2E)
                     gpu.fill(popupX + 6, popupY + 9, popupWidth - 12, 1, " ")
                     gpu.setForeground(0x00FFAA)
@@ -2943,10 +3071,9 @@ function showAuthPopup()
                     gpu.set(codeX5, popupY + 9, display)
                     gpu.setBackground(0x0A0A1A)
                     
-                elseif ch >= 48 and ch <= 57 then  -- Цифры 0-9
+                elseif ch >= 48 and ch <= 57 then
                     if unicode.len(authCodeInput or "") < 6 then
                         authCodeInput = (authCodeInput or "") .. unicode.char(ch)
-                        -- ★★★ ПЕРЕРИСОВЫВАЕМ ПОЛЕ ВВОДА ★★★
                         gpu.setBackground(0x1A1A2E)
                         gpu.fill(popupX + 6, popupY + 9, popupWidth - 12, 1, " ")
                         gpu.setForeground(0x00FFAA)
@@ -2960,9 +3087,10 @@ function showAuthPopup()
                     end
                 end
             end
+            
+            ::continue_auth::
         end
         
-        -- ★★★ ОСТАНАВЛИВАЕМ ТАЙМЕР КУРСОРА ПРИ ВЫХОДЕ ★★★
         if cursorTimer then
             event.cancel(cursorTimer)
             cursorTimer = nil
@@ -6717,15 +6845,30 @@ function main()
             local y = tonumber(ev[4]) or 0
             local playerName = ev[6] or "Неизвестный"
             
-            -- ★★★ ПРОВЕРЯЕМ, ЧТО ИГРОК ВСЁ ЕЩЁ НА PIM ★★★
+            -- ★★★ ПРОВЕРКА: КТО НАЖАЛ ★★★
+            if currentScreen == "auth_popup" then
+                -- В popup'e аутентификации проверяем особенно строго
+                local currentOnPim = getPlayerOnPim()
+                if not currentOnPim or currentOnPim == "" then
+                    goto continue
+                end
+                if currentPlayer and currentOnPim ~= currentPlayer then
+                    writeDebugLog("⚠️ На PIM другой игрок, игнорируем touch в auth_popup")
+                    goto continue
+                end
+                if playerName ~= currentPlayer then
+                    writeDebugLog("⚠️ Коснулся не владелец: " .. playerName .. ", игнорируем")
+                    goto continue
+                end
+            end
+            
+            -- ★★★ ОБЩАЯ ПРОВЕРКА ДЛЯ ВСЕХ ЭКРАНОВ ★★★
             if not isPimOwner(playerName) then
                 goto continue
             end
 
-            -- ★★★ ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: ЕСЛИ ИГРОК СМЕНИЛСЯ ★★★
             if currentPlayer and playerName ~= currentPlayer then
                 writeDebugLog("⚠️ Игрок сменился! Было: " .. currentPlayer .. ", стало: " .. playerName)
-                -- Сбрасываем состояние старого игрока
                 if currentPlayer then
                     safeExit()
                 end
@@ -6806,13 +6949,11 @@ function main()
                     local item = filteredItems[clickedIndex]
                     
                     if item and (currentShopMode ~= "buy" or item.qty > 0) then
-                        -- ★★★ ИСПРАВЛЕНИЕ: ОБНОВЛЯЕМ ТОЛЬКО ВЫБРАННЫЙ РЯД ★★★
                         local oldSelectedIndex = selectedIndex
                         selectedIndex = clickedIndex
                         selectedItem = item
                         hoveredIndex = 0
                         
-                        -- Перерисовываем только старый и новый ряды
                         if oldSelectedIndex > 0 and oldSelectedIndex ~= clickedIndex then
                             local oldRow = oldSelectedIndex - listScroll + 1
                             if oldRow >= 1 and oldRow <= visibleRows then
@@ -6823,15 +6964,12 @@ function main()
                             end
                         end
                         
-                        -- Перерисовываем новый ряд (с подсветкой)
                         local newRow = clickedIndex - listScroll + 1
                         if newRow >= 1 and newRow <= visibleRows then
                             drawSingleRow(6 + newRow, item, false, true, clickedIndex)
                         end
                         
-                        -- ★★★ ОБНОВЛЯЕМ КНОПКУ "КУПИТЬ/ПРОДАТЬ" ★★★
                         drawBuyButton()
-                        
                         updateSelectorDisplay(selectedItem)
                     end
                     goto continue
@@ -6865,12 +7003,10 @@ function main()
                     filteredItems = getFilteredItems()
                     drawBuyItemsList()
                     redrawSearchField()
-                    -- ★★★ ОБНОВЛЯЕМ КНОПКУ (ТОВАР НЕ ВЫБРАН - СЕРАЯ) ★★★
                     drawBuyButton()
                     goto continue
                 end
 
-                -- ★★★ ОСТАЛЬНЫЕ КНОПКИ ОБРАБАТЫВАЕМ КАК ОБЫЧНО ★★★
                 local backButton = {
                     text = "[ НАЗАД ]",
                     x = 37, y = 24,
@@ -6890,7 +7026,6 @@ function main()
                     goto continue
                 end
 
-                -- ★★★ ОБРАБОТКА КЛИКА ПО КНОПКЕ "КУПИТЬ/ПРОДАТЬ" ★★★
                 local nextButton = {}
                 if currentShopMode == "buy" then
                     nextButton.text = "[ КУПИТЬ ]"
@@ -6904,7 +7039,6 @@ function main()
                 nextButton.ys = 1
                 nextButton.bg = colors.bg_button
                 
-                -- Определяем активна ли кнопка
                 local isActive = selectedItem and (currentShopMode ~= "buy" or selectedItem.qty > 0)
                 if isActive then
                     nextButton.fg = colors.accent_secondary
@@ -6921,7 +7055,6 @@ function main()
                             if (needCoin > 0 and coinBalance < needCoin) or (needEma > 0 and emaBalance < needEma) then
                                 insufficientBalanceCoin = coinBalance
                                 insufficientBalanceEma = emaBalance
-                                -- ★★★ ВЫЗЫВАЕМ НОВУЮ ФУНКЦИЮ ★★★
                                 showInsufficientPopupAndWait()
                                 goto continue
                             end
@@ -6946,7 +7079,6 @@ function main()
             end
 
             if showSellPopup and currentScreen == "sell_scan" then
-                -- Уже обрабатывается в showSellPopupAndWait()
                 goto continue
             end
 
@@ -7068,19 +7200,15 @@ function main()
                     goto continue
                 end
                 
-                -- ★★★ ПРОВЕРЯЕМ, НЕ ДОЛЖНА ЛИ КНОПКА БЫТЬ СКРЫТА ★★★
                 local showAddButton = not playerHasFeedback
                 
-                -- ★★★ ЕСЛИ КНОПКА ДОЛЖНА БЫТЬ СКРЫТА - НЕ ОБРАБАТЫВАЕМ КЛИК ★★★
                 if showAddButton then
                     local addBtn = {x=36, y=24, xs=14, ys=1}
                     if isButtonClicked(addBtn, x, y) then
-                        -- ★★★ ПРОВЕРЯЕМ ЗАНОВО ★★★
                         if currentPlayer then
                             local player = playersIndex[currentPlayer]
                             if player then
                                 playerHasFeedback = player.hasFeedback or false
-                                -- ★★★ ПРОВЕРЯЕМ В ФАЙЛЕ ОТЗЫВОВ ★★★
                                 if not playerHasFeedback then
                                     local feedbacks = {}
                                     if fs.exists(FEEDBACKS_PATH) then
@@ -7106,7 +7234,6 @@ function main()
                             end
                         end
                         
-                        -- ★★★ ЕСЛИ ОТЗЫВ УЖЕ ЕСТЬ - ПОКАЗЫВАЕМ СООБЩЕНИЕ ★★★
                         if playerHasFeedback then
                             showTempMessage("Вы уже оставляли отзыв!", 2)
                         else
@@ -7135,13 +7262,13 @@ function main()
                 if isButtonClicked({x=20, y=24, xs=12, ys=1}, x, y) then
                     feedbackEditMode = false
                     feedbackInput = ""
-                    feedbackRating = 5  -- ★★★ СБРАСЫВАЕМ РЕЙТИНГ ★★★
+                    feedbackRating = 5
                     currentScreen = "feedbacks"
                     markDirty()
                     goto continue
                 end
                 
-                 if isButtonClicked({x=46, y=24, xs=15, ys=1}, x, y) and feedbackInput and feedbackInput ~= "" then
+                if isButtonClicked({x=46, y=24, xs=15, ys=1}, x, y) and feedbackInput and feedbackInput ~= "" then
                     local feedbackData = {
                         name = currentPlayer or "Аноним",
                         text = feedbackInput,
@@ -7149,10 +7276,8 @@ function main()
                         rating = feedbackRating or 5
                     }
                     
-                    -- ★★★ 1. ОТПРАВЛЯЕМ НА СЕРВЕР ★★★
                     sendToWeb("/api/new_feedback", toJson(feedbackData))
                     
-                    -- ★★★ 2. СОХРАНЯЕМ ЛОКАЛЬНО ★★★
                     local feedbacks = {}
                     if fs.exists(FEEDBACKS_PATH) then
                         local file = io.open(FEEDBACKS_PATH, "r")
@@ -7172,12 +7297,11 @@ function main()
                         file:close()
                     end
                     
-                    -- ★★★ 3. ОБНОВЛЯЕМ ДАННЫЕ ИГРОКА ★★★
                     playerHasFeedback = true
                     if currentPlayer and playersIndex[currentPlayer] then
                         local player = playersIndex[currentPlayer]
                         player.hasFeedback = true
-                        saveDB()  -- ← ★★★ МГНОВЕННОЕ СОХРАНЕНИЕ (НЕ saveDBDeferred) ★★★
+                        saveDB()
                         writeDebugLog("💾 hasFeedback сохранён для " .. currentPlayer)
                         
                         local change = {
@@ -7224,7 +7348,7 @@ function main()
                     local player = playersIndex[currentPlayer]
                     if player then
                         player.agreed = true
-                        saveDB()  -- ✅ МГНОВЕННОЕ СОХРАНЕНИЕ НА ДИСК
+                        saveDB()
                         writeDebugLog("💾 Соглашение сохранено для " .. currentPlayer)
                     end
                     showTempMessage("✅ Спасибо! Теперь вам доступен магазин.", 2)
@@ -7664,7 +7788,6 @@ function main()
                     markDirty()
                 end
                 forceSyncBinding()
-                checkBindingOnServer()
                 markDirty()
             else
                 coinBalance = 0.0
