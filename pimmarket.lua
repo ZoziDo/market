@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА1233366666
 -- ============================================================
 
 local function setupAutoStart()
@@ -2751,6 +2751,13 @@ function showAuthPopup()
             
             if ev[1] == "touch" then
                 local x, y = ev[3], ev[4]
+                local touchPlayer = ev[6] or "Неизвестный"
+                
+                -- ★★★ ПРОВЕРКА: ТОЛЬКО ВЛАДЕЛЕЦ ★★★
+                if not isPimOwner(touchPlayer) then
+                    writeDebugLog("⚠️ Коснулся не владелец: " .. touchPlayer .. ", игнорируем")
+                    goto continue_auth_bound
+                end
                 
                 if isButtonClicked(closeBtn, x, y) then
                     authCodeInput = ""
@@ -2764,6 +2771,8 @@ function showAuthPopup()
                     break
                 end
             end
+            
+            ::continue_auth_bound::
         end
         
     else
@@ -2848,6 +2857,13 @@ function showAuthPopup()
             -- Обработка касаний
             if ev[1] == "touch" then
                 local x, y = ev[3], ev[4]
+                local touchPlayer = ev[6] or "Неизвестный"
+                
+                -- ★★★ ПРОВЕРКА: ТОЛЬКО ВЛАДЕЛЕЦ ★★★
+                if not isPimOwner(touchPlayer) then
+                    writeDebugLog("⚠️ Коснулся не владелец: " .. touchPlayer .. ", игнорируем")
+                    goto continue_auth
+                end
                 
                 if isButtonClicked(closeBtn, x, y) then
                     isEditing = false
@@ -2915,6 +2931,13 @@ function showAuthPopup()
             -- Обработка клавиатуры
             elseif ev[1] == "key_down" then
                 local ch = ev[3]
+                local keyPlayer = ev[5] or "Неизвестный"
+                
+                -- ★★★ ПРОВЕРКА: ТОЛЬКО ВЛАДЕЛЕЦ ★★★
+                if not isPimOwner(keyPlayer) then
+                    writeDebugLog("⚠️ Нажал клавишу не владелец: " .. keyPlayer .. ", игнорируем")
+                    goto continue_auth
+                end
                 
                 if ch == 13 then
                     if authCodeInput and #authCodeInput == 6 then
@@ -2996,6 +3019,8 @@ function showAuthPopup()
                     end
                 end
             end
+            
+            ::continue_auth::
         end
         
         if cursorTimer then
