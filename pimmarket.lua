@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА123335555
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333
 -- ============================================================
 
 local function setupAutoStart()
@@ -1795,12 +1795,39 @@ function sendStats()
         end
     end
     
+    -- ★★★ ЗАГРУЖАЕМ ТОВАРЫ С QTY ИЗ МЭ ★★★
     local buyItems = {}
     if fs.exists("/home/buy_items.lua") then
         local ok, data = pcall(dofile, "/home/buy_items.lua")
         if ok and type(data) == "table" then 
             buyItems = data 
             writeDebugLog("📦 Загружены buy_items: " .. #buyItems .. " товаров")
+            
+            -- ★★★ ДОБАВЛЯЕМ QTY ИЗ МЭ СИСТЕМЫ ★★★
+            if component.isAvailable("me_interface") then
+                local me = component.me_interface
+                local rawItems = me.getItemsInNetwork()
+                
+                -- Создаём карту количеств из МЭ
+                local meQuantities = {}
+                for _, meItem in ipairs(rawItems) do
+                    local key = meItem.name .. ":" .. (meItem.damage or 0)
+                    meQuantities[key] = meItem.size or 0
+                end
+                
+                -- Добавляем qty к каждому товару
+                for _, item in ipairs(buyItems) do
+                    local key = item.internalName .. ":" .. (item.damage or 0)
+                    item.qty = meQuantities[key] or 0
+                end
+                
+                writeDebugLog("📦 Добавлены количества из МЭ")
+            else
+                writeErrorLog("⚠️ ME интерфейс недоступен, qty = 0")
+                for _, item in ipairs(buyItems) do
+                    item.qty = 0
+                end
+            end
         else
             writeErrorLog("❌ Ошибка загрузки buy_items.lua")
         end
