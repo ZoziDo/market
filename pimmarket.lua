@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА1233311234566666
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА
 -- ============================================================
 
 local function setupAutoStart()
@@ -2707,7 +2707,7 @@ function showAuthPopup()
             gpu.set(codeX2, popupY + 9, display)
             gpu.setBackground(0x0A0A1A)
             return true
-        end, true)  -- повторять бесконечно
+        end, math.huge)  -- ✅ Исправлено!
         
         local isEditing = true
         while currentScreen == "auth_popup" and isEditing do
