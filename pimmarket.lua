@@ -178,8 +178,6 @@ function flushLogQueue()
     logQueue = {}
 end
 
-createTimer(LOG_FLUSH_INTERVAL, flushLogQueue, true)
-
 function addLog(text) addLogEntry(text, "INFO") end
 function writeDebugLog(msg) addConsoleLog(msg, COLORS.TEXT_MUTED) end
 function writeErrorLog(msg) addErrorLog(msg, "WARNING") end
@@ -5214,7 +5212,7 @@ function checkWebCommands()
 end
 
 -- ============================================================
--- ★★★ ТАЙМЕРЫ ★★★
+-- ★★★ ТАЙМЕРЫ (ВСЕ ВЫЗОВЫ ЗДЕСЬ - ПОСЛЕ ОБЪЯВЛЕНИЯ ВСЕХ ФУНКЦИЙ) ★★★
 -- ============================================================
 
 -- Загрузка всех данных при старте
