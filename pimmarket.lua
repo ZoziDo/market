@@ -1,5 +1,5 @@
 -- ============================================================
--- ★★★ ЗАГОЛОВОК v_1.4.2 ★★★
+-- ★★★ ЗАГОЛОВОК v_1.4.3 ★★★
 -- ============================================================
 local component = require("component")
 local event = require("event")
@@ -12,6 +12,25 @@ local internet = require("internet")
 local math = require("math")
 local os = require("os")
 local shell = require("shell")
+
+-- ============================================================
+-- ★★★ ВРЕМЕННАЯ ОТЛАДКА ★★★
+-- ============================================================
+function debugLog(msg)
+    local file = io.open("/home/debug.log", "a")
+    if file then
+        file:write(os.date("%H:%M:%S") .. " | " .. tostring(msg) .. "\n")
+        file:flush()
+        file:close()
+    end
+end
+
+-- Очищаем лог при старте
+local file = io.open("/home/debug.log", "w")
+if file then
+    file:write("=== DEBUG LOG STARTED ===\n")
+    file:close()
+end
 
 -- ============================================================
 -- ★★★ КОНФИГУРАЦИЯ ★★★
@@ -2698,36 +2717,39 @@ function goToReport()
 end
 
 function goToHelp()
-    -- Отладка
-    print("=== goToHelp() вызвана ===")
+    debugLog("=== goToHelp() вызвана ===")
     
     local agreement = nil
     local ok, err = pcall(function()
+        debugLog("Пытаемся загрузить agreement.lua")
         agreement = dofile("/home/agreement.lua")
+        debugLog("Загрузка завершена")
     end)
     
-    print("ok=" .. tostring(ok))
-    print("agreement=" .. tostring(agreement))
+    debugLog("ok=" .. tostring(ok))
+    debugLog("err=" .. tostring(err))
+    debugLog("agreement=" .. tostring(agreement))
+    
     if agreement then
-        print("type=" .. type(agreement))
-        print("has draw=" .. tostring(type(agreement.draw) == "function"))
-        print("has show=" .. tostring(type(agreement.show) == "function"))
+        debugLog("type=" .. type(agreement))
+        debugLog("has draw=" .. tostring(type(agreement.draw) == "function"))
+        debugLog("has show=" .. tostring(type(agreement.show) == "function"))
     end
-    print("==========================")
     
     -- Проверяем что загрузилось
     if ok and agreement ~= nil then
-        -- Если загрузилась таблица с функциями
         if type(agreement) == "table" and type(agreement.draw) == "function" then
-            -- Показываем соглашение
+            debugLog("✅ agreement загружен, показываем")
             currentScreen = "agreement"
             markDirty()
             
             agreement.draw()
+            debugLog("✅ agreement.draw() выполнен")
             
-            -- Ждём ответа
             if type(agreement.show) == "function" then
+                debugLog("Ждём нажатия кнопки...")
                 local agreed = agreement.show()
+                debugLog("agreed=" .. tostring(agreed))
                 if agreed then
                     playerAgreed = true
                     if cache_players[currentPlayer] then
@@ -2742,13 +2764,19 @@ function goToHelp()
                     goBackToMenu()
                 end
             else
+                debugLog("❌ agreement.show не функция!")
                 goBackToMenu()
             end
             return
+        else
+            debugLog("❌ agreement не таблица или нет draw")
         end
+    else
+        debugLog("❌ agreement не загружен")
     end
     
     -- Если файл не загрузился - показываем заглушку
+    debugLog("Показываем заглушку")
     local w, h = getScreenSize()
     clear()
     drawScreenBorder()
@@ -2771,12 +2799,10 @@ function goToHelp()
     
     currentScreen = "agreement"
     
-    -- Ждём нажатия кнопки или выхода игрока
     while currentScreen == "agreement" do
         local ev = {event.pull(0.5)}
         
         if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
-            -- Игрок ушёл - возвращаемся на экран приветствия
             currentPlayer = nil
             pimOwner = nil
             alreadyAuthorized = false
@@ -2791,7 +2817,6 @@ function goToHelp()
             local y = tonumber(ev[4]) or 0
             local touchPlayer = ev[6] or "Неизвестный"
             
-            -- Только владелец может нажать
             if not isPimOwner(touchPlayer) then
                 goto continue_help
             end
