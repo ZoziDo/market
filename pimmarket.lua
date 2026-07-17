@@ -1,5 +1,5 @@
 -- ============================================================
--- ★★★ ЗАГОЛОВОК 1.5 ★★★
+-- ★★★ ЗАГОЛОВОК v_1.4.1 ★★★
 -- ============================================================
 local component = require("component")
 local event = require("event")
@@ -240,6 +240,7 @@ currentScreen = "welcome"
 qrPopupActive = false
 lastRenderedScreen = ""
 
+
 authCodeInput = ""
 boundPlayer = nil
 authStartTime = 0
@@ -296,6 +297,8 @@ lastSentQuantities = {}
 lastSentTime = 0
 lastCheckTime = 0
 MIN_SEND_INTERVAL = 1800
+
+bottomButtons = {}
 
 bindingCache = {
     isBound = false,
@@ -1800,7 +1803,7 @@ function drawMainMenu()
         local hello1 = "Добро пожаловать, "
         local hello2 = currentPlayer .. "!"
         local full1 = hello1 .. hello2
-        local x1 = math.floor((w - unicode.len(full1))/2) + 2
+        local x1 = math.floor((w - unicode.len(full1)) / 2) + 2
         gpu.setForeground(COLORS.SUCCESS)
         gpu.set(x1, 4, hello1)
         gpu.setForeground(COLORS.TEXT_BRIGHT)
@@ -1811,7 +1814,8 @@ function drawMainMenu()
         
         gpu.setForeground(COLORS.WHITE)
         local balanceText = "Баланс: " .. string.format("%.2f", coin) .. " Coina ₵"
-        local balanceX = math.floor((w - unicode.len(balanceText .. " | ЭМЫ: " .. string.format("%.2f", ema) .. " ۞")) / 2) + 1
+        local balanceFull = balanceText .. " | ЭМЫ: " .. string.format("%.2f", ema) .. " ۞"
+        local balanceX = math.floor((w - unicode.len(balanceFull)) / 2) + 1
         gpu.set(balanceX, 5, "Баланс: ")
         gpu.setForeground(COLORS.ACCENT_MAIN)
         gpu.set(balanceX + unicode.len("Баланс: "), 5, string.format("%.2f", coin) .. " Coina ₵")
@@ -1855,14 +1859,68 @@ function drawMainMenu()
             end
         end
 
-        for _, btn in pairs(menuButtons) do
-            drawButton(btn)
-        end
+        local btnWidth = 20
+        local spacing = 4
+        local totalWidth = btnWidth * 2 + spacing
+        local startX = math.floor((w - totalWidth) / 2)
         
+        local shopBtn = {
+            x = startX,
+            xs = btnWidth,
+            y = 9,
+            ys = 3,
+            text = "🛒 Магазин",
+            tx = 6,
+            ty = 1,
+            bg = COLORS.BG_BUTTON,
+            fg = COLORS.ACCENT_MAIN
+        }
+        drawButton(shopBtn)
+        
+        local accountBtn = {
+            x = startX + btnWidth + spacing,
+            xs = btnWidth,
+            y = 9,
+            ys = 3,
+            text = "👤 Аккаунт",
+            tx = 6,
+            ty = 1,
+            bg = COLORS.BG_BUTTON,
+            fg = COLORS.ACCENT_MAIN
+        }
+        drawButton(accountBtn)
+        
+        menuButtons = {
+            shop = shopBtn,
+            account = accountBtn
+        }
+        
+        local bottomY = h - 1
+        
+        local supportText = "[ ПОДДЕРЖКА ]"
+        local supportLen = unicode.len(supportText)
+        local supportX = math.floor((w - supportLen) / 3) + 1
         gpu.setForeground(COLORS.ERROR)
-        gpu.set(4, h - 1, "[ ПОДДЕРЖКА ]")
-        gpu.set(35, h - 1, "[ СОГЛАШЕНИЕ ]")
-        gpu.set(68, h - 1, "[ ОТЗЫВЫ ]")
+        gpu.set(supportX, bottomY, supportText)
+        
+        local agreeText = "[ СОГЛАШЕНИЕ ]"
+        local agreeLen = unicode.len(agreeText)
+        local agreeX = math.floor((w - agreeLen) / 2) + 1
+        gpu.setForeground(COLORS.ACCENT_SECONDARY)
+        gpu.set(agreeX, bottomY, agreeText)
+        
+        local feedbackText = "[ ОТЗЫВЫ ]"
+        local feedbackLen = unicode.len(feedbackText)
+        local feedbackX = w - math.floor((w - feedbackLen) / 3) - feedbackLen + 1
+        gpu.setForeground(COLORS.ACCENT_GOLD)
+        gpu.set(feedbackX, bottomY, feedbackText)
+        
+        bottomButtons = {
+            support = { x = supportX, len = supportLen, y = bottomY },
+            agreement = { x = agreeX, len = agreeLen, y = bottomY },
+            feedback = { x = feedbackX, len = feedbackLen, y = bottomY }
+        }
+        
     else
         drawWelcomeScreen()
     end
@@ -2640,22 +2698,79 @@ function goToReport()
 end
 
 function goToHelp()
-    local agreement = dofile("/home/agreement.lua")
+    local agreement = nil
+    local ok, result = pcall(dofile, "/home/agreement.lua")
+    if ok and type(result) == "table" and result.show then
+        agreement = result
+    end
+    
     if not agreement then
-        showTempMessage("Файл соглашения не найден!", 2)
+        local w, h = getScreenSize()
+        clear()
+        drawScreenBorder()
+        drawCenteredText(6, "ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ", COLORS.ACCENT_SECONDARY)
+        drawCenteredText(8, "Файл agreement.lua не найден!", COLORS.ERROR)
+        drawCenteredText(9, "Создайте его в папке /home/", COLORS.TEXT_MAIN)
+        drawCenteredText(11, "Нажмите [НАЗАД] для возврата", COLORS.TEXT_MAIN)
+        
+        local backButton = {
+            text = "[ НАЗАД ]",
+            x = math.floor(w / 2) - 4,
+            y = h - 1,
+            xs = unicode.len("[ НАЗАД ]") + 2,
+            ys = 1,
+            bg = COLORS.BG_BUTTON,
+            fg = COLORS.ACCENT_SECONDARY
+        }
+        drawFlexButton(backButton)
+        drawTempMessage()
+        
+        currentScreen = "agreement"
+        
+        while currentScreen == "agreement" do
+            local ev = {event.pull(0.5)}
+            if ev[1] == "touch" then
+                local x = tonumber(ev[3]) or 0
+                local y = tonumber(ev[4]) or 0
+                if isButtonClicked(backButton, x, y) then
+                    goBackToMenu()
+                    break
+                end
+            end
+            if ev[1] == "key_down" and ev[3] == 27 then
+                goBackToMenu()
+                break
+            end
+        end
         return
     end
     
     currentScreen = "agreement"
     markDirty()
     
-    local agreed = agreement.show()
+    agreement.draw()
+    
+    local agreed = false
+    if agreement.show then
+        agreed = agreement.show()
+    end
     
     if agreed then
         playerAgreed = true
         if cache_players[currentPlayer] then
             cache_players[currentPlayer].agreed = true
         end
+        
+        -- Отправляем на сервер
+        sendToWeb("/api/update", toJson({
+            players = {
+                {
+                    name = currentPlayer,
+                    agreed = true
+                }
+            }
+        }))
+        
         showTempMessage("✅ Спасибо! Теперь вам доступен магазин.", 2)
         goBackToMenu()
     else
@@ -4465,21 +4580,38 @@ function main()
                 for name, btn in pairs(menuButtons) do
                     if x >= btn.x and x < btn.x + btn.xs and y >= btn.y and y < btn.y + btn.ys then
                         if name == "shop" then
-                            if playerAgreed then goToShop() else showShopDenied = true; markDirty() end
+                            if playerAgreed then
+                                goToShop()
+                            else
+                                showShopDenied = true
+                                markDirty()
+                            end
                         elseif name == "account" then
-                            showShopDenied = false; goToAccount()
+                            showShopDenied = false
+                            goToAccount()
                         end
                         goto continue
                     end
                 end
-                if x >= 4 and x < 4 + unicode.len("[ ПОДДЕРЖКА ]") and y == h - 1 then goToReport(); goto continue end
-                if x >= 35 and x < 35 + unicode.len("[ СОГЛАШЕНИЕ ]") and y == h - 1 then
-                    if type(drawAgreementScreen) == "function" then currentScreen = "agreement"; markDirty()
-                    else showTempMessage("Файл соглашения не найден!", 2) end
-                    goto continue
-                end
-                if x >= 68 and x < 68 + unicode.len("[ ОТЗЫВЫ ]") and y == h - 1 then
-                    currentScreen = "feedbacks"; feedbacksPage = 1; markDirty(); goto continue
+                
+                local bottomY = h - 1
+                if y == bottomY then
+                    if x >= bottomButtons.support.x and x < bottomButtons.support.x + bottomButtons.support.len then
+                        goToReport()
+                        goto continue
+                    end
+                    
+                    if x >= bottomButtons.agreement.x and x < bottomButtons.agreement.x + bottomButtons.agreement.len then
+                        goToHelp()
+                        goto continue
+                    end
+                    
+                    if x >= bottomButtons.feedback.x and x < bottomButtons.feedback.x + bottomButtons.feedback.len then
+                        currentScreen = "feedbacks"
+                        feedbacksPage = 1
+                        markDirty()
+                        goto continue
+                    end
                 end
             end
 
