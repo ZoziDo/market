@@ -11,7 +11,7 @@ local os = require("os")
 local TIMEZONE_OFFSET = 3 * 3600
 
 -- ============================================================
--- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА АВТОЗАПУСКА12333555
 -- ============================================================
 
 local function setupAutoStart()
@@ -1629,6 +1629,9 @@ function addTransaction(type, playerName, item, qty, value_coin, value_ema)
     end
     saveGlobalStats()
     
+    -- ★★★ ID БУДЕТ ПРИСВОЕН НА СЕРВЕРЕ ★★★
+    -- НЕ ГЕНЕРИРУЕМ ID ЗДЕСЬ!
+    
     local transactionRecord = {
         time = getRealTimeHM(),
         type = type,
@@ -1636,6 +1639,7 @@ function addTransaction(type, playerName, item, qty, value_coin, value_ema)
         qty = qty or 0,
         coin = value_coin or 0,
         ema = value_ema or 0
+        -- id ОТСУТСТВУЕТ — СЕРВЕР ПРИСВОИТ
     }
     
     table.insert(transactions, {
@@ -1692,10 +1696,8 @@ function addTransaction(type, playerName, item, qty, value_coin, value_ema)
         writeErrorLog("⚠️ Некорректное имя игрока при добавлении транзакции: " .. tostring(playerName))
     end
 
-    -- ★★★ ТОЛЬКО ОДИН СПОСОБ ОТПРАВКИ — ЧЕРЕЗ /api/delta ★★★
     local change = {
-        id = "txn_" .. os.time() .. "_" .. math.random(100000, 999999),
-        type = type,  -- "buy" или "sell"
+        type = type,
         data = {
             player = playerName,
             item = item,
@@ -1704,11 +1706,8 @@ function addTransaction(type, playerName, item, qty, value_coin, value_ema)
             ema = value_ema or 0
         }
     }
-    
     writeDebugFile("📤 Добавлено изменение в буфер")
     add_pending_change(change)
-    
-    -- ★★★ ОТПРАВЛЯЕМ СРАЗУ ★★★
     send_pending_changes()
 end
 
@@ -1775,7 +1774,7 @@ function saveBuyItemsWithQty()
 end
 
 
-function sendStats()
+ function sendStats()
     writeDebugLog("📊 sendStats() начат (резервный дамп)")
     
     -- ★★★ ПРОВЕРЯЕМ, ПРОШЛО ЛИ ДОСТАТОЧНО ВРЕМЕНИ ★★★
@@ -1807,6 +1806,7 @@ function sendStats()
     local playerList = {}
     local totalBalance = 0
     local playerCount = 0
+    local allPlayerTransactions = {}
     
     for _ in pairs(players) do playerCount = playerCount + 1 end
     writeDebugLog("📊 Всего игроков в памяти: " .. playerCount)
@@ -1816,18 +1816,42 @@ function sendStats()
         local bal = (data.balance or 0) + (data.emaBalance or 0)
         totalBalance = totalBalance + bal
         
+        if not data.transactionsList then
+            data.transactionsList = {}
+        end
+        
+        if data.transactionsList then
+            for _, t in ipairs(data.transactionsList) do
+                local tCopy = {
+                    time = t.time,
+                    type = t.type,
+                    player = name,
+                    item = t.item,
+                    qty = t.qty,
+                    coin = t.coin,
+                    ema = t.ema
+                }
+                table.insert(allPlayerTransactions, tCopy)
+            end
+        end
+        
         table.insert(playerList, {
             name = name,
             balance = data.balance or 0,
             emaBalance = data.emaBalance or 0,
             transactions = data.transactions or 0,
             banned = data.banned or false,
-            transactionsList = data.transactionsList or {},
+            transactionsList = data.transactionsList,
             site_user = data.site_user
         })
     end
     
+    table.sort(allPlayerTransactions, function(a, b)
+        return a.time > b.time
+    end)
+    
     writeDebugLog("👥 Игроков отправлено: " .. #playerList)
+    writeDebugLog("📋 Всего транзакций отправлено: " .. #allPlayerTransactions)
     globalStats.totalBalance = totalBalance
     saveGlobalStats()
     
@@ -1844,25 +1868,27 @@ function sendStats()
         end
     end
     
-    -- ★★★ ОТПРАВЛЯЕМ ТОЛЬКО ИГРОКОВ, БЕЗ ТОВАРОВ И ТРАНЗАКЦИЙ ★★★
+    -- ★★★ ОТПРАВЛЯЕМ ТОЛЬКО ИГРОКОВ И ТРАНЗАКЦИИ, ТОВАРЫ НЕ ОТПРАВЛЯЕМ ★★★
     local payload = {
         players = playerList,
         admins = admins,
         total = #playerList,
         total_balance = totalBalance,
+        total_transactions = (globalStats.totalBuys or 0) + (globalStats.totalSells or 0),
         total_reports = globalStats.totalReports or 0,
         total_feedbacks = #feedbacksList,
         total_revenue = globalStats.totalRevenue or 0,
         online = 0,
         paused = shopPaused,
         feedbacks = feedbacksList,
-        -- ★★★ ТОВАРЫ И ТРАНЗАКЦИИ НЕ ОТПРАВЛЯЕМ ★★★
+        transactions = allPlayerTransactions,
+        -- ★★★ ТОВАРЫ НЕ ОТПРАВЛЯЕМ — ОНИ УПРАВЛЯЮТСЯ ТОЛЬКО С САЙТА ★★★
         system_info = sysInfo
     }
     
     local jsonData = toJson(payload)
     writeDebugLog("📤 Размер JSON: " .. #jsonData .. " байт")
-    writeDebugLog("📤 Отправлены данные: " .. #playerList .. " игроков")
+    writeDebugLog("📤 Отправлены данные: " .. #playerList .. " игроков, " .. #allPlayerTransactions .. " транзакций")
     
     sendToWeb("/api/update", jsonData)
 end
