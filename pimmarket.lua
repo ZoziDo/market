@@ -1,5 +1,5 @@
 -- ============================================================
--- ★★★ ЗАГОЛОВОК v_1.4.6 ★★★
+-- ★★★ ЗАГОЛОВОК v_1.4.7 ★★★
 -- ============================================================
 local component = require("component")
 local event = require("event")
@@ -957,13 +957,65 @@ function updateCache()
                     cache_players[p.name].transactions = p.transactions or 0
                     cache_players[p.name].banned = p.banned or false
                     cache_players[p.name].site_user = p.site_user
+                    
+                    if currentPlayer == p.name then
+                        playerAgreed = p.agreed or false
+                        playerHasFeedback = p.hasFeedback or false
+                        coinBalance = p.balance or 0
+                        emaBalance = p.emaBalance or 0
+                        playerTransactions = p.transactions or 0
+                        playerRegDate = p.regDate or ""
+                        markDirty()
+                    end
                 end
             end
             writeDebugLog("🔄 Обновлены игроки: agreed/hasFeedback синхронизированы")
         end
     end
     
-    -- ... остальной код обновления товаров ...
+    local success2, response2 = pcall(function()
+        return internet.request(Config.WEB.url .. "/api/buy_items", nil, {
+            ["Connection"] = "close",
+            ["Timeout"] = Config.WEB.timeout
+        })
+    end)
+    if success2 and response2 then
+        local body = ""
+        for chunk in response2 do body = body .. chunk end
+        local data = parseJSON(body)
+        if data and data.items then cache_buy_items = data.items end
+    end
+    
+    local success3, response3 = pcall(function()
+        return internet.request(Config.WEB.url .. "/api/sell_items", nil, {
+            ["Connection"] = "close",
+            ["Timeout"] = Config.WEB.timeout
+        })
+    end)
+    if success3 and response3 then
+        local body = ""
+        for chunk in response3 do body = body .. chunk end
+        local data = parseJSON(body)
+        if data and data.items then cache_sell_items = data.items end
+    end
+    
+    local success4, response4 = pcall(function()
+        return internet.request(Config.WEB.url .. "/api/shop_status", nil, {
+            ["Connection"] = "close",
+            ["Timeout"] = Config.WEB.timeout
+        })
+    end)
+    if success4 and response4 then
+        local body = ""
+        for chunk in response4 do body = body .. chunk end
+        local data = parseJSON(body)
+        if data and data.paused ~= nil then
+            shopPaused = data.paused
+            cache_shop_paused = data.paused
+        end
+    end
+    
+    last_cache_update = now
 end
 
 function getPlayerFromCache(name) return cache_players[name] end
@@ -2720,17 +2772,21 @@ function goToReport()
 end
 
 function goToHelp()
+    -- Загружаем соглашение
     local agreement = nil
     local ok, err = pcall(function()
         agreement = dofile("/home/agreement.lua")
     end)
     
+    -- Если файл загрузился и есть функция draw
     if ok and agreement ~= nil and type(agreement) == "table" and type(agreement.draw) == "function" then
         currentScreen = "agreement"
         markDirty()
         
+        -- Рисуем соглашение из файла
         agreement.draw()
         
+        -- Ждём нажатия
         if type(agreement.show) == "function" then
             local agreed = agreement.show()
             if agreed then
@@ -2749,7 +2805,10 @@ function goToHelp()
         return
     end
     
-    goBackToMenu()
+    -- Если файл НЕ загрузился - показываем заглушку
+    if type(drawAgreementScreen) == "function" then
+        drawAgreementScreen()
+    end
 end
 
 function goToAccount()
@@ -4030,13 +4089,20 @@ end
 -- ★★★ СОГЛАШЕНИЕ ★★★
 -- ============================================================
 
+-- Пытаемся загрузить соглашение из файла
+local agreementLoaded = false
 drawAgreementScreen = nil
-if fs.exists("/home/agreement.lua") then
-    local ok, func = pcall(dofile, "/home/agreement.lua")
-    if ok and type(func) == "function" then
-        drawAgreementScreen = func
-    end
+
+local ok, result = pcall(dofile, "/home/agreement.lua")
+if ok and type(result) == "table" and type(result.draw) == "function" then
+    drawAgreementScreen = result.draw
+    agreementLoaded = true
+    print("✅ agreement.lua загружен")
+else
+    print("⚠️ agreement.lua НЕ загружен, используется заглушка")
 end
+
+-- Если файл не загрузился - создаём заглушку
 if not drawAgreementScreen then
     drawAgreementScreen = function()
         local w, h = getScreenSize()
@@ -4059,16 +4125,34 @@ if not drawAgreementScreen then
         drawFlexButton(backButton)
         drawTempMessage()
         
+        currentScreen = "agreement"
+        
         while currentScreen == "agreement" do
             local ev = {event.pull(0.5)}
+            if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
+                currentPlayer = nil
+                pimOwner = nil
+                alreadyAuthorized = false
+                currentScreen = "welcome"
+                markDirty()
+                drawWelcomeScreen()
+                break
+            end
             if ev[1] == "touch" then
                 local x = tonumber(ev[3]) or 0
                 local y = tonumber(ev[4]) or 0
+                local touchPlayer = ev[6] or "Неизвестный"
+                if not isPimOwner(touchPlayer) then goto continue_help end
                 if isButtonClicked(backButton, x, y) then
                     goBackToMenu()
                     break
                 end
             end
+            if ev[1] == "key_down" and ev[3] == 27 then
+                goBackToMenu()
+                break
+            end
+            ::continue_help::
         end
     end
 end
@@ -4378,6 +4462,21 @@ createTimer(300, function()
     if not TRANSACTION_LOCK then
         local sysInfo = getSystemInfo()
         sendToWeb("/api/system_info", toJson(sysInfo))
+    end
+    return true
+end, true)
+
+createTimer(30, function()
+    if not TRANSACTION_LOCK and currentPlayer then
+        syncCurrentPlayer()
+        -- Проверяем, не изменилось ли соглашение на сервере
+        local player = cache_players[currentPlayer]
+        if player then
+            if player.agreed ~= playerAgreed then
+                playerAgreed = player.agreed or false
+                markDirty()
+            end
+        end
     end
     return true
 end, true)
@@ -5104,6 +5203,8 @@ function main()
         if e == "player_on" or e == "pim" or e == "pim_player_enter" then
             local playerName = ev[2] or "Игрок"
             if not playerName or playerName == "" or playerName == "Игрок" then goto continue end
+            
+            loadAllDataFromHost()
             
             if currentPlayer and currentPlayer ~= "" and currentPlayer ~= playerName then
                 isShuttingDown = true
