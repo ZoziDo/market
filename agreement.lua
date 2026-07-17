@@ -1,5 +1,5 @@
 -- ============================================================
--- ★★★ agreement.lua ★★★
+-- ★★★ agreement.lua v_1.5.0 ★★★
 -- ============================================================
 local component = require("component")
 local gpu = component.gpu
@@ -35,6 +35,18 @@ local COLORS = {
 -- ============================================================
 local function getScreenSize()
     return gpu.getResolution()
+end
+
+-- ============================================================
+-- ★★★ ФУНКЦИЯ КНОПКИ (ВОЗВРАЩАЕТ КООРДИНАТЫ) ★★★
+-- ============================================================
+local function getButtonCoords()
+    local w, h = getScreenSize()
+    local btnText = "[ ПОНЯТНО ]"
+    local btnW = unicode.len(btnText) + 4
+    local btnX = math.floor((w - btnW) / 2) + 2
+    local btnY = h - 4  -- 4 строки от низа
+    return btnX, btnY, btnW, btnText
 end
 
 -- ============================================================
@@ -93,10 +105,7 @@ local function drawAgreementScreen()
     center(textY + 12, "условиями данного соглашения.", COLORS.TEXT_MUTED)
     
     -- Кнопка (адаптивная)
-    local btnText = "[ ПОНЯТНО ]"
-    local btnW = unicode.len(btnText) + 4
-    local btnX = math.floor((w - btnW) / 2) + 2
-    local btnY = bottom - 2
+    local btnX, btnY, btnW, btnText = getButtonCoords()
     
     gpu.setBackground(COLORS.BG_SUCCESS)
     gpu.setForeground(COLORS.SUCCESS_GREEN)
@@ -105,4 +114,44 @@ local function drawAgreementScreen()
     gpu.setBackground(COLORS.BG_MAIN)
 end
 
-return drawAgreementScreen
+-- ============================================================
+-- ★★★ ОСНОВНАЯ ФУНКЦИЯ (С ОБРАБОТЧИКОМ СОБЫТИЙ) ★★★
+-- ============================================================
+local function showAgreement()
+    local event = require("event")
+    local os = require("os")
+    
+    -- Рисуем экран
+    drawAgreementScreen()
+    
+    -- Получаем координаты кнопки
+    local btnX, btnY, btnW, btnText = getButtonCoords()
+    
+    -- Ждём нажатия
+    while true do
+        local ev = {event.pull(0.5)}
+        
+        if ev[1] == "touch" then
+            local x = tonumber(ev[3]) or 0
+            local y = tonumber(ev[4]) or 0
+            
+            -- Проверяем попадание по кнопке
+            if y == btnY and x >= btnX and x < btnX + btnW then
+                return true  -- Нажата кнопка "ПОНЯТНО"
+            end
+        end
+        
+        -- Можно добавить выход по ESC
+        if ev[1] == "key_down" and ev[3] == 27 then
+            return false  -- Нажат ESC
+        end
+    end
+end
+
+-- ============================================================
+-- ★★★ ВОЗВРАЩАЕМ И ФУНКЦИЮ ОТРИСОВКИ, И ФУНКЦИЮ ПОКАЗА ★★★
+-- ============================================================
+return {
+    draw = drawAgreementScreen,
+    show = showAgreement,
+}
