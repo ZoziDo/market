@@ -1,5 +1,5 @@
 -- ============================================================
--- 1. REQUIRE v_1.4.2
+-- 1. REQUIRE v_1.4.4
 -- ============================================================
 local component = require("component")
 local event = require("event")
@@ -3967,17 +3967,28 @@ end
 -- ============================================================
 -- 24. SHOP
 -- ============================================================
+-- ★★★ ЗАГРУЗКА ТОВАРОВ С ЗАЩИТОЙ ★★★
 shopData = safeDoFile(SHOP_ITEMS_FILE)
+if type(shopData) ~= "table" then
+    shopData = {}
+end
 sellItems = shopData.sellItems or {}
 vanillaItems = shopData.vanillaItems or {}
 
 buyItemsData = safeDoFile(BUY_ITEMS_FILE)
+if type(buyItemsData) ~= "table" then
+    buyItemsData = {}
+end
 buyItemMap = {}
 for _, item in ipairs(buyItemsData) do
-    local dmg = item.damage or 0
-    local key = item.internalName .. ":" .. dmg
-    buyItemMap[key] = item
+    if type(item) == "table" then
+        local dmg = item.damage or 0
+        local key = item.internalName .. ":" .. dmg
+        buyItemMap[key] = item
+    end
 end
+
+shopItems = shopItems or {}
 
 function loadBuyItems(forceRefresh)
     if not forceRefresh and cachedBuyItems and (os.clock() - cacheTimestamp) < CONSTANTS.CACHE_TTL then
