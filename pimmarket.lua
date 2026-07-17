@@ -1,5 +1,5 @@
 -- ============================================================
--- ★★★ ЗАГОЛОВОК v_1.4.1 ★★★
+-- ★★★ ЗАГОЛОВОК v_1.4.2 ★★★
 -- ============================================================
 local component = require("component")
 local event = require("event")
@@ -2698,83 +2698,116 @@ function goToReport()
 end
 
 function goToHelp()
+    -- Отладка
+    print("=== goToHelp() вызвана ===")
+    
     local agreement = nil
-    local ok, result = pcall(dofile, "/home/agreement.lua")
-    if ok and type(result) == "table" and result.show then
-        agreement = result
+    local ok, err = pcall(function()
+        agreement = dofile("/home/agreement.lua")
+    end)
+    
+    print("ok=" .. tostring(ok))
+    print("agreement=" .. tostring(agreement))
+    if agreement then
+        print("type=" .. type(agreement))
+        print("has draw=" .. tostring(type(agreement.draw) == "function"))
+        print("has show=" .. tostring(type(agreement.show) == "function"))
+    end
+    print("==========================")
+    
+    -- Проверяем что загрузилось
+    if ok and agreement ~= nil then
+        -- Если загрузилась таблица с функциями
+        if type(agreement) == "table" and type(agreement.draw) == "function" then
+            -- Показываем соглашение
+            currentScreen = "agreement"
+            markDirty()
+            
+            agreement.draw()
+            
+            -- Ждём ответа
+            if type(agreement.show) == "function" then
+                local agreed = agreement.show()
+                if agreed then
+                    playerAgreed = true
+                    if cache_players[currentPlayer] then
+                        cache_players[currentPlayer].agreed = true
+                    end
+                    sendToWeb("/api/update", toJson({
+                        players = {{ name = currentPlayer, agreed = true }}
+                    }))
+                    showTempMessage("✅ Спасибо! Теперь вам доступен магазин.", 2)
+                    goBackToMenu()
+                else
+                    goBackToMenu()
+                end
+            else
+                goBackToMenu()
+            end
+            return
+        end
     end
     
-    if not agreement then
-        local w, h = getScreenSize()
-        clear()
-        drawScreenBorder()
-        drawCenteredText(6, "ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ", COLORS.ACCENT_SECONDARY)
-        drawCenteredText(8, "Файл agreement.lua не найден!", COLORS.ERROR)
-        drawCenteredText(9, "Создайте его в папке /home/", COLORS.TEXT_MAIN)
-        drawCenteredText(11, "Нажмите [НАЗАД] для возврата", COLORS.TEXT_MAIN)
+    -- Если файл не загрузился - показываем заглушку
+    local w, h = getScreenSize()
+    clear()
+    drawScreenBorder()
+    drawCenteredText(6, "ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ", COLORS.ACCENT_SECONDARY)
+    drawCenteredText(8, "Файл agreement.lua не найден!", COLORS.ERROR)
+    drawCenteredText(9, "Создайте его в папке /home/", COLORS.TEXT_MAIN)
+    drawCenteredText(11, "Нажмите [НАЗАД] для возврата", COLORS.TEXT_MAIN)
+    
+    local backButton = {
+        text = "[ НАЗАД ]",
+        x = math.floor(w / 2) - 4,
+        y = h - 1,
+        xs = unicode.len("[ НАЗАД ]") + 2,
+        ys = 1,
+        bg = COLORS.BG_BUTTON,
+        fg = COLORS.ACCENT_SECONDARY
+    }
+    drawFlexButton(backButton)
+    drawTempMessage()
+    
+    currentScreen = "agreement"
+    
+    -- Ждём нажатия кнопки или выхода игрока
+    while currentScreen == "agreement" do
+        local ev = {event.pull(0.5)}
         
-        local backButton = {
-            text = "[ НАЗАД ]",
-            x = math.floor(w / 2) - 4,
-            y = h - 1,
-            xs = unicode.len("[ НАЗАД ]") + 2,
-            ys = 1,
-            bg = COLORS.BG_BUTTON,
-            fg = COLORS.ACCENT_SECONDARY
-        }
-        drawFlexButton(backButton)
-        drawTempMessage()
+        if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
+            -- Игрок ушёл - возвращаемся на экран приветствия
+            currentPlayer = nil
+            pimOwner = nil
+            alreadyAuthorized = false
+            currentScreen = "welcome"
+            markDirty()
+            drawWelcomeScreen()
+            break
+        end
         
-        currentScreen = "agreement"
-        
-        while currentScreen == "agreement" do
-            local ev = {event.pull(0.5)}
-            if ev[1] == "touch" then
-                local x = tonumber(ev[3]) or 0
-                local y = tonumber(ev[4]) or 0
-                if isButtonClicked(backButton, x, y) then
-                    goBackToMenu()
-                    break
-                end
+        if ev[1] == "touch" then
+            local x = tonumber(ev[3]) or 0
+            local y = tonumber(ev[4]) or 0
+            local touchPlayer = ev[6] or "Неизвестный"
+            
+            -- Только владелец может нажать
+            if not isPimOwner(touchPlayer) then
+                goto continue_help
             end
-            if ev[1] == "key_down" and ev[3] == 27 then
+            
+            if isButtonClicked(backButton, x, y) then
                 goBackToMenu()
                 break
             end
         end
-        return
-    end
-    
-    currentScreen = "agreement"
-    markDirty()
-    
-    agreement.draw()
-    
-    local agreed = false
-    if agreement.show then
-        agreed = agreement.show()
-    end
-    
-    if agreed then
-        playerAgreed = true
-        if cache_players[currentPlayer] then
-            cache_players[currentPlayer].agreed = true
+        
+        if ev[1] == "key_down" and ev[3] == 27 then
+            goBackToMenu()
+            break
         end
         
-        -- Отправляем на сервер
-        sendToWeb("/api/update", toJson({
-            players = {
-                {
-                    name = currentPlayer,
-                    agreed = true
-                }
-            }
-        }))
-        
-        showTempMessage("✅ Спасибо! Теперь вам доступен магазин.", 2)
-        goBackToMenu()
-    else
-        goBackToMenu()
+        ::continue_help::
     end
 end
 
