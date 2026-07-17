@@ -1,5 +1,5 @@
 -- ============================================================
--- 1. REQUIRE v_1.4.4
+-- 1. REQUIRE v_1.4.5
 -- ============================================================
 local component = require("component")
 local event = require("event")
@@ -2595,7 +2595,7 @@ function performBuy()
     local totalCoin = (item.priceCoin or 0) * qty
     local totalEma = (item.priceEma or 0) * qty
     
-    -- ★★★ ИСПРАВЛЕННАЯ ПРОВЕРКА БАЛАНСА ★★★
+    -- ★★★ ИСПРАВЛЕННАЯ ПРОВЕРКА БАЛАНСА — ИСПОЛЬЗУЕМ ЛОКАЛЬНЫЕ ПЕРЕМЕННЫЕ ★★★
     local currentCoin = coinBalance or 0
     local currentEma = emaBalance or 0
     
