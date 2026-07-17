@@ -1,5 +1,5 @@
 -- ============================================================
--- ★★★ ЗАГОЛОВОК ★★★
+-- ★★★ ЗАГОЛОВОК 1.5 ★★★
 -- ============================================================
 local component = require("component")
 local event = require("event")
@@ -2640,38 +2640,26 @@ function goToReport()
 end
 
 function goToHelp()
+    local agreement = dofile("/home/agreement.lua")
+    if not agreement then
+        showTempMessage("Файл соглашения не найден!", 2)
+        return
+    end
+    
     currentScreen = "agreement"
-    if type(drawAgreementScreen) == "function" then
-        markDirty()
-    else
-        local w, h = getScreenSize()
-        drawCenteredText(10, "СОГЛАШЕНИЕ НЕ ЗАГРУЖЕНО", COLORS.ERROR)
-        drawCenteredText(12, "Файл agreement.lua отсутствует", COLORS.TEXT_MAIN)
-        drawCenteredText(14, "Нажмите [НАЗАД] для возврата", COLORS.TEXT_MAIN)
-        
-        local backButton = {
-            text = "[ НАЗАД ]",
-            x = math.floor(w / 2) - 4,
-            y = h - 1,
-            xs = unicode.len("[ НАЗАД ]") + 2,
-            ys = 1,
-            bg = COLORS.BG_BUTTON,
-            fg = COLORS.ACCENT_SECONDARY
-        }
-        drawFlexButton(backButton)
-        drawTempMessage()
-        
-        while currentScreen == "agreement" do
-            local ev = {event.pull(0.5)}
-            if ev[1] == "touch" then
-                local x = tonumber(ev[3]) or 0
-                local y = tonumber(ev[4]) or 0
-                if isButtonClicked(backButton, x, y) then
-                    goBackToMenu()
-                    break
-                end
-            end
+    markDirty()
+    
+    local agreed = agreement.show()
+    
+    if agreed then
+        playerAgreed = true
+        if cache_players[currentPlayer] then
+            cache_players[currentPlayer].agreed = true
         end
+        showTempMessage("✅ Спасибо! Теперь вам доступен магазин.", 2)
+        goBackToMenu()
+    else
+        goBackToMenu()
     end
 end
 
