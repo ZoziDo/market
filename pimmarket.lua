@@ -1,5 +1,5 @@
 -- ============================================
--- КОНФИГУРАЦИЯ1126
+-- КОНФИГУРАЦИЯ112
 -- ============================================
 local component = require("component")
 local event = require("event")
@@ -272,9 +272,23 @@ function PimManager.new()
 end
 
 function PimManager:hasPlayerOnPlate()
-    if not self.pim then return false end
-    local ok, size = pcall(self.pim.getInventorySize, self.pim)
-    if not ok then return false end
+    if not self.pim then
+        logError("PIM не найден!", "hasPlayerOnPlate")
+        return false
+    end
+    
+    -- ПРАВИЛЬНЫЙ вызов - без аргументов!
+    local ok, size = pcall(self.pim.getInventorySize)
+    if not ok then
+        logError("Ошибка вызова getInventorySize: " .. tostring(size), "hasPlayerOnPlate")
+        return false
+    end
+    
+    -- Логируем размер для отладки
+    if size > 0 then
+        logState("PIM_SIZE", size)
+    end
+    
     return size > 0
 end
 
@@ -289,12 +303,12 @@ function PimManager:checkLoop()
     if not self.monitorRunning then return end
     
     local currentState = self:hasPlayerOnPlate()
-    logState("PIM check", currentState .. " (previous: " .. tostring(self.hasPlayer) .. ")")
+    logState("PIM check", tostring(currentState) .. " (previous: " .. tostring(self.hasPlayer) .. ")")
     
     if currentState ~= self.hasPlayer then
         if currentState then
             self.hasPlayer = true
-            logEvent("pim_occupied", "Игрок встал на PIM")
+            logEvent("pim_occupied", "Игрок встал на PIM (размер: " .. tostring(currentState) .. ")")
             event.signal("pim_occupied")
         else
             logEvent("pim_free", "Игрок сошёл с PIM, начинаем антидребезг")
@@ -325,38 +339,8 @@ end
 -- ============================================
 -- ВОТ ЭТУ СТРОКУ НУЖНО ДОБАВИТЬ! (СОЗДАНИЕ ЭКЗЕМПЛЯРА)
 -- ============================================
+
 local pimManager = PimManager.new()
-
--- ============================================
--- ИНИЦИАЛИЗАЦИЯ (ТЕПЕРЬ pimManager СУЩЕСТВУЕТ)
--- ============================================
-logAction("PROGRAM_START", "Инициализация магазина")
-logState("PIM_AVAILABLE", pimManager.pim ~= nil)  -- <-- ТЕПЕРЬ РАБОТАЕТ
-
-gpu.setResolution(80, 25)
-gpu.setBackground(colors.bg_main)
-
-logAction("PIM_MONITOR", "Запуск мониторинга PIM")
-pimManager:startMonitoring()  -- <-- ТЕПЕРЬ РАБОТАЕТ
-
-os.sleep(0.2)
-
-local hasPlayer = pimManager:hasPlayerOnPlate()  -- <-- ТЕПЕРЬ РАБОТАЕТ
-logState("INITIAL_PLAYER_STATE", hasPlayer)
-
-if hasPlayer then
-    logEvent("INIT", "Игрок уже на PIM при запуске")
-    createSession("Игрок")
-    currentScreen = "menu"
-    drawMainMenu()
-    showTempMessage("Добро пожаловать!", 2)
-else
-    logEvent("INIT", "PIM свободен, показываем экран приветствия")
-    currentScreen = "idle"
-    drawIdleScreen()
-end
-
-logAction("PROGRAM_READY", "Магазин готов к работе")
 
 -- ============================================
 -- СЕССИЯ ИГРОКА
@@ -575,73 +559,8 @@ local function updateSelectorDisplay(item)
 end
 
 -- ============================================
--- ЗАГРУЗКА ПРЕДМЕТОВ
+-- UI ФУНКЦИИ
 -- ============================================
-local function loadBuyItems()
-    if not component.isAvailable("me_interface") then return end
-    local me = component.me_interface
-    local rawItems = me.getItemsInNetwork()
-    local tempShopItems = {}
-    
-    for _, meItem in ipairs(rawItems) do
-        local name = meItem.name
-        if blacklist[name] then goto continue end
-        local qty = meItem.size or 0
-        if qty == 0 then goto continue end
-
-        local damage = meItem.damage or 0
-        local mapKey = name .. ":" .. damage
-        local mapping = buyItemMap[mapKey]
-        if not mapping then goto continue end
-
-        local displayName = mapping.displayName
-        local priceCoin = mapping.price_coin or mapping.price or 0
-        local priceEma = mapping.price_ema or 0
-        if priceCoin <= 0 and priceEma <= 0 then goto continue end
-
-        local key = name .. ":" .. damage
-        if tempShopItems[key] then
-            tempShopItems[key].qty = tempShopItems[key].qty + qty
-        else
-            tempShopItems[key] = {
-                internalName = name,
-                displayName = displayName,
-                qty = qty,
-                priceCoin = priceCoin,
-                priceEma = priceEma,
-                damage = damage,
-                canBuy = true
-            }
-        end
-        ::continue::
-    end
-
-    shopItems = {}
-    for key, itemData in pairs(tempShopItems) do
-        table.insert(shopItems, itemData)
-    end
-
-    table.sort(shopItems, function(a, b)
-        return sortableName(a.displayName) < sortableName(b.displayName)
-    end)
-end
-
-local function loadSellItems()
-    shopItems = {}
-    for _, item in ipairs(sellItems) do
-        local internal = item.internalName or item.name
-        if internal then
-            table.insert(shopItems, {
-                displayName = item.displayName or item.name or internal,
-                internalName = internal,
-                qty = item.qty or 0,
-                price = item.price or 0,
-                damage = item.damage or 0
-            })
-        end
-    end
-end
-
 -- ============================================
 -- UI ФУНКЦИИ
 -- ============================================
@@ -711,6 +630,11 @@ local function drawIdleScreen()
     drawCenteredText(19, "━━━━━━━━━━━━━━━━━━━", colors.accent_main)
     gpu.setForeground(colors.text_main)
     drawCenteredText(22, "--===============|VIP SHOP|===============--", colors.text_main)
+    
+    -- Кнопка "ТЕСТ PIM" на экране приветствия
+    local testBtn = {x=35, xs=10, y=24, ys=1, text="ТЕСТ PIM", tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main}
+    drawFlexButton(testBtn)
+    
     drawTempMessage()
 end
 
@@ -769,7 +693,7 @@ local function drawMainMenu()
     local accountBtn = {x=32, xs=20, y=16, ys=3, text="👤 Аккаунт", tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main}
     drawButton(accountBtn)
     
-    -- Кнопка "Логи" (НОВАЯ)
+    -- Кнопка "Логи"
     local logBtn = {x=32, xs=20, y=22, ys=3, text="📋 Логи", tx=6, ty=1, bg=colors.bg_button, fg=colors.text_main}
     drawButton(logBtn)
     
@@ -1566,6 +1490,74 @@ local function drawInventoryFullPopup()
 end
 
 -- ============================================
+-- ЗАГРУЗКА ПРЕДМЕТОВ
+-- ============================================
+local function loadBuyItems()
+    if not component.isAvailable("me_interface") then return end
+    local me = component.me_interface
+    local rawItems = me.getItemsInNetwork()
+    local tempShopItems = {}
+    
+    for _, meItem in ipairs(rawItems) do
+        local name = meItem.name
+        if blacklist[name] then goto continue end
+        local qty = meItem.size or 0
+        if qty == 0 then goto continue end
+
+        local damage = meItem.damage or 0
+        local mapKey = name .. ":" .. damage
+        local mapping = buyItemMap[mapKey]
+        if not mapping then goto continue end
+
+        local displayName = mapping.displayName
+        local priceCoin = mapping.price_coin or mapping.price or 0
+        local priceEma = mapping.price_ema or 0
+        if priceCoin <= 0 and priceEma <= 0 then goto continue end
+
+        local key = name .. ":" .. damage
+        if tempShopItems[key] then
+            tempShopItems[key].qty = tempShopItems[key].qty + qty
+        else
+            tempShopItems[key] = {
+                internalName = name,
+                displayName = displayName,
+                qty = qty,
+                priceCoin = priceCoin,
+                priceEma = priceEma,
+                damage = damage,
+                canBuy = true
+            }
+        end
+        ::continue::
+    end
+
+    shopItems = {}
+    for key, itemData in pairs(tempShopItems) do
+        table.insert(shopItems, itemData)
+    end
+
+    table.sort(shopItems, function(a, b)
+        return sortableName(a.displayName) < sortableName(b.displayName)
+    end)
+end
+
+local function loadSellItems()
+    shopItems = {}
+    for _, item in ipairs(sellItems) do
+        local internal = item.internalName or item.name
+        if internal then
+            table.insert(shopItems, {
+                displayName = item.displayName or item.name or internal,
+                internalName = internal,
+                qty = item.qty or 0,
+                price = item.price or 0,
+                damage = item.damage or 0
+            })
+        end
+    end
+end
+
+-- ============================================
 -- ЛОГИКА ПОКУПКИ/ПРОДАЖИ
 -- ============================================
 local function performBuy()
@@ -1954,6 +1946,51 @@ local function refreshCurrentScreen()
         drawMainMenu()
     end
 end
+
+-- ============================================
+-- ИНИЦИАЛИЗАЦИЯ
+-- ============================================
+logAction("PROGRAM_START", "Инициализация магазина")
+logState("PIM_AVAILABLE", pimManager.pim ~= nil)
+
+-- ОТЛАДКА: выводим информацию о PIM в консоль
+if pimManager.pim then
+    print("PIM найден! Адрес: " .. tostring(pimManager.pim))
+    local ok, size = pcall(pimManager.pim.getInventorySize)
+    if ok then
+        print("Размер PIM: " .. tostring(size))
+    else
+        print("Ошибка получения размера PIM: " .. tostring(size))
+    end
+else
+    print("ВНИМАНИЕ: PIM не найден! Проверьте наличие PIM-плиты.")
+end
+
+gpu.setResolution(80, 25)
+gpu.setBackground(colors.bg_main)
+
+logAction("PIM_MONITOR", "Запуск мониторинга PIM")
+pimManager:startMonitoring()
+
+os.sleep(0.2)
+
+local hasPlayer = pimManager:hasPlayerOnPlate()
+logState("INITIAL_PLAYER_STATE", hasPlayer)
+print("Игрок на PIM: " .. tostring(hasPlayer))  -- ОТЛАДКА
+
+if hasPlayer then
+    logEvent("INIT", "Игрок уже на PIM при запуске")
+    createSession("Игрок")
+    currentScreen = "menu"
+    drawMainMenu()
+    showTempMessage("Добро пожаловать!", 2)
+else
+    logEvent("INIT", "PIM свободен, показываем экран приветствия")
+    currentScreen = "idle"
+    drawIdleScreen()
+end
+
+logAction("PROGRAM_READY", "Магазин готов к работе")
 
 
 -- ============================================
