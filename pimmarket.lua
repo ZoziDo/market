@@ -1,5 +1,5 @@
 -- ============================================
--- КОНФИГУРАЦИЯ112
+-- КОНФИГУРАЦИЯ1125
 -- ============================================
 local component = require("component")
 local event = require("event")
@@ -11,6 +11,89 @@ local computer = require("computer")
 local fs = require("filesystem")
 local shell = require("shell")
 local os = require("os")  -- Добавить эту строку!
+
+-- ============================================
+-- СИСТЕМА ЛОГИРОВАНИЯ
+-- ============================================
+local logFile = "/home/shop_log.txt"
+
+local function writeLog(message)
+    local timestamp = os.date("%Y-%m-%d %H:%M:%S")
+    local logMessage = "[" .. timestamp .. "] " .. message .. "\n"
+    
+    local file, err = io.open(logFile, "a")
+    if file then
+        file:write(logMessage)
+        file:close()
+    else
+        print("Ошибка записи лога: " .. tostring(err))
+    end
+end
+
+local function logAction(action, details)
+    writeLog("ACTION: " .. action .. " | " .. details)
+end
+
+local function logState(state, value)
+    writeLog("STATE: " .. state .. " = " .. tostring(value))
+end
+
+local function logEvent(event, data)
+    writeLog("EVENT: " .. event .. " | " .. data)
+end
+
+local function logError(error, location)
+    writeLog("ERROR: " .. error .. " | LOCATION: " .. location)
+end
+
+-- Функция показа логов
+local function showLogs()
+    if not fs.exists(logFile) then
+        showTempMessage("Логов пока нет", 2)
+        return
+    end
+    
+    local file = io.open(logFile, "r")
+    if not file then
+        showTempMessage("Не могу открыть лог-файл", 2)
+        return
+    end
+    
+    local lines = {}
+    for line in file:lines() do
+        table.insert(lines, line)
+        if #lines > 20 then
+            table.remove(lines, 1)
+        end
+    end
+    file:close()
+    
+    clear()
+    drawScreenBorder()
+    drawCenteredText(2, "ПОСЛЕДНИЕ 20 СТРОК ЛОГА", colors.accent_secondary)
+    
+    for i, line in ipairs(lines) do
+        gpu.setForeground(colors.text_main)
+        gpu.set(3, 3 + i, unicode.sub(line, 1, 75))
+    end
+    
+    local backBtn = {x=37, y=24, xs=12, ys=1, text="[ НАЗАД ]", bg=colors.bg_button, fg=colors.accent_secondary}
+    drawFlexButton(backBtn)
+    drawTempMessage()
+    
+    -- Ожидаем нажатия
+    while true do
+        local ev = {event.pull()}
+        if ev[1] == "touch" then
+            local x, y = ev[3], ev[4]
+            if isButtonClicked(backBtn, x, y) then
+                break
+            end
+        end
+    end
+    
+    drawMainMenu()
+end
 
 -- ============================================
 -- ЦВЕТА
@@ -210,26 +293,26 @@ function PimManager:checkLoop()
     if not self.monitorRunning then return end
     
     local currentState = self:hasPlayerOnPlate()
+    logState("PIM check", currentState .. " (previous: " .. tostring(self.hasPlayer) .. ")")
     
     if currentState ~= self.hasPlayer then
         if currentState then
-            -- Игрок появился
             self.hasPlayer = true
-            -- Отправляем событие напрямую в главный цикл
+            logEvent("pim_occupied", "Игрок встал на PIM")
             event.signal("pim_occupied")
         else
-            -- Игрок исчез - антидребезг
+            logEvent("pim_free", "Игрок сошёл с PIM, начинаем антидребезг")
             os.sleep(self.debounceTime)
-            -- Двойная проверка
             if not self:hasPlayerOnPlate() then
                 self.hasPlayer = false
-                -- Отправляем событие напрямую в главный цикл
+                logEvent("pim_free", "Игрок действительно ушёл (подтверждено)")
                 event.signal("pim_free")
+            else
+                logEvent("pim_free", "Ложное срабатывание - игрок вернулся")
             end
         end
     end
     
-    -- Планируем следующую проверку
     self.checkTimer = event.timer(0.1, function()
         self:checkLoop()
     end)
@@ -255,11 +338,14 @@ local session = {
 local function createSession(playerName)
     session.active = true
     session.playerName = playerName or "Игрок"
-    session.isAuthorized = true -- Авторизация всегда успешна
+    session.isAuthorized = true
+    logAction("CREATE_SESSION", "Игрок: " .. session.playerName)
     return true
 end
 
 local function destroySession()
+    logAction("DESTROY_SESSION", "Игрок: " .. (session.playerName or "неизвестно"))
+    
     session.active = false
     session.playerName = nil
     session.isAuthorized = false
@@ -288,6 +374,8 @@ local function destroySession()
     playerHasFeedback = false
     reportInput = ""
     tempMessage = ""
+    
+    logAction("SESSION_CLEANUP", "Все данные очищены")
     
     return true
 end
@@ -641,14 +729,17 @@ local function drawMainMenu()
         drawCenteredText(7, "⚠️ Вы не приняли пользовательское соглашение! Нажмите [Соглашение]", colors.accent_secondary)
     end
 
-    local menuButtons = {
-        shop = {x=32, xs=20, y=10, ys=3, text="🛒 Магазин", tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main},
-        account = {x=32, xs=20, y=16, ys=3, text="👤 Аккаунт", tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main}
-    }
+    -- Кнопка "Магазин"
+    local shopBtn = {x=32, xs=20, y=10, ys=3, text="🛒 Магазин", tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main}
+    drawButton(shopBtn)
     
-    for _, btn in pairs(menuButtons) do
-        drawButton(btn)
-    end
+    -- Кнопка "Аккаунт"
+    local accountBtn = {x=32, xs=20, y=16, ys=3, text="👤 Аккаунт", tx=6, ty=1, bg=colors.bg_button, fg=colors.accent_main}
+    drawButton(accountBtn)
+    
+    -- Кнопка "Логи" (НОВАЯ)
+    local logBtn = {x=32, xs=20, y=22, ys=3, text="📋 Логи", tx=6, ty=1, bg=colors.bg_button, fg=colors.text_main}
+    drawButton(logBtn)
     
     -- Нижняя панель
     gpu.setForeground(colors.error)
@@ -1835,54 +1926,69 @@ end
 -- ============================================
 -- ИНИЦИАЛИЗАЦИЯ
 -- ============================================
+logAction("PROGRAM_START", "Инициализация магазина")
+logState("PIM_AVAILABLE", pimManager.pim ~= nil)
+
 gpu.setResolution(80, 25)
 gpu.setBackground(colors.bg_main)
 
--- Проверяем наличие игрока при старте
-local pimManager = PimManager.new()
-
--- Запускаем мониторинг Pim ДО проверки игрока
+logAction("PIM_MONITOR", "Запуск мониторинга PIM")
 pimManager:startMonitoring()
 
--- Небольшая задержка для стабилизации
 os.sleep(0.2)
 
-if pimManager:hasPlayerOnPlate() then
+local hasPlayer = pimManager:hasPlayerOnPlate()
+logState("INITIAL_PLAYER_STATE", hasPlayer)
+
+if hasPlayer then
+    logEvent("INIT", "Игрок уже на PIM при запуске")
     createSession("Игрок")
     currentScreen = "menu"
     drawMainMenu()
     showTempMessage("Добро пожаловать!", 2)
 else
+    logEvent("INIT", "PIM свободен, показываем экран приветствия")
     currentScreen = "idle"
     drawIdleScreen()
 end
+
+logAction("PROGRAM_READY", "Магазин готов к работе")
 
 -- ============================================
 -- ОБРАБОТЧИКИ СОБЫТИЙ
 -- ============================================
 -- Появление игрока
 event.listen("pim_occupied", function()
+    logEvent("HANDLER", "pim_occupied triggered")
+    
     if not session.active then
+        logAction("SESSION_START", "Создание сессии для нового игрока")
         createSession("Игрок")
         currentScreen = "menu"
         drawMainMenu()
         showTempMessage("Добро пожаловать!", 2)
+        logState("CURRENT_SCREEN", "menu")
+    else
+        logEvent("WARNING", "pim_occupied вызван, но сессия уже активна")
     end
 end)
 
 -- Уход игрока
 event.listen("pim_free", function()
+    logEvent("HANDLER", "pim_free triggered")
+    
     if session.active then
+        logAction("SESSION_END", "Завершение сессии игрока")
         destroySession()
         currentScreen = "idle"
         drawIdleScreen()
         showTempMessage("До свидания!", 2)
+        logState("CURRENT_SCREEN", "idle")
+    else
+        logEvent("WARNING", "pim_free вызван, но сессия не активна")
     end
 end)
 
--- ============================================
--- ГЛАВНЫЙ ЦИКЛ
--- ============================================
 -- ============================================
 -- ГЛАВНЫЙ ЦИКЛ
 -- ============================================
@@ -1890,10 +1996,16 @@ while true do
     local ev = {event.pull(0.5)}
     local e = ev[1]
     
+    -- Логируем все события (кроме мыши, чтобы не засорять)
+    if e == "pim_occupied" or e == "pim_free" or e == "player_on" or e == "player_off" then
+        logEvent("MAIN_LOOP", "Получено событие: " .. tostring(e))
+    end
+    
     -- Игнорируем клавишу Ctrl+C
     if e == "key_down" then
         local _, _, _, code, char = table.unpack(ev)
         if char == 3 then
+            logEvent("KEYBOARD", "Ctrl+C нажат - игнорируем")
             goto continue
         end
     end
@@ -2186,7 +2298,7 @@ while true do
                 goto continue
             end
             
-            -- Кнопка "Магазин"
+            -- Кнопка "Магазин" (y: 10-13)
             if x >= 32 and x <= 52 and y >= 10 and y <= 13 then
                 if playerData.agreed then
                     goToShop()
@@ -2196,9 +2308,16 @@ while true do
                 goto continue
             end
             
-            -- Кнопка "Аккаунт"
+            -- Кнопка "Аккаунт" (y: 16-19)
             if x >= 32 and x <= 52 and y >= 16 and y <= 19 then
                 goToAccount()
+                goto continue
+            end
+            
+            -- Кнопка "Логи" (y: 22-25) - НОВАЯ
+            if x >= 32 and x <= 52 and y >= 22 and y <= 25 then
+                logAction("UI", "Открытие логов")
+                showLogs()
                 goto continue
             end
             
