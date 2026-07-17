@@ -1,5 +1,5 @@
 -- ============================================================
--- ★★★ ЗАГОЛОВОК v_1.4.8 ★★★
+-- ★★★ ЗАГОЛОВОК v_1.4.9 ★★★
 -- ============================================================
 local component = require("component")
 local event = require("event")
@@ -48,10 +48,6 @@ Config = {
     },
     CACHE = {
         updateInterval = 30,
-    },
-    PIM = {
-        checkInterval = 0.5,      -- Проверка каждые 500 мс
-        debounceTime = 0.8,       -- Защита от ложных срабатываний (800 мс)
     },
 }
 
@@ -339,307 +335,6 @@ PULL_DIRECTION = "up"
 
 local screenWidth, screenHeight = gpu.getResolution()
 visibleRows = math.min(screenHeight - 6, 15)
-
--- ============================================================
--- ★★★ НОВЫЙ МЕХАНИЗМ PIM (на основе getInventorySize) ★★★
--- ============================================================
-
--- Глобальные переменные для нового PIM-механизма
-local pimAddr = nil
-local lastPimState = false
-local pimCheckTimer = nil
-local pimDebounceTimer = nil
-local pimDebounceStart = 0
-local pimDebounceState = false
-local PIM_DEBOUNCE_MS = Config.PIM.debounceTime * 1000
-
--- ============================================================
--- ★★★ ПОИСК PIM-УСТРОЙСТВА ★★★
--- ============================================================
-
-function findPim()
-    for addr in component.list("pim") do
-        return addr
-    end
-    return nil
-end
-
-function getPim()
-    if not pimAddr then
-        pimAddr = findPim()
-    end
-    if pimAddr then
-        return component.proxy(pimAddr)
-    end
-    return nil
-end
-
--- ============================================================
--- ★★★ ПРОВЕРКА ПРИСУТСТВИЯ ИГРОКА ★★★
--- ============================================================
-
-function isPlayerOnPim()
-    local pim = getPim()
-    if not pim then return false end
-    
-    local ok, size = pcall(pim.getInventorySize, pim)
-    if ok and type(size) == "number" then
-        return size > 0
-    end
-    return false
-end
-
--- ============================================================
--- ★★★ ЗАМЕНА СТАРЫХ ФУНКЦИЙ ДЛЯ СОВМЕСТИМОСТИ ★★★
--- ============================================================
-
--- Оставляем для совместимости с существующим кодом
-function getPimAddr()
-    return pimAddr or findPim()
-end
-
-function getPlayerOnPim()
-    -- Возвращаем имя игрока, если он есть на PIM
-    if isPlayerOnPim() then
-        return currentPlayer or "Игрок"
-    end
-    return nil
-end
-
-function isPimOwner(playerName)
-    if not playerName or not pimOwner then return false end
-    return playerName == pimOwner
-end
-
--- ============================================================
--- ★★★ ОБРАБОТЧИК ВХОДА ИГРОКА ★★★
--- ============================================================
-
-function handlePlayerEnter()
-    -- Проверяем, не заблокирован ли магазин
-    if shopPaused then
-        drawWelcomeScreen()
-        return
-    end
-    
-    -- Проверяем, не авторизован ли уже
-    if alreadyAuthorized then
-        return
-    end
-    
-    -- Используем "Игрок" как имя по умолчанию
-    local playerName = "Игрок"
-    
-    -- Создаем запись игрока в кеше, если её нет
-    if not cache_players[playerName] then
-        cache_players[playerName] = {
-            name = playerName,
-            balance = 0,
-            emaBalance = 0,
-            transactions = 0,
-            banned = false,
-            agreed = false,
-            hasFeedback = false,
-            regDate = getRealTimeString(),
-            site_user = nil
-        }
-    end
-    
-    currentPlayer = playerName
-    pimOwner = playerName
-    
-    -- Загружаем данные игрока
-    local player = cache_players[playerName]
-    coinBalance = player.balance or 0
-    emaBalance = player.emaBalance or 0
-    playerTransactions = player.transactions or 0
-    playerAgreed = player.agreed or false
-    playerHasFeedback = player.hasFeedback or false
-    playerRegDate = player.regDate or getRealTimeString()
-    
-    -- Генерируем токен для авторизации
-    currentToken = tostring(math.floor(math.random() * 900000000 + 100000000))
-    alreadyAuthorized = true
-    
-    -- Переходим в меню
-    currentScreen = "menu"
-    addPlayerLog("Вход: " .. playerName, "ENTER")
-    markDirty()
-end
-
--- ============================================================
--- ★★★ ОБРАБОТЧИК ВЫХОДА ИГРОКА ★★★
--- ============================================================
-
-function handlePlayerLeave()
-    -- Проверяем, есть ли активная сессия
-    if not currentPlayer or currentPlayer == "" then
-        return
-    end
-    
-    -- Сохраняем имя для лога
-    local playerName = currentPlayer
-    
-    -- Выполняем безопасный выход
-    safeExit()
-    
-    -- Очищаем все временные данные
-    currentPlayer = nil
-    currentToken = nil
-    alreadyAuthorized = false
-    pimOwner = nil
-    authCodeInput = ""
-    boundPlayer = nil
-    
-    -- Очищаем состояние магазина
-    selectedItem = nil
-    hoveredIndex = 0
-    selectedIndex = 0
-    filteredItems = {}
-    shopSearch = ""
-    searchActive = false
-    searchInput = ""
-    purchaseItem = nil
-    purchaseQuantity = 1
-    sellConfirmItem = nil
-    foundAmount = 0
-    showSellPopup = false
-    showPartialPopup = false
-    showInsufficientPopup = false
-    showInventoryFullPopup = false
-    listScroll = 1
-    horizontalScroll = 1
-    
-    -- Возвращаем на экран приветствия
-    currentScreen = "welcome"
-    markDirty()
-    drawWelcomeScreen()
-    
-    addPlayerLog("Выход: " .. playerName, "LEAVE")
-end
-
--- ============================================================
--- ★★★ ЗАЩИТА ОТ ЛОЖНЫХ СРАБАТЫВАНИЙ ★★★
--- ============================================================
-
-function startPimDebounce()
-    -- Если уже есть таймер дебаунса, отменяем его
-    if pimDebounceTimer then
-        event.cancel(pimDebounceTimer)
-        pimDebounceTimer = nil
-    end
-    
-    pimDebounceState = false
-    pimDebounceStart = os.clock()
-    
-    -- Запускаем таймер проверки
-    pimDebounceTimer = event.timer(PIM_DEBOUNCE_MS / 1000, function()
-        pimDebounceTimer = nil
-        
-        -- Повторно проверяем состояние
-        local stillEmpty = not isPlayerOnPim()
-        
-        if stillEmpty then
-            -- Игрок действительно ушел
-            if currentPlayer and currentPlayer ~= "" then
-                handlePlayerLeave()
-            end
-        else
-            -- Ложное срабатывание, игрок все еще на месте
-            pimDebounceState = false
-            if currentScreen == "welcome" and currentPlayer then
-                -- Восстанавливаем меню, если оно было закрыто
-                currentScreen = "menu"
-                markDirty()
-            end
-        end
-        return false
-    end)
-end
-
--- ============================================================
--- ★★★ ПЕРИОДИЧЕСКАЯ ПРОВЕРКА PIM ★★★
--- ============================================================
-
-function checkPimState()
-    if isShuttingDown then return end
-    if shopPaused then return end
-    
-    local currentState = isPlayerOnPim()
-    
-    -- Проверяем изменение состояния
-    if currentState ~= lastPimState then
-        lastPimState = currentState
-        
-        if currentState then
-            -- Игрок появился
-            if pimDebounceTimer then
-                event.cancel(pimDebounceTimer)
-                pimDebounceTimer = nil
-            end
-            
-            -- Если нет активной сессии, запускаем вход
-            if not currentPlayer or currentPlayer == "" then
-                handlePlayerEnter()
-            end
-        else
-            -- Игрок исчез - запускаем дебаунс
-            if currentPlayer and currentPlayer ~= "" then
-                startPimDebounce()
-            end
-        end
-    end
-    
-    return true
-end
-
--- ============================================================
--- ★★★ ИНИЦИАЛИЗАЦИЯ НОВОГО МЕХАНИЗМА ★★★
--- ============================================================
-
-function initPimMechanism()
-    -- Находим PIM
-    pimAddr = findPim()
-    if not pimAddr then
-        addErrorLog("⚠️ PIM не найден!", "WARNING")
-        return false
-    end
-    
-    -- Проверяем начальное состояние
-    lastPimState = isPlayerOnPim()
-    
-    -- Если игрок уже есть на PIM, запускаем вход
-    if lastPimState and not currentPlayer then
-        handlePlayerEnter()
-    end
-    
-    -- Запускаем периодическую проверку
-    if pimCheckTimer then
-        event.cancel(pimCheckTimer)
-        pimCheckTimer = nil
-    end
-    
-    pimCheckTimer = event.timer(Config.PIM.checkInterval, checkPimState, math.huge)
-    
-    addErrorLog("✅ PIM механизм инициализирован (getInventorySize)", "INFO")
-    return true
-end
-
--- ============================================================
--- ★★★ ПЕРЕХВАТ СТАРЫХ СОБЫТИЙ PIM ★★★
--- ============================================================
-
--- Блокируем старые события PIM, чтобы они не конфликтовали
-local oldEventListen = event.listen
-event.listen = function(name, callback)
-    if name == "player_on" or name == "player_off" or 
-       name == "pim_player_enter" or name == "pim_player_leave" or
-       name == "pim" then
-        -- Игнорируем старые события PIM
-        return
-    end
-    return oldEventListen(name, callback)
-end
 
 -- ============================================================
 -- ★★★ АВТОЗАПУСК ★★★
@@ -1562,8 +1257,45 @@ function sendStats()
 end
 
 -- ============================================================
--- ★★★ ФУНКЦИИ ДЛЯ РАБОТЫ С PIM (НОВЫЙ МЕХАНИЗМ) ★★★
+-- ★★★ ФУНКЦИИ ДЛЯ РАБОТЫ С PIM ★★★
 -- ============================================================
+
+function getPimAddr()
+    local success, result = pcall(function()
+        for addr in component.list("pim") do return addr end
+    end)
+    if success and result then return result end
+    return nil
+end
+
+function getPlayerOnPim()
+    local pimAddr = getPimAddr()
+    if not pimAddr then return nil end
+    local pim = component.proxy(pimAddr)
+    local player = nil
+    if pim.getPlayer then
+        local ok, result = pcall(pim.getPlayer, pim)
+        if ok and result and result ~= "" then player = result end
+    end
+    if not player and pim.getPlayerName then
+        local ok, result = pcall(pim.getPlayerName, pim)
+        if ok and result and result ~= "" then player = result end
+    end
+    if not player and pim.getUsername then
+        local ok, result = pcall(pim.getUsername, pim)
+        if ok and result and result ~= "" then player = result end
+    end
+    if not player then
+        local ok, result = pcall(function() return pim.player end)
+        if ok and result and result ~= "" then player = result end
+    end
+    return player
+end
+
+function isPimOwner(playerName)
+    if not playerName or not pimOwner then return false end
+    return playerName == pimOwner
+end
 
 selector = nil
 for addr in component.list("openperipheral_selector") do
@@ -1674,13 +1406,13 @@ function namesMatch(name1, name2)
 end
 
 function scanPlayerInventory(targetName, targetDamage)
-    local pim = getPim()
-    if not pim then return 0 end
+    local pimAddr = getPimAddr()
+    if not pimAddr then return 0 end
     targetDamage = targetDamage or 0
     local total = 0
     for slot = 1, 36 do
-        local ok, stack = pcall(pim.getStackInSlot, pim, slot)
-        if ok and stack then
+        local stack = component.invoke(pimAddr, "getStackInSlot", slot)
+        if stack then
             local qty = stack.size or stack.qty or 0
             if qty > 0 then
                 local rawName = stack.name or stack.label or ""
@@ -1696,14 +1428,14 @@ function scanPlayerInventory(targetName, targetDamage)
 end
 
 function extractToME(targetName, amount, targetDamage)
-    local pim = getPim()
-    if not pim or amount <= 0 then return 0 end
+    local pimAddr = getPimAddr()
+    if not pimAddr or amount <= 0 then return 0 end
     targetDamage = targetDamage or 0
     local extracted = 0
     for slot = 1, 36 do
         if extracted >= amount then break end
-        local ok, stack = pcall(pim.getStackInSlot, pim, slot)
-        if ok and stack then
+        local stack = component.invoke(pimAddr, "getStackInSlot", slot)
+        if stack then
             local qty = stack.size or stack.qty or 0
             if qty > 0 then
                 local rawName = stack.name or stack.label or ""
@@ -1712,8 +1444,8 @@ function extractToME(targetName, amount, targetDamage)
                 if namesMatch(cleanName, targetName) and damage == targetDamage then
                     local toTake = math.min(qty, amount - extracted)
                     if toTake > 0 then
-                        local moved = pcall(pim.pushItem, pim, PUSH_DIRECTION, slot, toTake)
-                        if moved and type(moved) == "number" and moved > 0 then
+                        local moved = component.invoke(pimAddr, "pushItem", PUSH_DIRECTION, slot, toTake)
+                        if type(moved) == "number" and moved > 0 then
                             extracted = extracted + moved
                         end
                     end
@@ -2645,7 +2377,8 @@ function drawSellPopup()
     if sellConfirmItem.internalName == "customnpcs:npcMoney" then
         gpu.setForeground(COLORS.TOMATO)
         gpu.set(popupX+3 + unicode.len("Вы получите: "), popupY+5, string.format("%.2f", value) .. " ۞")
-    else        gpu.setForeground(COLORS.ACCENT_MAIN)
+    else
+        gpu.setForeground(COLORS.ACCENT_MAIN)
         gpu.set(popupX+3 + unicode.len("Вы получите: "), popupY+5, string.format("%.2f", value) .. " ₵")
     end
 
@@ -3039,17 +2772,21 @@ function goToReport()
 end
 
 function goToHelp()
+    -- Загружаем соглашение
     local agreement = nil
     local ok, err = pcall(function()
         agreement = dofile("/home/agreement.lua")
     end)
     
+    -- Если файл загрузился и есть функция draw
     if ok and agreement ~= nil and type(agreement) == "table" and type(agreement.draw) == "function" then
         currentScreen = "agreement"
         markDirty()
         
+        -- Рисуем соглашение из файла
         agreement.draw()
         
+        -- Ждём нажатия
         if type(agreement.show) == "function" then
             local agreed = agreement.show()
             if agreed then
@@ -3068,7 +2805,10 @@ function goToHelp()
         return
     end
     
-    goBackToMenu()
+    -- Если файл НЕ загрузился - показываем заглушку
+    if type(drawAgreementScreen) == "function" then
+        drawAgreementScreen()
+    end
 end
 
 function goToAccount()
@@ -4349,13 +4089,20 @@ end
 -- ★★★ СОГЛАШЕНИЕ ★★★
 -- ============================================================
 
+-- Пытаемся загрузить соглашение из файла
+local agreementLoaded = false
 drawAgreementScreen = nil
-if fs.exists("/home/agreement.lua") then
-    local ok, func = pcall(dofile, "/home/agreement.lua")
-    if ok and type(func) == "function" then
-        drawAgreementScreen = func
-    end
+
+local ok, result = pcall(dofile, "/home/agreement.lua")
+if ok and type(result) == "table" and type(result.draw) == "function" then
+    drawAgreementScreen = result.draw
+    agreementLoaded = true
+    print("✅ agreement.lua загружен")
+else
+    print("⚠️ agreement.lua НЕ загружен, используется заглушка")
 end
+
+-- Если файл не загрузился - создаём заглушку
 if not drawAgreementScreen then
     drawAgreementScreen = function()
         local w, h = getScreenSize()
@@ -4378,16 +4125,34 @@ if not drawAgreementScreen then
         drawFlexButton(backButton)
         drawTempMessage()
         
+        currentScreen = "agreement"
+        
         while currentScreen == "agreement" do
             local ev = {event.pull(0.5)}
+            if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
+                currentPlayer = nil
+                pimOwner = nil
+                alreadyAuthorized = false
+                currentScreen = "welcome"
+                markDirty()
+                drawWelcomeScreen()
+                break
+            end
             if ev[1] == "touch" then
                 local x = tonumber(ev[3]) or 0
                 local y = tonumber(ev[4]) or 0
+                local touchPlayer = ev[6] or "Неизвестный"
+                if not isPimOwner(touchPlayer) then goto continue_help end
                 if isButtonClicked(backButton, x, y) then
                     goBackToMenu()
                     break
                 end
             end
+            if ev[1] == "key_down" and ev[3] == 27 then
+                goBackToMenu()
+                break
+            end
+            ::continue_help::
         end
     end
 end
@@ -4739,9 +4504,6 @@ local function processMouseMove(x, y)
 end
 
 function main()
-    -- Инициализируем PIM механизм
-    initPimMechanism()
-    
     drawWelcomeScreen()
     addErrorLog("🟢 Терминал #1 (PIM MARKET) запущен", "INFO")
 
@@ -5438,14 +5200,238 @@ function main()
             goto continue
         end
 
-        -- ИГНОРИРУЕМ СТАРЫЕ СОБЫТИЯ PIM
         if e == "player_on" or e == "pim" or e == "pim_player_enter" then
-            -- Игнорируем, так как используем новый механизм
+            local playerName = nil
+            
+            if e == "player_on" then
+                playerName = ev[2]
+            elseif e == "pim" or e == "pim_player_enter" then
+                playerName = ev[2] or ev[3] or ev[4] or ev[5]
+            end
+            
+            if not playerName or playerName == "" or playerName == "Игрок" then
+                playerName = getPlayerOnPim()
+            end
+            
+            if not playerName or playerName == "" or playerName == "Игрок" then
+                goto continue
+            end
+            
+            loadAllDataFromHost()
+            
+            if currentPlayer and currentPlayer ~= "" and currentPlayer ~= playerName then
+                isShuttingDown = true
+                currentPlayer = nil
+                currentToken = nil
+                alreadyAuthorized = false
+                pimOwner = nil
+                currentScreen = "welcome"
+                authCodeInput = ""
+                boundPlayer = nil
+                if TRANSACTION_LOCK then TRANSACTION_LOCK = false end
+                selectedItem = nil
+                hoveredIndex = 0
+                selectedIndex = 0
+                filteredItems = {}
+                shopSearch = ""
+                searchActive = false
+                searchInput = ""
+                purchaseItem = nil
+                purchaseQuantity = 1
+                sellConfirmItem = nil
+                foundAmount = 0
+                showSellPopup = false
+                showPartialPopup = false
+                showInsufficientPopup = false
+                showInventoryFullPopup = false
+                listScroll = 1
+                horizontalScroll = 1
+                tempMessage = ""
+                if tempMessageTimer then event.cancel(tempMessageTimer); tempMessageTimer = nil end
+                pcall(updateSelectorDisplay, nil)
+                pcall(selector.setSlot, 0, nil)
+                pcall(selector.setSlot, 1, nil)
+                clearAllTimers()
+                drawWelcomeScreen()
+                isShuttingDown = false
+                pimOwner = playerName
+            end
+            
+            if shopPaused then
+                drawWelcomeScreen()
+                while shopPaused do
+                    local ev2 = {event.pull(1)}
+                    if ev2[1] == "player_off" or ev2[1] == "pim_player_leave" then
+                        drawWelcomeScreen()
+                        break
+                    end
+                end
+                goto continue
+            end
+                                    
+            if not pimOwner then pimOwner = playerName end
+            currentPlayer = playerName:match("^%s*(.-)%s*$") or playerName
+            if not currentPlayer or currentPlayer == "" then currentPlayer = playerName end
+            
+            local banInfo = nil
+            local success, response = pcall(function()
+                return internet.request(WEB_URL .. "/api/check_ban?name=" .. currentPlayer)
+            end)
+            if success and response then
+                local body = ""
+                for chunk in response do body = body .. chunk end
+                local data = parseJSON(body)
+                if data and data.banned then banInfo = data end
+            end
+                    
+            if banInfo then
+                local reason = "Не указана"
+                if banInfo.reason_b64 then
+                    reason = decodeBase64(banInfo.reason_b64)
+                elseif banInfo.reason then
+                    reason = banInfo.reason
+                end
+                local admin = banInfo.admin or "Система"
+                
+                local function formatDate(isoDate)
+                    if not isoDate or isoDate == "" then return "" end
+                    local year, month, day = isoDate:match("(%d+)-(%d+)-(%d+)")
+                    if year and month and day then return day .. "." .. month .. "." .. year end
+                    return isoDate
+                end
+                
+                local formattedDate = banInfo.date and formatDate(banInfo.date) or ""
+                local formattedExpire = banInfo.expires and formatDate(banInfo.expires) or ""
+                local isPermanent = not banInfo.expires or banInfo.expires == ""
+                
+                local w, h = gpu.getResolution()
+                gpu.setBackground(COLORS.BG_MAIN)
+                gpu.fill(1, 1, w, h, " ")
+                
+                gpu.setForeground(COLORS.ERROR)
+                drawCenteredText(6, "╔══════════════════════════════════════════════════════════════╗", COLORS.ERROR)
+                drawCenteredText(7, "║                       ВЫ ЗАБЛОКИРОВАНЫ                       ║", COLORS.ERROR)
+                drawCenteredText(8, "╚══════════════════════════════════════════════════════════════╝", COLORS.ERROR)
+                
+                drawCenteredText(10, "Причина: " .. reason, COLORS.TEXT_MAIN)
+                drawCenteredText(11, "Администратор: " .. admin, COLORS.TEXT_MAIN)
+                if formattedDate ~= "" then drawCenteredText(12, "Дата: " .. formattedDate, COLORS.TEXT_MAIN) end
+                if isPermanent then drawCenteredText(13, "Бессрочный бан", COLORS.TEXT_MAIN)
+                else drawCenteredText(13, "Срок истекает: " .. formattedExpire, COLORS.TEXT_MAIN) end
+                drawCenteredText(15, " Доступ запрещён", COLORS.ERROR)
+                gpu.setForeground(COLORS.ACCENT_SECONDARY)
+                drawCenteredText(22, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", COLORS.ACCENT_SECONDARY)
+                drawTempMessage()
+                
+                while true do
+                    local ev2 = {event.pull(1)}
+                    if ev2[1] == "player_off" or ev2[1] == "pim_player_leave" then
+                        drawWelcomeScreen()
+                        break
+                    end
+                end
+                currentPlayer = nil
+                pimOwner = nil
+                alreadyAuthorized = false
+                currentScreen = "welcome"
+                markDirty()
+                goto continue
+            end
+            
+            if alreadyAuthorized then
+                local player = cache_players[currentPlayer]
+                if player then
+                    playerAgreed = player.agreed or false
+                    playerHasFeedback = player.hasFeedback or false
+                    coinBalance = player.balance or 0
+                    emaBalance = player.emaBalance or 0
+                    playerTransactions = player.transactions or 0
+                    playerRegDate = player.regDate or ""
+                end
+                
+                if currentScreen == "auth" or currentScreen == "account_loading" then
+                    currentScreen = "menu"
+                    markDirty()
+                end
+                forceSyncBinding()
+                markDirty()
+            else
+                -- ★★★ НОВЫЙ ИГРОК ★★★
+                coinBalance = 0.0
+                emaBalance = 0.0
+                playerAgreed = false
+                currentScreen = "auth"
+                authStartTime = os.clock()
+                
+                local player = cache_players[currentPlayer]
+                if not player then
+                    player = {
+                        name = currentPlayer,
+                        balance = 0,
+                        emaBalance = 0,
+                        transactions = 0,
+                        banned = false,
+                        agreed = false,
+                        hasFeedback = false,
+                        regDate = getRealTimeString(),
+                        site_user = nil
+                    }
+                    cache_players[currentPlayer] = player
+                    addPlayerLog("Новый игрок: " .. currentPlayer, "NEW")
+                end
+                
+                if player.banned then
+                    drawCenteredText(20, "Вы забанены!", COLORS.ERROR)
+                    os.sleep(2)
+                    currentPlayer = nil
+                    currentScreen = "welcome"
+                    markDirty()
+                else
+                    currentToken = tostring(math.floor(math.random() * 900000000 + 100000000))
+                    coinBalance = player.balance or 0
+                    emaBalance = player.emaBalance or 0
+                    playerTransactions = player.transactions or 0
+                    playerAgreed = player.agreed or false
+                    playerRegDate = player.regDate or getRealTimeString()
+                    alreadyAuthorized = true
+                    
+                    currentScreen = "menu"
+                    markDirty()
+                    forceSyncBinding()
+                    addPlayerLog("Вход: " .. currentPlayer, "ENTER")
+                end
+            end
             goto continue
         end
 
         if e == "player_off" or e == "pim_player_leave" then
-            -- Игнорируем, так как используем новый механизм
+            local playerName = ev[2] or "Игрок"
+            
+            if currentPlayer and playerName == currentPlayer then
+                local currentOnPim = getPlayerOnPim()
+                if currentOnPim and currentOnPim == currentPlayer then
+                    goto continue
+                end
+            end
+            
+            if playerName == pimOwner then
+                pimOwner = nil
+                if TRANSACTION_LOCK then
+                    local waitCount = 0
+                    while TRANSACTION_LOCK and waitCount < 30 do
+                        os.sleep(0.1)
+                        waitCount = waitCount + 1
+                    end
+                    if TRANSACTION_LOCK then TRANSACTION_LOCK = false end
+                end
+            end
+            
+            if currentPlayer and playerName == currentPlayer then
+                safeExit()
+            elseif playerName == pimOwner then
+                safeExit()
+            end
+            
             goto continue
         end
        ::continue::
