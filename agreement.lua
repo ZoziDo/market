@@ -1,9 +1,10 @@
 -- ============================================================
--- ★★★ agreement.lua v_1.5.0 ★★★
+-- ★★★ agreement.lua ★★★
 -- ============================================================
 local component = require("component")
 local gpu = component.gpu
 local unicode = require("unicode")
+local event = require("event")
 
 -- ============================================================
 -- ★★★ ЦВЕТА ★★★
@@ -38,28 +39,26 @@ local function getScreenSize()
 end
 
 -- ============================================================
--- ★★★ ФУНКЦИЯ КНОПКИ (ВОЗВРАЩАЕТ КООРДИНАТЫ) ★★★
+-- ★★★ ФУНКЦИЯ КНОПКИ ★★★
 -- ============================================================
 local function getButtonCoords()
     local w, h = getScreenSize()
     local btnText = "[ ПОНЯТНО ]"
     local btnW = unicode.len(btnText) + 4
     local btnX = math.floor((w - btnW) / 2) + 2
-    local btnY = h - 4  -- 4 строки от низа
+    local btnY = h - 3
     return btnX, btnY, btnW, btnText
 end
 
 -- ============================================================
--- ★★★ ОТРИСОВКА СОГЛАШЕНИЯ ★★★
+-- ★★★ ОТРИСОВКА ★★★
 -- ============================================================
 local function drawAgreementScreen()
     local w, h = getScreenSize()
     
-    -- Очистка
     gpu.setBackground(COLORS.BG_MAIN)
     gpu.fill(1, 1, w, h, " ")
     
-    -- Рамка (адаптивная)
     local left, right, top, bottom = 3, w - 2, 2, h - 3
     gpu.setForeground(COLORS.BORDER)
     gpu.fill(left, top, right - left + 1, 1, "─")
@@ -73,17 +72,14 @@ local function drawAgreementScreen()
     gpu.set(left, bottom, "└")
     gpu.set(right, bottom, "┘")
     
-    -- Функция центрирования
     local function center(y, txt, color)
         gpu.setForeground(color or COLORS.TEXT_MAIN)
         local x = math.floor((w - unicode.len(txt)) / 2) + 1
         gpu.set(x, y, txt)
     end
     
-    -- Заголовок
     center(top + 3, "ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ", COLORS.TITLE)
     
-    -- Текст
     local textY = top + 5
     center(textY, "Используя данный ПК-магазин, ты автоматически соглашаешься", COLORS.TEXT_MUTED)
     center(textY + 1, "со следующими условиями:", COLORS.TEXT_MUTED)
@@ -92,7 +88,6 @@ local function drawAgreementScreen()
     center(textY + 4, "2. Администрация не несёт ответственности за потерю предметов.", COLORS.TEXT_MAIN)
     center(textY + 5, "3. Запрещено использование багов и эксплойтов.", COLORS.TEXT_MAIN)
     
-    -- Красная строка
     local redText = "   Нарушение = перманентная блокировка аккаунта."
     local redX = math.floor((w - unicode.len(redText)) / 2) + 1
     gpu.setForeground(COLORS.ERROR)
@@ -104,7 +99,6 @@ local function drawAgreementScreen()
     center(textY + 11, "Нажимая кнопку ниже, ты подтверждаешь согласие со всеми", COLORS.TEXT_MUTED)
     center(textY + 12, "условиями данного соглашения.", COLORS.TEXT_MUTED)
     
-    -- Кнопка (адаптивная)
     local btnX, btnY, btnW, btnText = getButtonCoords()
     
     gpu.setBackground(COLORS.BG_SUCCESS)
@@ -115,41 +109,50 @@ local function drawAgreementScreen()
 end
 
 -- ============================================================
--- ★★★ ОСНОВНАЯ ФУНКЦИЯ (С ОБРАБОТЧИКОМ СОБЫТИЙ) ★★★
+-- ★★★ ОЖИДАНИЕ НАЖАТИЯ ★★★
 -- ============================================================
 local function showAgreement()
-    local event = require("event")
-    local os = require("os")
-    
-    -- Рисуем экран
-    drawAgreementScreen()
-    
-    -- Получаем координаты кнопки
+    local w, h = getScreenSize()
     local btnX, btnY, btnW, btnText = getButtonCoords()
     
-    -- Ждём нажатия
+    -- Счётчик попыток
+    local attempts = 0
+    
     while true do
+        attempts = attempts + 1
+        
+        -- Перерисовываем экран каждые 5 секунд (на случай если его перекрыли)
+        if attempts % 10 == 0 then
+            drawAgreementScreen()
+        end
+        
         local ev = {event.pull(0.5)}
         
+        -- Выход по ESC
+        if ev[1] == "key_down" and ev[3] == 27 then
+            return false
+        end
+        
+        -- Клик
         if ev[1] == "touch" then
             local x = tonumber(ev[3]) or 0
             local y = tonumber(ev[4]) or 0
             
-            -- Проверяем попадание по кнопке
             if y == btnY and x >= btnX and x < btnX + btnW then
-                return true  -- Нажата кнопка "ПОНЯТНО"
+                return true
             end
         end
         
-        -- Можно добавить выход по ESC
-        if ev[1] == "key_down" and ev[3] == 27 then
-            return false  -- Нажат ESC
+        -- Если игрок ушёл - ждём нового
+        if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
+            -- Не возвращаем false, а продолжаем ждать
+            -- (потому что в основном коде это обрабатывается отдельно)
         end
     end
 end
 
 -- ============================================================
--- ★★★ ВОЗВРАЩАЕМ И ФУНКЦИЮ ОТРИСОВКИ, И ФУНКЦИЮ ПОКАЗА ★★★
+-- ★★★ ВОЗВРАТ ★★★
 -- ============================================================
 return {
     draw = drawAgreementScreen,
