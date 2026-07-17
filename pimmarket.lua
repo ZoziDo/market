@@ -1,5 +1,5 @@
 -- ============================================================
--- 1. REQUIRE v_1.4.1
+-- 1. REQUIRE v_1.4.2
 -- ============================================================
 local component = require("component")
 local event = require("event")
@@ -2357,8 +2357,8 @@ function syncCurrentPlayer()
     
     local player = playersIndex[currentPlayer]
     if player then
-        coinBalance = player.balance or 0
-        emaBalance = player.emaBalance or 0
+        coinBalance = player.balance or 0      
+        emaBalance = player.emaBalance or 0    
         playerTransactions = player.transactions or 0
         playerRegDate = player.regDate or ""
         playerAgreed = player.agreed or false
@@ -2533,6 +2533,24 @@ function performBuy()
         return
     end
 
+    if not currentPlayer then
+        drawCenteredText(20, "Ошибка: игрок не авторизован", COLORS.ERROR)
+        os.sleep(2)
+        markDirty()
+        return
+    end
+
+    syncCurrentPlayer()
+    
+    if coinBalance == nil then
+        coinBalance = 0
+        addErrorLog("coinBalance был nil, установлен в 0")
+    end
+    if emaBalance == nil then
+        emaBalance = 0
+        addErrorLog("emaBalance был nil, установлен в 0")
+    end
+
     if TRANSACTION_LOCK then
         showTempMessage("Подождите, транзакция выполняется...", 2)
         return
@@ -2576,10 +2594,15 @@ function performBuy()
 
     local totalCoin = (item.priceCoin or 0) * qty
     local totalEma = (item.priceEma or 0) * qty
-    if coinBalance < totalCoin or emaBalance < totalEma then
+    
+    -- ★★★ ИСПРАВЛЕННАЯ ПРОВЕРКА БАЛАНСА ★★★
+    local currentCoin = coinBalance or 0
+    local currentEma = emaBalance or 0
+    
+    if currentCoin < totalCoin or currentEma < totalEma then
         showInsufficientPopup = true
-        insufficientBalanceCoin = coinBalance
-        insufficientBalanceEma = emaBalance
+        insufficientBalanceCoin = currentCoin
+        insufficientBalanceEma = currentEma
         unlockTransactions()
         showInsufficientPopupAndWait() 
         return
