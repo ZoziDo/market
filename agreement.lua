@@ -1,5 +1,5 @@
 -- ============================================================
--- ★★★ agreement.lua ★★★
+-- ★★★ agreement.lua v_1.4.0 ★★★
 -- ============================================================
 local component = require("component")
 local gpu = component.gpu
@@ -112,20 +112,9 @@ end
 -- ★★★ ОЖИДАНИЕ НАЖАТИЯ ★★★
 -- ============================================================
 local function showAgreement()
-    local w, h = getScreenSize()
     local btnX, btnY, btnW, btnText = getButtonCoords()
     
-    -- Счётчик попыток
-    local attempts = 0
-    
     while true do
-        attempts = attempts + 1
-        
-        -- Перерисовываем экран каждые 5 секунд (на случай если его перекрыли)
-        if attempts % 10 == 0 then
-            drawAgreementScreen()
-        end
-        
         local ev = {event.pull(0.5)}
         
         -- Выход по ESC
@@ -133,7 +122,7 @@ local function showAgreement()
             return false
         end
         
-        -- Клик
+        -- Клик по кнопке
         if ev[1] == "touch" then
             local x = tonumber(ev[3]) or 0
             local y = tonumber(ev[4]) or 0
@@ -143,10 +132,9 @@ local function showAgreement()
             end
         end
         
-        -- Если игрок ушёл - ждём нового
+        -- ★★★ ЕСЛИ ИГРОК УШЁЛ — ПРОДОЛЖАЕМ ЖДАТЬ ★★★
         if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
-            -- Не возвращаем false, а продолжаем ждать
-            -- (потому что в основном коде это обрабатывается отдельно)
+            -- Ничего не делаем, просто ждём дальше
         end
     end
 end
