@@ -1,5 +1,5 @@
 -- ============================================================
--- 1. REQUIRE v_1.4.0
+-- 1. REQUIRE v_1.4.1
 -- ============================================================
 local component = require("component")
 local event = require("event")
@@ -3928,6 +3928,20 @@ function isPlayerOnPim(playerName)
 end
 
 -- ============================================================
+-- ★★★ ФУНКЦИЯ БЕЗОПАСНОЙ ЗАГРУЗКИ ФАЙЛОВ ★★★
+-- ============================================================
+function safeDoFile(path)
+    if not fs.exists(path) then
+        return {}
+    end
+    local ok, result = pcall(dofile, path)
+    if not ok then
+        return {}
+    end
+    return result
+end
+
+-- ============================================================
 -- 24. SHOP
 -- ============================================================
 shopData = safeDoFile(SHOP_ITEMS_FILE)
@@ -3940,17 +3954,6 @@ for _, item in ipairs(buyItemsData) do
     local dmg = item.damage or 0
     local key = item.internalName .. ":" .. dmg
     buyItemMap[key] = item
-end
-
-function safeDoFile(path)
-    if not fs.exists(path) then
-        return {}
-    end
-    local ok, result = pcall(dofile, path)
-    if not ok then
-        return {}
-    end
-    return result
 end
 
 function loadBuyItems(forceRefresh)
