@@ -1,5 +1,5 @@
 -- ============================================
--- КОНФИГУРАЦИЯ1125
+-- КОНФИГУРАЦИЯ1126
 -- ============================================
 local component = require("component")
 local event = require("event")
@@ -281,11 +281,7 @@ end
 function PimManager:startMonitoring()
     if self.monitorRunning then return end
     self.monitorRunning = true
-    
-    -- Первая проверка
     self.hasPlayer = self:hasPlayerOnPlate()
-    
-    -- Запускаем цикл проверки
     self:checkLoop()
 end
 
@@ -325,6 +321,42 @@ function PimManager:stopMonitoring()
         self.checkTimer = nil
     end
 end
+
+-- ============================================
+-- ВОТ ЭТУ СТРОКУ НУЖНО ДОБАВИТЬ! (СОЗДАНИЕ ЭКЗЕМПЛЯРА)
+-- ============================================
+local pimManager = PimManager.new()
+
+-- ============================================
+-- ИНИЦИАЛИЗАЦИЯ (ТЕПЕРЬ pimManager СУЩЕСТВУЕТ)
+-- ============================================
+logAction("PROGRAM_START", "Инициализация магазина")
+logState("PIM_AVAILABLE", pimManager.pim ~= nil)  -- <-- ТЕПЕРЬ РАБОТАЕТ
+
+gpu.setResolution(80, 25)
+gpu.setBackground(colors.bg_main)
+
+logAction("PIM_MONITOR", "Запуск мониторинга PIM")
+pimManager:startMonitoring()  -- <-- ТЕПЕРЬ РАБОТАЕТ
+
+os.sleep(0.2)
+
+local hasPlayer = pimManager:hasPlayerOnPlate()  -- <-- ТЕПЕРЬ РАБОТАЕТ
+logState("INITIAL_PLAYER_STATE", hasPlayer)
+
+if hasPlayer then
+    logEvent("INIT", "Игрок уже на PIM при запуске")
+    createSession("Игрок")
+    currentScreen = "menu"
+    drawMainMenu()
+    showTempMessage("Добро пожаловать!", 2)
+else
+    logEvent("INIT", "PIM свободен, показываем экран приветствия")
+    currentScreen = "idle"
+    drawIdleScreen()
+end
+
+logAction("PROGRAM_READY", "Магазин готов к работе")
 
 -- ============================================
 -- СЕССИЯ ИГРОКА
@@ -1923,36 +1955,6 @@ local function refreshCurrentScreen()
     end
 end
 
--- ============================================
--- ИНИЦИАЛИЗАЦИЯ
--- ============================================
-logAction("PROGRAM_START", "Инициализация магазина")
-logState("PIM_AVAILABLE", pimManager.pim ~= nil)
-
-gpu.setResolution(80, 25)
-gpu.setBackground(colors.bg_main)
-
-logAction("PIM_MONITOR", "Запуск мониторинга PIM")
-pimManager:startMonitoring()
-
-os.sleep(0.2)
-
-local hasPlayer = pimManager:hasPlayerOnPlate()
-logState("INITIAL_PLAYER_STATE", hasPlayer)
-
-if hasPlayer then
-    logEvent("INIT", "Игрок уже на PIM при запуске")
-    createSession("Игрок")
-    currentScreen = "menu"
-    drawMainMenu()
-    showTempMessage("Добро пожаловать!", 2)
-else
-    logEvent("INIT", "PIM свободен, показываем экран приветствия")
-    currentScreen = "idle"
-    drawIdleScreen()
-end
-
-logAction("PROGRAM_READY", "Магазин готов к работе")
 
 -- ============================================
 -- ОБРАБОТЧИКИ СОБЫТИЙ
