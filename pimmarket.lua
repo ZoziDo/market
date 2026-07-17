@@ -1,5 +1,5 @@
 -- ============================================================
--- 1. REQUIRE v_1.4.5
+-- 1. REQUIRE v_1.4.6
 -- ============================================================
 local component = require("component")
 local event = require("event")
@@ -44,11 +44,23 @@ local HTTP = {
     CONFIG = {
         BASE_URL = "https://zozido.pythonanywhere.com",
         TIMEOUT = 3,
-        MAX_RETRIES = 2,
+        MAX_RETRIES = 3,
         RETRY_DELAY = 2,
+        RETRY_BACKOFF = 2,        -- Множитель задержки
+        MAX_RETRY_DELAY = 30,     -- Максимальная задержка
         BATCH_SIZE = 50,
         FLUSH_INTERVAL = 15,
         MAX_QUEUE_SIZE = 100,
+        RECONNECT_DELAY = 5,      -- Задержка перед переподключением
+        MAX_RECONNECT_ATTEMPTS = 5,
+        CIRCUIT_BREAKER = {
+            enabled = true,
+            failure_threshold = 5,    -- Количество ошибок для разрыва
+            timeout = 60,             -- Время восстановления (сек)
+            state = "closed",         -- closed / open / half_open
+            failures = 0,
+            last_failure = 0,
+        }
     },
     
     queues = {
@@ -62,6 +74,10 @@ local HTTP = {
         last_request_time = 0,
         failed_requests = 0,
         total_requests = 0,
+        is_connected = false,
+        reconnect_attempts = 0,
+        last_connection_check = 0,
+        connection_error = nil,
     },
 }
 
@@ -95,6 +111,12 @@ function HTTP:request(method, endpoint, data, options)
     local retries = options.retries or self.CONFIG.MAX_RETRIES
     local priority = options.priority or "normal"
     
+    -- ★★★ ПРОВЕРКА CIRCUIT BREAKER ★★★
+    if self:isCircuitBreakerOpen() then
+        self:logWarning("Circuit breaker OPEN, request blocked: " .. endpoint)
+        return nil, "CIRCUIT_BREAKER_OPEN"
+    end
+    
     if options.async then
         return self:requestAsync(method, endpoint, data, options)
     end
@@ -112,7 +134,16 @@ function HTTP:request(method, endpoint, data, options)
     
     self:logRequest(method, endpoint, priority)
     
-    return self:executeWithRetry(method, url, body, headers, retries, timeout)
+    local result, error = self:executeWithRetry(method, url, body, headers, retries, timeout)
+    
+    -- ★★★ ОБНОВЛЯЕМ CIRCUIT BREAKER ★★★
+    if result then
+        self:recordSuccess()
+    else
+        self:recordFailure(error)
+    end
+    
+    return result, error
 end
 
 -- ============================================================
@@ -122,6 +153,16 @@ end
 function HTTP:executeWithRetry(method, url, body, headers, retries, timeout)
     local last_error = nil
     local attempts = retries + 1
+    local delay = self.CONFIG.RETRY_DELAY
+    
+    -- ★★★ ПРОВЕРКА СОЕДИНЕНИЯ ★★★
+    if not self:checkConnection() then
+        self:logWarning("No connection, attempting reconnect...")
+        local reconnected = self:reconnect()
+        if not reconnected then
+            return nil, "NO_CONNECTION"
+        end
+    end
     
     for attempt = 1, attempts do
         local success, response = pcall(function()
@@ -131,19 +172,29 @@ function HTTP:executeWithRetry(method, url, body, headers, retries, timeout)
         self.status.total_requests = self.status.total_requests + 1
         
         if success and response then
+            -- Получаем статус
             local status = response.getStatus and response:getStatus() 
                 or response.code or response.status
             
+            -- Успешный ответ
             if status == 200 or status == 204 or status == 201 then
                 self:logSuccess(method, url, attempt)
+                self.status.is_connected = true
+                self.status.reconnect_attempts = 0
                 return self:parseResponse(response)
             end
             
+            -- ★★★ ОБРАБОТКА 5xx — серверные ошибки (можно повторить) ★★★
             if status >= 500 and status <= 599 and attempt < attempts then
                 last_error = "HTTP " .. tostring(status)
+                local wait = delay * (self.CONFIG.RETRY_BACKOFF ^ (attempt - 1))
+                wait = math.min(wait, self.CONFIG.MAX_RETRY_DELAY)
+                self:logRetry(method, url, attempt, last_error, wait)
+                os.sleep(wait)
                 goto continue
             end
             
+            -- ★★★ ОБРАБОТКА 4xx — клиентские ошибки (повторять бесполезно) ★★★
             if status >= 400 and status <= 499 then
                 self:logError(method, url, "HTTP " .. tostring(status))
                 return nil, "HTTP " .. tostring(status)
@@ -151,20 +202,28 @@ function HTTP:executeWithRetry(method, url, body, headers, retries, timeout)
             
             last_error = "HTTP " .. tostring(status)
         else
+            -- ★★★ ОШИБКА СЕТИ ★★★
             last_error = tostring(response or "Unknown error")
+            
+            -- Проверяем, возможно потеряно соединение
+            self.status.is_connected = false
+            
+            if attempt < attempts then
+                local wait = delay * (self.CONFIG.RETRY_BACKOFF ^ (attempt - 1))
+                wait = math.min(wait, self.CONFIG.MAX_RETRY_DELAY)
+                self:logRetry(method, url, attempt, last_error, wait)
+                os.sleep(wait)
+                goto continue
+            end
         end
         
         ::continue::
-        
-        if attempt < attempts then
-            local delay = self.CONFIG.RETRY_DELAY * attempt
-            self:logRetry(method, url, attempt, last_error, delay)
-            os.sleep(delay)
-        end
     end
     
+    -- ★★★ ВСЕ ПОПЫТКИ ПРОВАЛИЛИСЬ ★★★
     self:logError(method, url, last_error)
     self.status.failed_requests = self.status.failed_requests + 1
+    self.status.is_connected = false
     return nil, last_error
 end
 
@@ -229,6 +288,7 @@ function HTTP:processQueue()
     
     self.status.is_processing = true
     
+    -- HIGH PRIORITY
     while #self.queues.high > 0 do
         local item = table.remove(self.queues.high, 1)
         local result, error = self:request(
@@ -242,6 +302,7 @@ function HTTP:processQueue()
         end
     end
     
+    -- NORMAL PRIORITY
     while #self.queues.normal > 0 do
         local item = table.remove(self.queues.normal, 1)
         local result, error = self:request(
@@ -255,6 +316,7 @@ function HTTP:processQueue()
         end
     end
     
+    -- LOW PRIORITY
     while #self.queues.low > 0 do
         local item = table.remove(self.queues.low, 1)
         local result, error = self:request(
@@ -269,6 +331,120 @@ function HTTP:processQueue()
     end
     
     self.status.is_processing = false
+end
+
+-- ============================================================
+-- ★★★ CONNECTION MANAGEMENT ★★★
+-- ============================================================
+
+function HTTP:checkConnection()
+    local now = os.time()
+    
+    -- Проверяем не чаще чем раз в 5 секунд
+    if now - self.status.last_connection_check < self.CONFIG.RECONNECT_DELAY then
+        return self.status.is_connected
+    end
+    
+    self.status.last_connection_check = now
+    
+    -- Пробуем сделать ping-запрос
+    local success, response = pcall(function()
+        return internet.request(self.CONFIG.BASE_URL .. "/api/items_version", nil, {
+            ["Connection"] = "close",
+            ["Timeout"] = 2
+        })
+    end)
+    
+    if success and response then
+        self.status.is_connected = true
+        self.status.reconnect_attempts = 0
+        self.status.connection_error = nil
+        return true
+    else
+        self.status.is_connected = false
+        self.status.connection_error = tostring(response or "Connection failed")
+        return false
+    end
+end
+
+function HTTP:reconnect()
+    if self.status.reconnect_attempts >= self.CONFIG.MAX_RECONNECT_ATTEMPTS then
+        self:logError("Max reconnect attempts reached")
+        return false
+    end
+    
+    self.status.reconnect_attempts = self.status.reconnect_attempts + 1
+    
+    local delay = self.CONFIG.RECONNECT_DELAY * (self.CONFIG.RETRY_BACKOFF ^ (self.status.reconnect_attempts - 1))
+    delay = math.min(delay, self.CONFIG.MAX_RETRY_DELAY)
+    
+    self:logWarning(string.format("Reconnecting... attempt %d/%d, delay %ds", 
+        self.status.reconnect_attempts, 
+        self.CONFIG.MAX_RECONNECT_ATTEMPTS,
+        delay))
+    
+    os.sleep(delay)
+    
+    -- Проверяем соединение после ожидания
+    return self:checkConnection()
+end
+
+-- ============================================================
+-- ★★★ CIRCUIT BREAKER ★★★
+-- ============================================================
+
+function HTTP:isCircuitBreakerOpen()
+    local cb = self.CONFIG.CIRCUIT_BREAKER
+    if not cb.enabled then
+        return false
+    end
+    
+    if cb.state == "closed" then
+        return false
+    end
+    
+    if cb.state == "open" then
+        local now = os.time()
+        if now - cb.last_failure > cb.timeout then
+            -- Переходим в half_open
+            cb.state = "half_open"
+            cb.failures = 0
+            self:logWarning("Circuit breaker: closed -> half_open")
+            return false
+        end
+        return true
+    end
+    
+    -- half_open — разрешаем один запрос для проверки
+    return false
+end
+
+function HTTP:recordSuccess()
+    local cb = self.CONFIG.CIRCUIT_BREAKER
+    if not cb.enabled then
+        return
+    end
+    
+    if cb.state == "half_open" then
+        cb.state = "closed"
+        cb.failures = 0
+        self:logWarning("Circuit breaker: half_open -> closed (success)")
+    end
+end
+
+function HTTP:recordFailure(error)
+    local cb = self.CONFIG.CIRCUIT_BREAKER
+    if not cb.enabled then
+        return
+    end
+    
+    cb.failures = cb.failures + 1
+    cb.last_failure = os.time()
+    
+    if cb.failures >= cb.failure_threshold then
+        cb.state = "open"
+        self:logError(string.format("Circuit breaker: closed -> open (failures: %d)", cb.failures))
+    end
 end
 
 -- ============================================================
@@ -354,18 +530,33 @@ function HTTP:getStats()
             low = #self.queues.low,
         },
         is_processing = self.status.is_processing,
+        is_connected = self.status.is_connected,
+        reconnect_attempts = self.status.reconnect_attempts,
+        circuit_breaker = {
+            state = self.CONFIG.CIRCUIT_BREAKER.state,
+            failures = self.CONFIG.CIRCUIT_BREAKER.failures,
+        }
     }
 end
 
 function HTTP:clearStats()
     self.status.total_requests = 0
     self.status.failed_requests = 0
+    self.CONFIG.CIRCUIT_BREAKER.failures = 0
+    self.CONFIG.CIRCUIT_BREAKER.state = "closed"
 end
 
 -- ============================================================
 -- ★★★ ИНИЦИАЛИЗАЦИЯ ★★★
 -- ============================================================
 
+-- Таймер для проверки соединения
+event.timer(30, function()
+    HTTP:checkConnection()
+    return true
+end, true)
+
+-- Таймер для очистки очереди (если зависла)
 event.timer(60, function()
     if HTTP.status.is_processing then
         local diff = os.time() - HTTP.status.last_request_time
@@ -377,16 +568,28 @@ event.timer(60, function()
     return true
 end, true)
 
+-- Таймер для восстановления Circuit Breaker
+event.timer(10, function()
+    local cb = HTTP.CONFIG.CIRCUIT_BREAKER
+    if cb.state == "open" then
+        local now = os.time()
+        if now - cb.last_failure > cb.timeout then
+            cb.state = "half_open"
+            cb.failures = 0
+            HTTP:logWarning("Circuit breaker: open -> half_open (timeout)")
+        end
+    end
+    return true
+end, true)
+
 -- ============================================================
 -- ★★★ СОВМЕСТИМОСТЬ СО СТАРЫМ КОДОМ ★★★
 -- ============================================================
 
--- Заменяем старую sendToWeb
 _G.sendToWeb = function(endpoint, jsonData, options)
     options = options or {}
     options.priority = options.priority or "normal"
     
-    -- Если jsonData это строка - парсим в таблицу
     local data = jsonData
     if type(jsonData) == "string" then
         data = parseJSON(jsonData) or jsonData
@@ -395,7 +598,6 @@ _G.sendToWeb = function(endpoint, jsonData, options)
     HTTP:postAsync(endpoint, data, options)
 end
 
--- Заменяем старую sendErrorToWeb
 _G.sendErrorToWeb = function(error_msg, level)
     level = level or "ERROR"
     local timestamp = getRealTimeHM()
@@ -406,10 +608,9 @@ _G.sendErrorToWeb = function(error_msg, level)
     }, { priority = "high" })
 end
 
--- Экспорт для прямого доступа
 _G.HTTP = HTTP
 
-writeDebugLog("✅ HTTP Client инициализирован")
+writeDebugLog("✅ HTTP Client инициализирован (Retry, Timeout, Reconnect)")
 
 -- ============================================================
 -- 3. TIME
