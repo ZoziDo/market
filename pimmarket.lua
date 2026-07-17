@@ -1,5 +1,5 @@
 -- ============================================================
--- ★★★ ЗАГОЛОВОК v_1.4.4 ★★★
+-- ★★★ ЗАГОЛОВОК v_1.4.5 ★★★
 -- ============================================================
 local component = require("component")
 local event = require("event")
@@ -867,8 +867,27 @@ function loadAllDataFromHost()
         if data and data.players then
             cache_players = {}
             for _, p in ipairs(data.players) do
-                if p and p.name then cache_players[p.name] = p end
+                if p and p.name then
+                    cache_players[p.name] = {
+                        name = p.name,
+                        balance = p.balance or 0,
+                        emaBalance = p.emaBalance or 0,
+                        transactions = p.transactions or 0,
+                        banned = p.banned or false,
+                        banReason = p.banReason,
+                        banAdmin = p.banAdmin,
+                        banDate = p.banDate,
+                        banExpires = p.banExpires,
+                        agreed = p.agreed or false,        
+                        hasFeedback = p.hasFeedback or false,
+                        regDate = p.regDate or "",
+                        site_user = p.site_user
+                    }
+                end
             end
+            writeDebugLog("✅ Загружено " .. #data.players .. " игроков")
+        else
+            writeDebugLog("⚠️ Нет данных игроков")
         end
     end)
     
@@ -919,7 +938,7 @@ function updateCache()
     if isSyncing then return end
     
     local success, response = pcall(function()
-        return internet.request(Config.WEB.url .. "/api/buy_items", nil, {
+        return internet.request(Config.WEB.url .. "/api/players", nil, {
             ["Connection"] = "close",
             ["Timeout"] = Config.WEB.timeout
         })
@@ -928,39 +947,23 @@ function updateCache()
         local body = ""
         for chunk in response do body = body .. chunk end
         local data = parseJSON(body)
-        if data and data.items then cache_buy_items = data.items end
-    end
-    
-    local success2, response2 = pcall(function()
-        return internet.request(Config.WEB.url .. "/api/sell_items", nil, {
-            ["Connection"] = "close",
-            ["Timeout"] = Config.WEB.timeout
-        })
-    end)
-    if success2 and response2 then
-        local body = ""
-        for chunk in response2 do body = body .. chunk end
-        local data = parseJSON(body)
-        if data and data.items then cache_sell_items = data.items end
-    end
-    
-    local success3, response3 = pcall(function()
-        return internet.request(Config.WEB.url .. "/api/shop_status", nil, {
-            ["Connection"] = "close",
-            ["Timeout"] = Config.WEB.timeout
-        })
-    end)
-    if success3 and response3 then
-        local body = ""
-        for chunk in response3 do body = body .. chunk end
-        local data = parseJSON(body)
-        if data and data.paused ~= nil then
-            shopPaused = data.paused
-            cache_shop_paused = data.paused
+        if data and data.players then
+            for _, p in ipairs(data.players) do
+                if p and p.name and cache_players[p.name] then
+                    cache_players[p.name].agreed = p.agreed or false
+                    cache_players[p.name].hasFeedback = p.hasFeedback or false
+                    cache_players[p.name].balance = p.balance or 0
+                    cache_players[p.name].emaBalance = p.emaBalance or 0
+                    cache_players[p.name].transactions = p.transactions or 0
+                    cache_players[p.name].banned = p.banned or false
+                    cache_players[p.name].site_user = p.site_user
+                end
+            end
+            writeDebugLog("🔄 Обновлены игроки: agreed/hasFeedback синхронизированы")
         end
     end
     
-    last_cache_update = now
+    -- ... остальной код обновления товаров ...
 end
 
 function getPlayerFromCache(name) return cache_players[name] end
@@ -2722,90 +2725,31 @@ function goToHelp()
         agreement = dofile("/home/agreement.lua")
     end)
     
-    if ok and agreement ~= nil then
-        if type(agreement) == "table" and type(agreement.draw) == "function" then
-            currentScreen = "agreement"
-            markDirty()
-            
-            agreement.draw()
-            
-            if type(agreement.show) == "function" then
-                local agreed = agreement.show()
-                if agreed then
-                    playerAgreed = true
-                    if cache_players[currentPlayer] then
-                        cache_players[currentPlayer].agreed = true
-                    end
-                    sendToWeb("/api/update", toJson({
-                        players = {{ name = currentPlayer, agreed = true }}
-                    }))
-                    showTempMessage("✅ Спасибо! Теперь вам доступен магазин.", 2)
+    if ok and agreement ~= nil and type(agreement) == "table" and type(agreement.draw) == "function" then
+        currentScreen = "agreement"
+        markDirty()
+        
+        agreement.draw()
+        
+        if type(agreement.show) == "function" then
+            local agreed = agreement.show()
+            if agreed then
+                playerAgreed = true
+                if cache_players[currentPlayer] then
+                    cache_players[currentPlayer].agreed = true
                 end
+                sendToWeb("/api/update", toJson({
+                    players = {{ name = currentPlayer, agreed = true }}
+                }))
+                showTempMessage("✅ Спасибо! Теперь вам доступен магазин.", 2)
             end
-            
-            goBackToMenu()
-            return
         end
+        
+        goBackToMenu()
+        return
     end
     
-    -- Заглушка если файл не найден
-    local w, h = getScreenSize()
-    clear()
-    drawScreenBorder()
-    drawCenteredText(6, "ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ", COLORS.ACCENT_SECONDARY)
-    drawCenteredText(8, "Файл agreement.lua не найден!", COLORS.ERROR)
-    drawCenteredText(9, "Создайте его в папке /home/", COLORS.TEXT_MAIN)
-    drawCenteredText(11, "Нажмите [НАЗАД] для возврата", COLORS.TEXT_MAIN)
-    
-    local backButton = {
-        text = "[ НАЗАД ]",
-        x = math.floor(w / 2) - 4,
-        y = h - 1,
-        xs = unicode.len("[ НАЗАД ]") + 2,
-        ys = 1,
-        bg = COLORS.BG_BUTTON,
-        fg = COLORS.ACCENT_SECONDARY
-    }
-    drawFlexButton(backButton)
-    drawTempMessage()
-    
-    currentScreen = "agreement"
-    
-    while currentScreen == "agreement" do
-        local ev = {event.pull(0.5)}
-        
-        if ev[1] == "player_off" or ev[1] == "pim_player_leave" then
-            currentPlayer = nil
-            pimOwner = nil
-            alreadyAuthorized = false
-            currentScreen = "welcome"
-            markDirty()
-            drawWelcomeScreen()
-            break
-        end
-        
-        if ev[1] == "touch" then
-            local x = tonumber(ev[3]) or 0
-            local y = tonumber(ev[4]) or 0
-            local touchPlayer = ev[6] or "Неизвестный"
-            
-            if not isPimOwner(touchPlayer) then
-                goto continue_help
-            end
-            
-            if isButtonClicked(backButton, x, y) then
-                goBackToMenu()
-                break
-            end
-        end
-        
-        if ev[1] == "key_down" and ev[3] == 27 then
-            goBackToMenu()
-            break
-        end
-        
-        ::continue_help::
-    end
+    goBackToMenu()
 end
 
 function goToAccount()
@@ -5278,7 +5222,15 @@ function main()
             
             if alreadyAuthorized then
                 local player = cache_players[currentPlayer]
-                if player then playerHasFeedback = player.hasFeedback or false end
+                if player then
+                    playerAgreed = player.agreed or false
+                    playerHasFeedback = player.hasFeedback or false
+                    coinBalance = player.balance or 0
+                    emaBalance = player.emaBalance or 0
+                    playerTransactions = player.transactions or 0
+                    playerRegDate = player.regDate or ""
+                end
+                
                 if currentScreen == "auth" or currentScreen == "account_loading" then
                     currentScreen = "menu"
                     markDirty()
@@ -5286,6 +5238,7 @@ function main()
                 forceSyncBinding()
                 markDirty()
             else
+                -- Новый игрок
                 coinBalance = 0.0
                 emaBalance = 0.0
                 playerAgreed = false
@@ -5323,6 +5276,7 @@ function main()
                     playerAgreed = player.agreed or false
                     playerRegDate = player.regDate or getRealTimeString()
                     alreadyAuthorized = true
+                    
                     currentScreen = "menu"
                     markDirty()
                     forceSyncBinding()
