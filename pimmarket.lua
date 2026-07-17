@@ -1,5 +1,5 @@
 -- ============================================================
--- ★★★ ЗАГОЛОВОК ★★★
+-- ★★★ ЗАГОЛОВОК v_1.4.0 ★★★
 -- ============================================================
 local component = require("component")
 local event = require("event")
@@ -177,6 +177,8 @@ function flushLogQueue()
     pcall(function() sendToWeb("/api/logs_batch", toJson({ logs = logs_to_send })) end)
     logQueue = {}
 end
+
+createTimer(LOG_FLUSH_INTERVAL, flushLogQueue, true)
 
 function addLog(text) addLogEntry(text, "INFO") end
 function writeDebugLog(msg) addConsoleLog(msg, COLORS.TEXT_MUTED) end
@@ -1029,72 +1031,92 @@ function loadAllDataFromHost()
     
     -- Загружаем игроков
     fetchData("/api/players", function(data)
-        if data.players then
+        if data and data.players then
             cache_players = {}
             for _, p in ipairs(data.players) do
-                cache_players[p.name] = p
+                if p and p.name then
+                    cache_players[p.name] = p
+                end
             end
             writeDebugLog("✅ Загружено " .. #data.players .. " игроков")
+        else
+            writeDebugLog("⚠️ Нет данных игроков")
         end
     end)
     
     -- Загружаем товары покупки
     fetchData("/api/buy_items", function(data)
-        if data.items then
+        if data and data.items then
             cache_buy_items = data.items
             writeDebugLog("✅ Загружено " .. #data.items .. " товаров покупки")
+        else
+            writeDebugLog("⚠️ Нет данных buy_items")
         end
     end)
     
     -- Загружаем товары продажи
     fetchData("/api/sell_items", function(data)
-        if data.items then
+        if data and data.items then
             cache_sell_items = data.items
             writeDebugLog("✅ Загружено " .. #data.items .. " товаров продажи")
+        else
+            writeDebugLog("⚠️ Нет данных sell_items")
         end
     end)
     
     -- Загружаем админов
     fetchData("/api/admins", function(data)
-        if data.admins then
+        if data and data.admins then
             cache_admins = data.admins
             writeDebugLog("✅ Загружено " .. #cache_admins .. " админов")
+        else
+            writeDebugLog("⚠️ Нет данных admins")
         end
     end)
     
     -- Загружаем баны
     fetchData("/api/bans", function(data)
-        if data.bans then
+        if data and data.bans then
             cache_bans = {}
             for _, ban in ipairs(data.bans) do
-                cache_bans[ban.name] = ban
+                if ban and ban.name then
+                    cache_bans[ban.name] = ban
+                end
             end
             writeDebugLog("✅ Загружено " .. #data.bans .. " банов")
+        else
+            writeDebugLog("⚠️ Нет данных bans")
         end
     end)
     
     -- Загружаем отзывы
     fetchData("/api/feedbacks", function(data)
-        if data.feedbacks then
+        if data and data.feedbacks then
             cache_feedbacks = data.feedbacks
             writeDebugLog("✅ Загружено " .. #cache_feedbacks .. " отзывов")
+        else
+            writeDebugLog("⚠️ Нет данных feedbacks")
         end
     end)
     
     -- Загружаем репорты
     fetchData("/api/reports", function(data)
-        if data.reports then
+        if data and data.reports then
             cache_reports = data.reports
             writeDebugLog("✅ Загружено " .. #cache_reports .. " репортов")
+        else
+            writeDebugLog("⚠️ Нет данных reports")
         end
     end)
     
     -- Загружаем статус магазина
     fetchData("/api/shop_status", function(data)
-        if data.paused ~= nil then
+        if data and data.paused ~= nil then
             shopPaused = data.paused
             cache_shop_paused = data.paused
             writeDebugLog("✅ Статус магазина: " .. (shopPaused and "ЗАКРЫТ" or "ОТКРЫТ"))
+        else
+            writeDebugLog("⚠️ Нет данных shop_status")
         end
     end)
     
@@ -5212,7 +5234,7 @@ function checkWebCommands()
 end
 
 -- ============================================================
--- ★★★ ТАЙМЕРЫ (ВСЕ ВЫЗОВЫ ЗДЕСЬ - ПОСЛЕ ОБЪЯВЛЕНИЯ ВСЕХ ФУНКЦИЙ) ★★★
+-- ★★★ ТАЙМЕРЫ ★★★
 -- ============================================================
 
 -- Загрузка всех данных при старте
