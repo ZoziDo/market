@@ -1,5 +1,5 @@
 -- ============================================
--- КОНФИГУРАЦИЯ11
+-- КОНФИГУРАЦИЯ112
 -- ============================================
 local component = require("component")
 local event = require("event")
@@ -10,6 +10,7 @@ local keyboard = require("keyboard")
 local computer = require("computer")
 local fs = require("filesystem")
 local shell = require("shell")
+local os = require("os")  -- Добавить эту строку!
 
 -- ============================================
 -- ЦВЕТА
@@ -166,7 +167,7 @@ local playerData = {
 }
 
 -- ============================================
--- PIM МЕНЕДЖЕР
+-- PIM МЕНЕДЖЕР (ИСПРАВЛЕННЫЙ)
 -- ============================================
 local PimManager = {}
 PimManager.__index = PimManager
@@ -177,6 +178,7 @@ function PimManager.new()
     self.hasPlayer = false
     self.debounceTime = 0.7
     self.monitorRunning = false
+    self.checkTimer = nil
     
     for addr in component.list("pim") do
         self.pim = component.proxy(addr)
@@ -200,12 +202,11 @@ function PimManager:startMonitoring()
     -- Первая проверка
     self.hasPlayer = self:hasPlayerOnPlate()
     
-    event.timer(0.1, function()
-        self:monitorLoop()
-    end, math.huge)
+    -- Запускаем цикл проверки
+    self:checkLoop()
 end
 
-function PimManager:monitorLoop()
+function PimManager:checkLoop()
     if not self.monitorRunning then return end
     
     local currentState = self:hasPlayerOnPlate()
@@ -214,6 +215,7 @@ function PimManager:monitorLoop()
         if currentState then
             -- Игрок появился
             self.hasPlayer = true
+            -- Отправляем событие напрямую в главный цикл
             event.signal("pim_occupied")
         else
             -- Игрок исчез - антидребезг
@@ -221,18 +223,25 @@ function PimManager:monitorLoop()
             -- Двойная проверка
             if not self:hasPlayerOnPlate() then
                 self.hasPlayer = false
+                -- Отправляем событие напрямую в главный цикл
                 event.signal("pim_free")
             end
         end
     end
     
-    -- Продолжаем мониторинг
-    event.timer(0.1, function()
-        self:monitorLoop()
+    -- Планируем следующую проверку
+    self.checkTimer = event.timer(0.1, function()
+        self:checkLoop()
     end)
 end
 
-local pimManager = PimManager.new()
+function PimManager:stopMonitoring()
+    self.monitorRunning = false
+    if self.checkTimer then
+        event.cancel(self.checkTimer)
+        self.checkTimer = nil
+    end
+end
 
 -- ============================================
 -- СЕССИЯ ИГРОКА
@@ -1830,17 +1839,23 @@ gpu.setResolution(80, 25)
 gpu.setBackground(colors.bg_main)
 
 -- Проверяем наличие игрока при старте
+local pimManager = PimManager.new()
+
+-- Запускаем мониторинг Pim ДО проверки игрока
+pimManager:startMonitoring()
+
+-- Небольшая задержка для стабилизации
+os.sleep(0.2)
+
 if pimManager:hasPlayerOnPlate() then
     createSession("Игрок")
     currentScreen = "menu"
     drawMainMenu()
+    showTempMessage("Добро пожаловать!", 2)
 else
     currentScreen = "idle"
     drawIdleScreen()
 end
-
--- Запускаем мониторинг PIM
-pimManager:startMonitoring()
 
 -- ============================================
 -- ОБРАБОТЧИКИ СОБЫТИЙ
@@ -1865,6 +1880,9 @@ event.listen("pim_free", function()
     end
 end)
 
+-- ============================================
+-- ГЛАВНЫЙ ЦИКЛ
+-- ============================================
 -- ============================================
 -- ГЛАВНЫЙ ЦИКЛ
 -- ============================================
@@ -2015,7 +2033,6 @@ while true do
             if y == 3 and x >= 42 and x <= 64 then
                 searchActive = true
                 searchInput = shopSearch
-                redrawSearchField()
                 drawBuyItemsList()
                 goto continue
             end
@@ -2025,7 +2042,6 @@ while true do
                 shopSearch = ""
                 searchInput = ""
                 searchActive = false
-                redrawSearchField()
                 listScroll = 1
                 selectedIndex = 0
                 selectedItem = nil
@@ -2331,12 +2347,10 @@ while true do
             elseif ch == 8 then
                 searchInput = unicode.sub(searchInput, 1, -2)
                 shopSearch = searchInput
-                redrawSearchField()
                 drawBuyItemsList()
             elseif ch >= 32 then
                 searchInput = searchInput .. unicode.char(ch)
                 shopSearch = searchInput
-                redrawSearchField()
                 drawBuyItemsList()
             end
             goto continue
@@ -2383,40 +2397,53 @@ while true do
             end
             goto continue
         end
-        
-        -- Прокрутка колесиком мыши
-        if e == "scroll" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
-            local direction = ev[5]
-            local x = ev[3]
-            local y = ev[4]
-            if x >= 2 and x <= 78 and y >= 7 and y <= 21 then
-                if direction == -1 then
-                    smoothScroll(1)
-                elseif direction == 1 then
-                    smoothScroll(-1)
-                end
-            end
-            goto continue
-        end
-        
-        -- Наведение мыши
-        if e == "mouse_move" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
-            local x, y = ev[3], ev[4]
-            if y >= 7 and y <= 21 and x >= 2 and x <= 77 then
-                local rel = y - 6
-                local newHover = listScroll + rel - 1
-                if newHover <= #filteredItems and newHover ~= hoveredIndex then
-                    hoveredIndex = newHover
+    end
+    
+    -- Прокрутка колесиком мыши
+    if e == "scroll" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
+        local direction = ev[5]
+        local x = ev[3]
+        local y = ev[4]
+        if x >= 2 and x <= 78 and y >= 7 and y <= 21 then
+            if direction == -1 then
+                local total = #filteredItems
+                if total > visibleRows then
+                    listScroll = math.min(listScroll + 1, total - visibleRows + 1)
                     drawBuyItemsList()
                 end
-            else
-                if hoveredIndex ~= 0 then
-                    hoveredIndex = 0
-                    drawBuyItemsList()
-                end
+            elseif direction == 1 then
+                listScroll = math.max(listScroll - 1, 1)
+                drawBuyItemsList()
             end
-            goto continue
         end
+        goto continue
+    end
+    
+    -- Наведение мыши
+    if e == "mouse_move" and (currentScreen == "shop_buy" or currentScreen == "shop_sell") then
+        local x, y = ev[3], ev[4]
+        if y >= 7 and y <= 21 and x >= 2 and x <= 77 then
+            local rel = y - 6
+            local newHover = listScroll + rel - 1
+            if newHover <= #filteredItems and newHover ~= hoveredIndex then
+                hoveredIndex = newHover
+                drawBuyItemsList()
+            end
+        else
+            if hoveredIndex ~= 0 then
+                hoveredIndex = 0
+                drawBuyItemsList()
+            end
+        end
+        goto continue
+    end
+    
+    -- ============================================
+    -- ВСТАВИТЬ ЭТОТ БЛОК СЮДА (ПЕРЕД ::continue::)
+    -- ============================================
+    if e == "pim_occupied" or e == "pim_free" then
+        -- Уже обработано через event.listen
+        goto continue
     end
     
     ::continue::
