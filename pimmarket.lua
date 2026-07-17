@@ -1,5 +1,5 @@
 -- ============================================================
--- ★★★ ЗАГОЛОВОК v_1.4.3 ★★★
+-- ★★★ ЗАГОЛОВОК v_1.4.4 ★★★
 -- ============================================================
 local component = require("component")
 local event = require("event")
@@ -2717,39 +2717,20 @@ function goToReport()
 end
 
 function goToHelp()
-    debugLog("=== goToHelp() вызвана ===")
-    
     local agreement = nil
     local ok, err = pcall(function()
-        debugLog("Пытаемся загрузить agreement.lua")
         agreement = dofile("/home/agreement.lua")
-        debugLog("Загрузка завершена")
     end)
     
-    debugLog("ok=" .. tostring(ok))
-    debugLog("err=" .. tostring(err))
-    debugLog("agreement=" .. tostring(agreement))
-    
-    if agreement then
-        debugLog("type=" .. type(agreement))
-        debugLog("has draw=" .. tostring(type(agreement.draw) == "function"))
-        debugLog("has show=" .. tostring(type(agreement.show) == "function"))
-    end
-    
-    -- Проверяем что загрузилось
     if ok and agreement ~= nil then
         if type(agreement) == "table" and type(agreement.draw) == "function" then
-            debugLog("✅ agreement загружен, показываем")
             currentScreen = "agreement"
             markDirty()
             
             agreement.draw()
-            debugLog("✅ agreement.draw() выполнен")
             
             if type(agreement.show) == "function" then
-                debugLog("Ждём нажатия кнопки...")
                 local agreed = agreement.show()
-                debugLog("agreed=" .. tostring(agreed))
                 if agreed then
                     playerAgreed = true
                     if cache_players[currentPlayer] then
@@ -2759,24 +2740,15 @@ function goToHelp()
                         players = {{ name = currentPlayer, agreed = true }}
                     }))
                     showTempMessage("✅ Спасибо! Теперь вам доступен магазин.", 2)
-                    goBackToMenu()
-                else
-                    goBackToMenu()
                 end
-            else
-                debugLog("❌ agreement.show не функция!")
-                goBackToMenu()
             end
+            
+            goBackToMenu()
             return
-        else
-            debugLog("❌ agreement не таблица или нет draw")
         end
-    else
-        debugLog("❌ agreement не загружен")
     end
     
-    -- Если файл не загрузился - показываем заглушку
-    debugLog("Показываем заглушку")
+    -- Заглушка если файл не найден
     local w, h = getScreenSize()
     clear()
     drawScreenBorder()
