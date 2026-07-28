@@ -29,7 +29,7 @@ local C = {
   red          = 0xFF5555,
   cyan         = 0x55FFFF,
 
-  selectedBg   = 0x002440,
+  selectedBg   = 0x3BFCD0,   -- новый цвет подсветки выбранного товара
   selectedName = 0x014d52,
   star         = 0x077d42,
 
@@ -39,6 +39,7 @@ local C = {
   sectionLine  = 0x27BDEC,
 
   headerBg     = 0x1A2D33,
+  notFound     = 0xF50016,   -- цвет "ничего не найдено"
 
   buttonBuy    = 0x0a502d,
   buttonClear  = 0x8b1a1a,
@@ -84,7 +85,6 @@ local MAIN_H  = HEIGHT - TOP_H - BOT_H
 
 local LEFT_W  = math.floor(WIDTH * 0.60)
 
--- Скролл отдельно, на 2 символа левее разделителя
 local SCROLL_X   = LEFT_W - 2
 local SEPARATOR1 = LEFT_W
 local SEPARATOR2 = LEFT_W + 1
@@ -105,13 +105,13 @@ local RIGHT_INNER_W = WIDTH - RIGHT_INNER_X - 1
 local INFO_Y     = MAIN_Y + 1
 local QTY_Y      = INFO_Y + 8
 local TOTAL_Y    = QTY_Y + 5
-local BTN_Y      = TOTAL_Y + 1
+local BTN_Y      = TOTAL_Y + 2          -- кнопки ниже на 1 строку
 local ACC_Y      = BTN_Y + 3
 
 local BOT_Y      = HEIGHT - 2
 
 -- ====================== ДАННЫЕ ======================
-local items = {
+local allItems = {
   {name="Дракониевая пыль",              me="365",  coina="12",  ema="0.8",  star=true},
   {name="Бумага",                        me="2",    coina="1",   ema="0.1",  star=true},
   {name="Медовые соты",                  me="121",  coina="8",   ema="0.5",  star=true},
@@ -150,9 +150,14 @@ local items = {
   {name="Контур печатной платы",         me="0",    coina="22",  ema="1.5",  star=false},
 }
 
-local selectedIndex = 22
+local items = {}
+for i, v in ipairs(allItems) do items[i] = v end
+
+local selectedIndex = 1
 local scrollOffset  = 0
 local quantity      = ""
+local searchQuery   = ""
+local searchFocused = false
 
 local account = {
   nick     = "Player_777",
@@ -161,6 +166,23 @@ local account = {
   regDate  = "12.03.2025",
   trans    = "148",
 }
+
+-- ====================== ПОИСК ======================
+local function filterItems()
+  items = {}
+  if searchQuery == "" then
+    for i, v in ipairs(allItems) do items[i] = v end
+  else
+    local q = searchQuery:lower()
+    for _, v in ipairs(allItems) do
+      if v.name:lower():find(q, 1, true) then
+        items[#items + 1] = v
+      end
+    end
+  end
+  selectedIndex = 1
+  scrollOffset = 0
+end
 
 -- ====================== ОТРИСОВКА ======================
 local function drawBackground()
@@ -177,7 +199,23 @@ local function drawTopBar()
   setBG(0x0A0A0A)
   gpu.set(1, 2, string.rep("=", WIDTH))
 
-  text(2, 3, "Управление каталогом товаров", C.white, 0x0A0A0A)
+  -- Строка поиска
+  local searchW = 40
+  local searchX = 2
+  fill(searchX, 3, searchW, 1, C.inputBg)
+
+  if searchQuery == "" and not searchFocused then
+    text(searchX + 1, 3, "Поиск...", C.darkGray, C.inputBg)
+  else
+    text(searchX + 1, 3, searchQuery, C.inputFg, C.inputBg)
+  end
+
+  -- кнопка [ Стереть ] рядом с поиском
+  local clearX = searchX + searchW + 1
+  setBG(C.buttonClear)
+  setFG(C.white)
+  gpu.fill(clearX, 3, 11, 1, " ")
+  gpu.set(clearX + 1, 3, "[ Стереть ]")
 end
 
 local function drawMainFrames()
@@ -204,21 +242,21 @@ local function drawLeftHeader()
 end
 
 local function drawSeparator()
-  -- чистый разделитель ||
   setBG(C.bg)
   setFG(C.mainLine)
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(SEPARATOR1, y, "|")
     gpu.set(SEPARATOR2, y, "|")
   end
+  -- верх
   gpu.set(SEPARATOR1, MAIN_Y, "+")
   gpu.set(SEPARATOR2, MAIN_Y, "+")
+  -- низ (добавлены ++)
   gpu.set(SEPARATOR1, MAIN_Y + MAIN_H - 1, "+")
   gpu.set(SEPARATOR2, MAIN_Y + MAIN_H - 1, "+")
 end
 
 local function drawScrollbar()
-  -- отдельный скроллбар слева от ||
   setBG(C.bg)
   setFG(C.darkGray)
   for y = LIST_Y, LIST_Y + LIST_H - 1 do
@@ -283,6 +321,15 @@ end
 
 local function drawProductList()
   fill(LIST_X, LIST_Y, LIST_W, LIST_H, C.bg)
+
+  if #items == 0 then
+    local msg = "ПО ТВОЕМУ ЗАПРОСУ, НИЧЕГО НЕ НАЙДЕНО!"
+    local mx = LIST_X + math.floor((LIST_W - #msg) / 2)
+    local my = LIST_Y + math.floor(LIST_H / 2)
+    text(mx, my, msg, C.notFound, C.bg)
+    return
+  end
+
   local startIdx = scrollOffset + 1
   local endIdx   = math.min(#items, startIdx + LIST_H - 1)
 
@@ -296,7 +343,6 @@ local function drawInfoBlock()
 
   sectionHeader(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, "ИНФО", C.sectionLine, C.white)
 
-  -- один отступ после заголовка
   local item = items[selectedIndex]
   if not item then return end
 
@@ -311,14 +357,12 @@ local function drawInfoBlock()
 end
 
 local function drawQuantitySection()
-  fill(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, 8, C.bg)
+  fill(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, 9, C.bg)
 
-  sectionHeader(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, "ПОЛЕ ДЛЯ КОЛИЧЕСТВА", C.sectionLine, C.white)
+  sectionHeader(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, "Поле для количества", C.sectionLine, C.white)
 
-  -- один отступ + поле ввода
   local fieldY = QTY_Y + 2
-  local fieldW = RIGHT_INNER_W
-  fill(RIGHT_INNER_X, fieldY, fieldW, 1, C.inputBg)
+  fill(RIGHT_INNER_X, fieldY, RIGHT_INNER_W, 1, C.inputBg)
 
   if quantity == "" then
     text(RIGHT_INNER_X + 1, fieldY, "Введите количество...", C.darkGray, C.inputBg)
@@ -339,6 +383,7 @@ local function drawQuantitySection()
     string.format("Итог: COINA: %s | EMA: %s", totalCoina, totalEma),
     C.yellow, C.bg)
 
+  -- кнопки ниже на 1 строку
   local btnW = 12
   local gap  = 2
 
@@ -356,9 +401,8 @@ end
 local function drawAccountInfo()
   fill(RIGHT_INNER_X, ACC_Y, RIGHT_INNER_W, 8, C.bg)
 
-  sectionHeader(RIGHT_INNER_X, ACC_Y, RIGHT_INNER_W, "ИНФОРМАЦИЯ АККАУНТА", C.sectionLine, C.white)
+  sectionHeader(RIGHT_INNER_X, ACC_Y, RIGHT_INNER_W, "Информация Аккаунта", C.sectionLine, C.white)
 
-  -- один отступ после заголовка
   local y = ACC_Y + 2
   text(RIGHT_INNER_X, y, "НИК      : " .. account.nick, C.white, C.bg)
   y = y + 1
@@ -382,7 +426,6 @@ local function drawBottomBar()
   setBG(C.bg)
   gpu.set(1, BOT_Y - 1, "+" .. string.rep("=", WIDTH - 2) .. "+")
 
-  -- кнопки прижаты влево
   local btnW = 14
   local gap  = 2
   local leftMargin = 2
@@ -422,6 +465,7 @@ end
 
 -- ====================== ЛОГИКА ======================
 local function selectItem(index)
+  if #items == 0 then return end
   if index < 1 then index = 1 end
   if index > #items then index = #items end
   selectedIndex = index
@@ -446,6 +490,7 @@ local function scroll(delta)
 end
 
 local function handleClick(x, y)
+  -- клик по списку
   if x >= LIST_X and x <= LIST_X + LIST_W and y >= LIST_Y and y <= LIST_Y + LIST_H - 1 then
     local row = y - LIST_Y
     local index = scrollOffset + row + 1
@@ -455,10 +500,27 @@ local function handleClick(x, y)
     return
   end
 
+  -- клик по кнопке Стереть в поиске
+  local searchW = 40
+  local clearX = 2 + searchW + 1
+  if y == 3 and x >= clearX and x < clearX + 11 then
+    searchQuery = ""
+    filterItems()
+    redrawAll()
+    return
+  end
+
+  -- клик по полю поиска
+  if y == 3 and x >= 2 and x <= 2 + searchW then
+    searchFocused = true
+    return
+  end
+
+  -- клик по Стереть количества
   local btnW = 12
   local gap  = 2
-  local clearX = RIGHT_INNER_X + btnW + gap
-  if y == BTN_Y and x >= clearX and x < clearX + btnW then
+  local clearQtyX = RIGHT_INNER_X + btnW + gap
+  if y == BTN_Y and x >= clearQtyX and x < clearQtyX + btnW then
     quantity = ""
     drawQuantitySection()
   end
@@ -466,6 +528,7 @@ end
 
 -- ====================== ГЛАВНЫЙ ЦИКЛ ======================
 term.clear()
+filterItems()
 redrawAll()
 
 while true do
@@ -484,20 +547,36 @@ while true do
   elseif name == "key_down" then
     local _, _, char, code = table.unpack(ev)
 
-    if code == keyboard.keys.up then
-      selectItem(selectedIndex - 1)
-    elseif code == keyboard.keys.down then
-      selectItem(selectedIndex + 1)
-    elseif code == keyboard.keys.back then
-      quantity = quantity:sub(1, -2)
-      drawQuantitySection()
-    elseif char and char >= 48 and char <= 57 then
-      if #quantity < 8 then
-        quantity = quantity .. string.char(char)
-        drawQuantitySection()
+    if searchFocused then
+      if code == keyboard.keys.enter or code == keyboard.keys.tab then
+        searchFocused = false
+      elseif code == keyboard.keys.back then
+        searchQuery = searchQuery:sub(1, -2)
+        filterItems()
+        redrawAll()
+      elseif char and char >= 32 and char <= 126 then
+        if #searchQuery < 30 then
+          searchQuery = searchQuery .. string.char(char)
+          filterItems()
+          redrawAll()
+        end
       end
-    elseif code == keyboard.keys.q or code == keyboard.keys.escape then
-      break
+    else
+      if code == keyboard.keys.up then
+        selectItem(selectedIndex - 1)
+      elseif code == keyboard.keys.down then
+        selectItem(selectedIndex + 1)
+      elseif code == keyboard.keys.back then
+        quantity = quantity:sub(1, -2)
+        drawQuantitySection()
+      elseif char and char >= 48 and char <= 57 then
+        if #quantity < 8 then
+          quantity = quantity .. string.char(char)
+          drawQuantitySection()
+        end
+      elseif code == keyboard.keys.q or code == keyboard.keys.escape then
+        break
+      end
     end
   end
 end
