@@ -38,6 +38,8 @@ local C = {
   mainLine     = 0x7FFFD4,
   sectionLine  = 0x27BDEC,
 
+  headerBg     = 0x1A2D33,   -- заливка строки заголовков колонок
+
   buttonBuy    = 0x0a502d,
   buttonClear  = 0x8b1a1a,
   buttonSales  = 0x1a5a6b,
@@ -62,7 +64,6 @@ local function text(x, y, str, fg, bg)
   gpu.set(x, y, str)
 end
 
--- Заголовок прижат влево + линия до конца
 local function sectionHeader(x, y, w, title, lineColor, titleColor)
   lineColor  = lineColor or C.sectionLine
   titleColor = titleColor or C.white
@@ -81,17 +82,16 @@ local BOT_H   = 3
 local MAIN_Y  = 4
 local MAIN_H  = HEIGHT - TOP_H - BOT_H
 
-local LEFT_W  = math.floor(WIDTH * 0.60)   -- ширина левой панели (до скролла)
-local RIGHT_W = WIDTH - LEFT_W - 2         -- правая панель (после ||)
+local LEFT_W  = math.floor(WIDTH * 0.60)
+local RIGHT_W = WIDTH - LEFT_W - 2
 
 local LIST_X  = 2
 local LIST_Y  = MAIN_Y + 3
 local LIST_H  = MAIN_H - 4
 local LIST_W  = LEFT_W - 2
 
--- Скроллбар = разделитель между панелями
-local SCROLL_X  = LEFT_W          -- первая |
-local SCROLL_X2 = LEFT_W + 1      -- вторая |
+local SCROLL_X  = LEFT_W
+local SCROLL_X2 = LEFT_W + 1
 
 local COL_NAME_X  = 3
 local COL_ME_X    = LEFT_W - 28
@@ -101,7 +101,8 @@ local COL_EMA_X   = LEFT_W - 9
 local RIGHT_INNER_X = LEFT_W + 3
 local RIGHT_INNER_W = WIDTH - RIGHT_INNER_X - 1
 
-local INFO_Y     = MAIN_Y + 2
+-- ИНФО теперь на одном уровне с КАТАЛОГ ТОВАРОВ
+local INFO_Y     = MAIN_Y + 1
 local QTY_Y      = INFO_Y + 7
 local TOTAL_Y    = QTY_Y + 4
 local BTN_Y      = TOTAL_Y + 1
@@ -183,7 +184,6 @@ local function drawMainFrames()
   setBG(C.bg)
   setFG(C.mainLine)
 
-  -- внешняя рамка
   gpu.set(1, MAIN_Y, "+" .. string.rep("=", WIDTH - 2) .. "+")
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(1, y, "|")
@@ -195,16 +195,16 @@ end
 local function drawLeftHeader()
   sectionHeader(2, MAIN_Y + 1, LEFT_W - 2, "КАТАЛОГ ТОВАРОВ", C.mainLine, C.white)
 
+  -- строка заголовков колонок с заливкой 0x1A2D33
   local colY = MAIN_Y + 2
-  fill(2, colY, LEFT_W - 2, 1, C.bg)
-  text(COL_NAME_X,  colY, "ТОВАР",  C.white, C.bg)
-  text(COL_ME_X,    colY, "В ME",   C.white, C.bg)
-  text(COL_COINA_X, colY, "COINA",  C.white, C.bg)
-  text(COL_EMA_X,   colY, "EMA",    C.white, C.bg)
+  fill(2, colY, LEFT_W - 2, 1, C.headerBg)
+  text(COL_NAME_X,  colY, "ТОВАР",  C.white, C.headerBg)
+  text(COL_ME_X,    colY, "В ME",   C.white, C.headerBg)
+  text(COL_COINA_X, colY, "COINA",  C.white, C.headerBg)
+  text(COL_EMA_X,   colY, "EMA",    C.white, C.headerBg)
 end
 
 local function drawScrollbar()
-  -- Двойная линия || как разделитель + скролл
   setBG(C.bg)
   setFG(C.mainLine)
 
@@ -213,13 +213,11 @@ local function drawScrollbar()
     gpu.set(SCROLL_X2, y, "|")
   end
 
-  -- верх и низ
   gpu.set(SCROLL_X,  MAIN_Y, "+")
   gpu.set(SCROLL_X2, MAIN_Y, "+")
   gpu.set(SCROLL_X,  MAIN_Y + MAIN_H - 1, "+")
   gpu.set(SCROLL_X2, MAIN_Y + MAIN_H - 1, "+")
 
-  -- ползунок (заливка цветом)
   local maxScroll = math.max(0, #items - LIST_H)
   local thumbH = math.max(3, math.floor(LIST_H * 0.25))
   local thumbY = LIST_Y
@@ -370,20 +368,23 @@ local function drawBottomBar()
   setBG(C.bg)
   gpu.set(1, BOT_Y - 1, "+" .. string.rep("=", WIDTH - 2) .. "+")
 
+  -- кнопки прижаты к правому краю
   local btnW = 14
-  local gap  = 4
-  local total = btnW * 2 + gap
-  local startX = math.floor((WIDTH - total) / 2)
+  local gap  = 2
+  local rightMargin = 2
+
+  local salesX = WIDTH - rightMargin - btnW
+  local buyX   = salesX - gap - btnW
 
   setBG(C.buttonBuy)
   setFG(C.white)
-  gpu.fill(startX, BOT_Y, btnW, 1, " ")
-  gpu.set(startX + 2, BOT_Y, "[ Покупки ]")
+  gpu.fill(buyX, BOT_Y, btnW, 1, " ")
+  gpu.set(buyX + 2, BOT_Y, "[ Покупки ]")
 
   setBG(C.buttonSales)
   setFG(C.white)
-  gpu.fill(startX + btnW + gap, BOT_Y, btnW, 1, " ")
-  gpu.set(startX + btnW + gap + 2, BOT_Y, "[ Продажи ]")
+  gpu.fill(salesX, BOT_Y, btnW, 1, " ")
+  gpu.set(salesX + 2, BOT_Y, "[ Продажи ]")
 end
 
 local function drawBottomBorder()
@@ -398,7 +399,7 @@ local function redrawAll()
   drawMainFrames()
   drawLeftHeader()
   drawProductList()
-  drawScrollbar()          -- скроллбар = разделитель
+  drawScrollbar()
   drawRightPanel()
   drawBottomBar()
   drawBottomBorder()
@@ -426,6 +427,7 @@ local function scroll(delta)
   local maxScroll = math.max(0, #items - LIST_H)
   scrollOffset = math.max(0, math.min(maxScroll, scrollOffset + delta))
   drawProductList()
+  drawScrollbar()
 end
 
 local function handleClick(x, y)
