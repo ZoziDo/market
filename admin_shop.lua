@@ -25,21 +25,26 @@ local C = {
   yellow       = 0xFFFF55,
   red          = 0xFF5555,
   cyan         = 0x55FFFF,
-  selectedBg   = 0x3BFCD0,
-  selectedName = 0x014d52,
+
+  selectedBg   = 0x002440,   -- фон выбранного товара
+  selectedName = 0x00e6b1,   -- название выбранного товара
   star         = 0x077d42,
+
   vipTitle     = 0x0c9a76,
   underLine    = 0x428A72,
   mainLine     = 0x7FFFD4,
   sectionLine  = 0x27BDEC,
   headerBg     = 0x1A2D33,
   notFound     = 0xF50016,
+
   buttonBuy    = 0x0a502d,
   buttonClear  = 0x8b1a1a,
   buttonSales  = 0x1a5a6b,
+
   inputBg      = 0x1a1a1a,
   inputFg      = 0xFFFFFF,
   accent       = 0x0c9a76,
+  frame        = 0x27BDEC,   -- рамка полей ввода
 }
 
 local function setBG(c) gpu.setBackground(c) end
@@ -64,6 +69,12 @@ local function sectionHeader(x, y, w, title, lineColor, titleColor)
   gpu.set(x, y, string.rep("-", w))
   setFG(titleColor)
   gpu.set(x + 1, y, title)
+end
+
+-- обрезка длинного текста
+local function truncate(str, maxLen)
+  if #str <= maxLen then return str end
+  return str:sub(1, maxLen - 3) .. "..."
 end
 
 local TOP_H   = 3
@@ -184,21 +195,30 @@ local function drawTopBar()
   setBG(0x0A0A0A)
   gpu.set(1, 2, string.rep("=", WIDTH))
 
+  -- Поле поиска с рамкой
   local searchW = 40
   local searchX = 2
-  fill(searchX, 3, searchW, 1, C.inputBg)
+  local searchY = 3
 
+  -- рамка
+  setFG(C.frame)
+  setBG(C.bg)
+  gpu.set(searchX - 1, searchY, "[" .. string.rep(" ", searchW) .. "]")
+
+  -- содержимое
+  fill(searchX, searchY, searchW, 1, C.inputBg)
   if searchQuery == "" and not searchFocused then
-    text(searchX + 1, 3, "Поиск...", C.darkGray, C.inputBg)
+    text(searchX + 1, searchY, "Поиск...", C.darkGray, C.inputBg)
   else
-    text(searchX + 1, 3, searchQuery, C.inputFg, C.inputBg)
+    text(searchX + 1, searchY, searchQuery, C.inputFg, C.inputBg)
   end
 
-  local clearX = searchX + searchW + 1
+  -- кнопка Стереть
+  local clearX = searchX + searchW + 2
   setBG(C.buttonClear)
   setFG(C.white)
-  gpu.fill(clearX, 3, 11, 1, " ")
-  gpu.set(clearX + 1, 3, "[ Стереть ]")
+  gpu.fill(clearX, searchY, 11, 1, " ")
+  gpu.set(clearX + 1, searchY, "[ Стереть ]")
 end
 
 local function drawMainFrames()
@@ -230,8 +250,10 @@ local function drawSeparator()
     gpu.set(SEPARATOR1, y, "|")
     gpu.set(SEPARATOR2, y, "|")
   end
+  -- верх
   gpu.set(SEPARATOR1, MAIN_Y, "+")
   gpu.set(SEPARATOR2, MAIN_Y, "+")
+  -- низ (обязательно ++)
   gpu.set(SEPARATOR1, MAIN_Y + MAIN_H - 1, "+")
   gpu.set(SEPARATOR2, MAIN_Y + MAIN_H - 1, "+")
 end
@@ -272,10 +294,11 @@ local function drawItemRow(index, y)
     fill(LIST_X, y, LIST_W, 1, C.bg)
   end
 
+  -- название меняет цвет, остальные колонки оставляем свои
   local nameColor = isSelected and C.selectedName or C.white
-  local meColor   = isSelected and C.selectedName or (item.star and C.green or C.red)
-  local coinaColor= isSelected and C.selectedName or C.yellow
-  local emaColor  = isSelected and C.selectedName or C.cyan
+  local meColor   = item.star and C.green or C.red
+  local coinaColor= C.yellow
+  local emaColor  = C.cyan
 
   if isSelected then
     text(COL_NAME_X, y, "> ", C.selectedName, C.selectedBg)
@@ -288,10 +311,7 @@ local function drawItemRow(index, y)
   end
 
   local maxNameLen = COL_ME_X - COL_NAME_X - 2
-  local displayName = item.name
-  if #displayName > maxNameLen - 2 then
-    displayName = displayName:sub(1, maxNameLen - 3) .. "."
-  end
+  local displayName = truncate(item.name, maxNameLen - 2)
 
   text(COL_NAME_X + 2, y, displayName, nameColor, isSelected and C.selectedBg or C.bg)
   text(COL_ME_X,   y, item.me,     meColor,   isSelected and C.selectedBg or C.bg)
@@ -325,8 +345,9 @@ local function drawInfoBlock()
   local item = items[selectedIndex]
   if not item then return end
 
+  local maxLen = RIGHT_INNER_W - 8
   local y = INFO_Y + 2
-  text(RIGHT_INNER_X, y, "Товар: " .. item.name, C.white, C.bg)
+  text(RIGHT_INNER_X, y, "Товар: " .. truncate(item.name, maxLen), C.white, C.bg)
   y = y + 1
   text(RIGHT_INNER_X, y, "В ME : " .. item.me, C.green, C.bg)
   y = y + 1
@@ -340,12 +361,18 @@ local function drawQuantitySection()
   sectionHeader(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, "Поле для количества", C.sectionLine, C.white)
 
   local fieldY = QTY_Y + 2
-  fill(RIGHT_INNER_X, fieldY, RIGHT_INNER_W, 1, C.inputBg)
+
+  -- рамка вокруг поля ввода
+  setFG(C.frame)
+  setBG(C.bg)
+  gpu.set(RIGHT_INNER_X, fieldY, "[" .. string.rep(" ", RIGHT_INNER_W - 2) .. "]")
+
+  fill(RIGHT_INNER_X + 1, fieldY, RIGHT_INNER_W - 2, 1, C.inputBg)
 
   if quantity == "" then
-    text(RIGHT_INNER_X + 1, fieldY, "Введите количество...", C.darkGray, C.inputBg)
+    text(RIGHT_INNER_X + 2, fieldY, "Введите количество...", C.darkGray, C.inputBg)
   else
-    text(RIGHT_INNER_X + 1, fieldY, quantity, C.inputFg, C.inputBg)
+    text(RIGHT_INNER_X + 2, fieldY, quantity, C.inputFg, C.inputBg)
   end
 
   local item = items[selectedIndex]
@@ -474,7 +501,7 @@ local function handleClick(x, y)
   end
 
   local searchW = 40
-  local clearX = 2 + searchW + 1
+  local clearX = 2 + searchW + 2
   if y == 3 and x >= clearX and x < clearX + 11 then
     searchQuery = ""
     filterItems()
