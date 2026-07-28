@@ -1,14 +1,9 @@
--- ============================================================
--- VIP-SHOP
--- OpenComputers / OpenOS / GPU API / Lua 5.2
--- ============================================================
-
 local component = require("component")
-local gpu       = component.gpu
-local term      = require("term")
-local event     = require("event")
-local keyboard  = require("keyboard")
-local unicode   = require("unicode")
+local gpu = component.gpu
+local term = require("term")
+local event = require("event")
+local keyboard = require("keyboard")
+local unicode = require("unicode")
 
 local WIDTH, HEIGHT = gpu.getResolution()
 local maxW, maxH = gpu.maxResolution()
@@ -18,91 +13,60 @@ if WIDTH < maxW or HEIGHT < maxH then
 end
 
 local C = {
-  bg           = 0x0C0C0C,
-  white        = 0xFFFFFF,
-  gray         = 0xAAAAAA,
-  darkGray     = 0x555555,
-  green        = 0x55FF55,
-  yellow       = 0xFFFF55,
-  red          = 0xFF5555,
-  cyan         = 0x55FFFF,
-  selectedBg   = 0x002440,
-  selectedName = 0x00e6b1,
-  star         = 0x077d42,
-  vipTitle     = 0x0c9a76,
-  underLine    = 0x428A72,
-  mainLine     = 0x7FFFD4,
-  sectionLine  = 0x27BDEC,
-  headerBg     = 0x1A2D33,
-  notFound     = 0xF50016,
-  buttonBuy    = 0x0a502d,
-  buttonClear  = 0x8b1a1a,
-  buttonSales  = 0x1a5a6b,
-  inputBg      = 0x1a1a1a,
-  inputFg      = 0xFFFFFF,
-  accent       = 0x0c9a76,
-  frame        = 0x27BDEC,
+  bg = 0x0C0C0C, white = 0xFFFFFF, gray = 0xAAAAAA, darkGray = 0x555555,
+  green = 0x55FF55, yellow = 0xFFFF55, red = 0xFF5555, cyan = 0x55FFFF,
+  selectedBg = 0x002440, selectedName = 0x00e6b1, star = 0x077d42,
+  vipTitle = 0x0c9a76, underLine = 0x428A72, mainLine = 0x7FFFD4,
+  sectionLine = 0x27BDEC, headerBg = 0x1A2D33, notFound = 0xF50016,
+  buttonBuy = 0x0a502d, buttonClear = 0x8b1a1a, buttonSales = 0x1a5a6b,
+  inputBg = 0x1a1a1a, inputFg = 0xFFFFFF, accent = 0x0c9a76, frame = 0x27BDEC,
 }
 
 local function setBG(c) gpu.setBackground(c) end
 local function setFG(c) gpu.setForeground(c) end
-
-local function fill(x, y, w, h, c)
-  setBG(c)
-  gpu.fill(x, y, w, h, " ")
-end
-
+local function fill(x, y, w, h, c) setBG(c) gpu.fill(x, y, w, h, " ") end
 local function text(x, y, str, fg, bg)
   if bg then setBG(bg) end
   if fg then setFG(fg) end
   gpu.set(x, y, str)
 end
-
 local function sectionHeader(x, y, w, title, lineColor, titleColor)
-  lineColor  = lineColor or C.sectionLine
+  lineColor = lineColor or C.sectionLine
   titleColor = titleColor or C.white
-  setBG(C.bg)
-  setFG(lineColor)
+  setBG(C.bg) setFG(lineColor)
   gpu.set(x, y, string.rep("-", w))
   setFG(titleColor)
   gpu.set(x + 1, y, title)
 end
-
 local function truncate(str, maxLen)
   if #str <= maxLen then return str end
   return str:sub(1, maxLen - 3) .. "..."
 end
 
-local TOP_H   = 3
-local BOT_H   = 3
-local MAIN_Y  = 4
-local MAIN_H  = HEIGHT - TOP_H - BOT_H
-
-local LEFT_W  = math.floor(WIDTH * 0.60)
-
-local SCROLL_X   = LEFT_W - 2
+local TOP_H = 3
+local BOT_H = 3
+local MAIN_Y = 4
+local MAIN_H = HEIGHT - TOP_H - BOT_H
+local LEFT_W = math.floor(WIDTH * 0.60)
+local SCROLL_X = LEFT_W - 2
 local SEPARATOR1 = LEFT_W
 local SEPARATOR2 = LEFT_W + 1
-
-local LIST_X  = 2
-local LIST_Y  = MAIN_Y + 3
-local LIST_H  = MAIN_H - 4
-local LIST_W  = SCROLL_X - 3
-
-local COL_NAME_X  = 3
-local COL_ME_X    = SCROLL_X - 26
+local LIST_X = 2
+local LIST_Y = MAIN_Y + 3
+local LIST_H = MAIN_H - 4
+local LIST_W = SCROLL_X - 3
+local COL_NAME_X = 3
+local COL_ME_X = SCROLL_X - 26
 local COL_COINA_X = SCROLL_X - 16
-local COL_EMA_X   = SCROLL_X - 7
-
+local COL_EMA_X = SCROLL_X - 7
 local RIGHT_INNER_X = LEFT_W + 3
 local RIGHT_INNER_W = WIDTH - RIGHT_INNER_X - 1
-
-local INFO_Y  = MAIN_Y + 1
-local QTY_Y   = INFO_Y + 8
+local INFO_Y = MAIN_Y + 1
+local QTY_Y = INFO_Y + 8
 local TOTAL_Y = QTY_Y + 5
-local BTN_Y   = TOTAL_Y + 2
-local ACC_Y   = BTN_Y + 3
-local BOT_Y   = HEIGHT - 2
+local BTN_Y = TOTAL_Y + 2
+local ACC_Y = BTN_Y + 3
+local BOT_Y = HEIGHT - 2
 
 local allItems = {
   {name="Дракониевая пыль", me="365", coina="12", ema="0.8", star=true},
@@ -147,18 +111,18 @@ local items = {}
 for i, v in ipairs(allItems) do items[i] = v end
 
 local selectedIndex = 1
-local scrollOffset  = 0
-local quantity      = ""
-local searchQuery   = ""
+local scrollOffset = 0
+local quantity = ""
+local searchQuery = ""
 local searchFocused = false
-local qtyFocused    = false
+local qtyFocused = false
 
 local account = {
-  nick     = "Player_777",
-  coina    = "12500",
-  ema      = "842.5",
-  regDate  = "12.03.2025",
-  trans    = "148",
+  nick = "Player_777",
+  coina = "12500",
+  ema = "842.5",
+  regDate = "12.03.2025",
+  trans = "148",
 }
 
 local function filterItems()
@@ -188,22 +152,18 @@ local function drawTopBar()
   setFG(C.underLine)
   setBG(0x0A0A0A)
   gpu.set(1, 2, string.rep("=", WIDTH))
-
   local searchW = 40
   local searchX = 2
   local searchY = 3
-
   setFG(C.frame)
   setBG(C.bg)
   gpu.set(searchX - 1, searchY, "[" .. string.rep(" ", searchW) .. "]")
-
   fill(searchX, searchY, searchW, 1, C.inputBg)
   if searchQuery == "" and not searchFocused then
     text(searchX + 1, searchY, "Поиск...", C.darkGray, C.inputBg)
   else
     text(searchX + 1, searchY, searchQuery, C.inputFg, C.inputBg)
   end
-
   local clearX = searchX + searchW + 2
   setBG(C.buttonClear)
   setFG(C.white)
@@ -226,10 +186,10 @@ local function drawLeftHeader()
   sectionHeader(2, MAIN_Y + 1, LEFT_W - 3, "КАТАЛОГ ТОВАРОВ", C.mainLine, C.white)
   local colY = MAIN_Y + 2
   fill(2, colY, LEFT_W - 3, 1, C.headerBg)
-  text(COL_NAME_X,  colY, "ТОВАР",  C.white, C.headerBg)
-  text(COL_ME_X,    colY, "В ME",   C.white, C.headerBg)
-  text(COL_COINA_X, colY, "COINA",  C.white, C.headerBg)
-  text(COL_EMA_X,   colY, "EMA",    C.white, C.headerBg)
+  text(COL_NAME_X, colY, "ТОВАР", C.white, C.headerBg)
+  text(COL_ME_X, colY, "В ME", C.white, C.headerBg)
+  text(COL_COINA_X, colY, "COINA", C.white, C.headerBg)
+  text(COL_EMA_X, colY, "EMA", C.white, C.headerBg)
 end
 
 local function drawSeparator()
@@ -277,9 +237,9 @@ local function drawItemRow(index, y)
     fill(LIST_X, y, LIST_W, 1, C.bg)
   end
   local nameColor = isSelected and C.selectedName or C.white
-  local meColor   = item.star and C.green or C.red
-  local coinaColor= C.yellow
-  local emaColor  = C.cyan
+  local meColor = item.star and C.green or C.red
+  local coinaColor = C.yellow
+  local emaColor = C.cyan
   if isSelected then
     text(COL_NAME_X, y, "> ", C.selectedName, C.selectedBg)
   else
@@ -292,9 +252,9 @@ local function drawItemRow(index, y)
   local maxNameLen = COL_ME_X - COL_NAME_X - 2
   local displayName = truncate(item.name, maxNameLen - 2)
   text(COL_NAME_X + 2, y, displayName, nameColor, isSelected and C.selectedBg or C.bg)
-  text(COL_ME_X,   y, item.me,     meColor,   isSelected and C.selectedBg or C.bg)
-  text(COL_COINA_X,y, item.coina,  coinaColor,isSelected and C.selectedBg or C.bg)
-  text(COL_EMA_X,  y, item.ema,    emaColor,  isSelected and C.selectedBg or C.bg)
+  text(COL_ME_X, y, item.me, meColor, isSelected and C.selectedBg or C.bg)
+  text(COL_COINA_X, y, item.coina, coinaColor, isSelected and C.selectedBg or C.bg)
+  text(COL_EMA_X, y, item.ema, emaColor, isSelected and C.selectedBg or C.bg)
 end
 
 local function drawProductList()
@@ -308,7 +268,7 @@ local function drawProductList()
     return
   end
   local startIdx = scrollOffset + 1
-  local endIdx   = math.min(#items, startIdx + LIST_H - 1)
+  local endIdx = math.min(#items, startIdx + LIST_H - 1)
   for i = startIdx, endIdx do
     drawItemRow(i, LIST_Y + (i - startIdx))
   end
@@ -346,14 +306,14 @@ local function drawQuantitySection()
   local item = items[selectedIndex]
   local qty = tonumber(quantity) or 0
   local totalCoina = 0
-  local totalEma   = 0
+  local totalEma = 0
   if item then
     totalCoina = qty * (tonumber(item.coina) or 0)
-    totalEma   = qty * (tonumber(item.ema) or 0)
+    totalEma = qty * (tonumber(item.ema) or 0)
   end
   text(RIGHT_INNER_X, TOTAL_Y, string.format("Итог: COINA: %s | EMA: %s", totalCoina, totalEma), C.yellow, C.bg)
   local btnW = 12
-  local gap  = 2
+  local gap = 2
   setBG(C.buttonBuy)
   setFG(C.white)
   gpu.fill(RIGHT_INNER_X, BTN_Y, btnW, 1, " ")
@@ -389,9 +349,9 @@ local function drawBottomBar()
   setBG(C.bg)
   gpu.set(1, BOT_Y - 1, "+" .. string.rep("=", WIDTH - 2) .. "+")
   local btnW = 14
-  local gap  = 2
+  local gap = 2
   local leftMargin = 2
-  local buyX  = leftMargin
+  local buyX = leftMargin
   local salesX = buyX + btnW + gap
   setBG(C.buttonBuy)
   setFG(C.white)
@@ -448,7 +408,6 @@ end
 local function handleClick(x, y)
   searchFocused = false
   qtyFocused = false
-
   if x >= LIST_X and x <= LIST_X + LIST_W and y >= LIST_Y and y <= LIST_Y + LIST_H - 1 then
     local row = y - LIST_Y
     local index = scrollOffset + row + 1
@@ -457,7 +416,6 @@ local function handleClick(x, y)
     end
     return
   end
-
   local searchW = 40
   local clearX = 2 + searchW + 2
   if y == 3 and x >= clearX and x < clearX + 11 then
@@ -466,20 +424,17 @@ local function handleClick(x, y)
     redrawAll()
     return
   end
-
   if y == 3 and x >= 2 and x <= 2 + searchW then
     searchFocused = true
     return
   end
-
   local fieldY = QTY_Y + 2
   if y == fieldY and x >= RIGHT_INNER_X and x <= RIGHT_INNER_X + RIGHT_INNER_W then
     qtyFocused = true
     return
   end
-
   local btnW = 12
-  local gap  = 2
+  local gap = 2
   local clearQtyX = RIGHT_INNER_X + btnW + gap
   if y == BTN_Y and x >= clearQtyX and x < clearQtyX + btnW then
     quantity = ""
@@ -487,7 +442,6 @@ local function handleClick(x, y)
   end
 end
 
--- ====================== ЗАПУСК ======================
 term.clear()
 filterItems()
 redrawAll()
@@ -495,19 +449,15 @@ redrawAll()
 while true do
   local ev = {event.pull()}
   local name = ev[1]
-
   if name == "touch" then
     handleClick(ev[3], ev[4])
-
   elseif name == "scroll" then
     local x, direction = ev[3], ev[5]
     if x >= LIST_X and x <= LIST_X + LIST_W + 2 then
       scroll(-direction)
     end
-
   elseif name == "key_down" then
     local _, _, char, code = table.unpack(ev)
-
     if searchFocused then
       if code == keyboard.keys.enter or code == keyboard.keys.tab then
         searchFocused = false
@@ -522,7 +472,6 @@ while true do
           redrawAll()
         end
       end
-
     elseif qtyFocused then
       if code == keyboard.keys.enter or code == keyboard.keys.tab then
         qtyFocused = false
@@ -535,7 +484,6 @@ while true do
           drawQuantitySection()
         end
       end
-
     else
       if code == keyboard.keys.up then
         selectItem(selectedIndex - 1)
