@@ -244,7 +244,7 @@ local function drawItemRow(index, y)
     text(COL_NAME_X, y, "> ", C.selectedName, C.selectedBg)
   else
     if item.star then
-      text(COL_NAME_X, y, "* ", C.star, C.bg)
+      text(COL_NAME_X, y, "* ", C.mainLine, C.bg)
     else
       text(COL_NAME_X, y, "- ", C.darkGray, C.bg)
     end
