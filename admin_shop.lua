@@ -34,9 +34,9 @@ local C = {
   star         = 0x077d42,
 
   vipTitle     = 0x0c9a76,
-  underLine    = 0x428A72,   -- линия после VIP-SHOP
-  mainLine     = 0x7FFFD4,   -- основные линии рамок
-  sectionLine  = 0x27BDEC,   -- линии секций ИНФО / Поле / Аккаунт
+  underLine    = 0x428A72,
+  mainLine     = 0x7FFFD4,
+  sectionLine  = 0x27BDEC,
 
   buttonBuy    = 0x0a502d,
   buttonClear  = 0x8b1a1a,
@@ -62,24 +62,19 @@ local function text(x, y, str, fg, bg)
   gpu.set(x, y, str)
 end
 
--- Рисует линию с текстом внутри: ---ТЕКСТ---
+-- Заголовок прижат влево + линия до конца
+-- ---ИНФО--------------------------------
 local function sectionHeader(x, y, w, title, lineColor, titleColor)
   lineColor  = lineColor or C.sectionLine
   titleColor = titleColor or C.white
 
-  local side = math.floor((w - #title - 2) / 2)
-  if side < 1 then side = 1 end
-
-  local left  = string.rep("-", side)
-  local right = string.rep("-", w - side - #title - 2)
-
   setBG(C.bg)
   setFG(lineColor)
-  gpu.set(x, y, left)
+  gpu.set(x, y, string.rep("-", w))
+
+  -- текст поверх линии
   setFG(titleColor)
-  gpu.set(x + side, y, " " .. title .. " ")
-  setFG(lineColor)
-  gpu.set(x + side + #title + 2, y, right)
+  gpu.set(x + 1, y, title)
 end
 
 -- ====================== РАЗМЕРЫ ======================
@@ -94,13 +89,14 @@ local RIGHT_W = WIDTH - LEFT_W
 local LIST_X  = 2
 local LIST_Y  = MAIN_Y + 3
 local LIST_H  = MAIN_H - 4
-local LIST_W  = LEFT_W - 4          -- чуть уже, чтобы скролл был отдельно
-local SCROLL_X = LEFT_W - 2         -- скролл на 1 символ левее рамки
+local LIST_W  = LEFT_W - 5
+local SCROLL_X = LEFT_W - 3          -- первая линия скролла
+local SCROLL_X2 = LEFT_W - 2         -- вторая линия скролла
 
 local COL_NAME_X  = 3
-local COL_ME_X    = LEFT_W - 31
-local COL_COINA_X = LEFT_W - 21
-local COL_EMA_X   = LEFT_W - 11
+local COL_ME_X    = LEFT_W - 32
+local COL_COINA_X = LEFT_W - 22
+local COL_EMA_X   = LEFT_W - 12
 
 local RIGHT_INNER_X = LEFT_W + 2
 local RIGHT_INNER_W = RIGHT_W - 3
@@ -176,7 +172,6 @@ local function drawTopBar()
   local title = "VIP-SHOP"
   text(math.floor((WIDTH - #title) / 2) + 1, 1, title, C.vipTitle, 0x0A0A0A)
 
-  -- линия после VIP-SHOP
   setFG(C.underLine)
   setBG(0x0A0A0A)
   gpu.set(1, 2, string.rep("=", WIDTH))
@@ -195,7 +190,7 @@ local function drawMainFrames()
   end
   gpu.set(1, MAIN_Y + MAIN_H - 1, "+" .. string.rep("=", WIDTH - 2) .. "+")
 
-  -- вертикальный разделитель
+  -- вертикальный разделитель (основная рамка)
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(LEFT_W, y, "|")
   end
@@ -205,11 +200,10 @@ local function drawMainFrames()
 end
 
 local function drawLeftHeader()
-  -- КАТАЛОГ ТОВАРОВ внутри линии
-  sectionHeader(2, MAIN_Y + 1, LEFT_W - 2, "КАТАЛОГ ТОВАРОВ", C.mainLine, C.white)
+  sectionHeader(2, MAIN_Y + 1, LEFT_W - 4, "КАТАЛОГ ТОВАРОВ", C.mainLine, C.white)
 
   local colY = MAIN_Y + 2
-  fill(2, colY, LEFT_W - 3, 1, C.bg)
+  fill(2, colY, LEFT_W - 5, 1, C.bg)
   text(COL_NAME_X,  colY, "ТОВАР",  C.white, C.bg)
   text(COL_ME_X,    colY, "В ME",   C.white, C.bg)
   text(COL_COINA_X, colY, "COINA",  C.white, C.bg)
@@ -217,25 +211,33 @@ local function drawLeftHeader()
 end
 
 local function drawScrollbar()
-  -- скролл отдельно от рамки (на 1 символ левее)
+  -- две линии скролла ||
   setBG(C.bg)
-  setFG(C.darkGray)
+  setFG(C.mainLine)
   for y = LIST_Y, LIST_Y + LIST_H - 1 do
-    gpu.set(SCROLL_X, y, " ")
+    gpu.set(SCROLL_X,  y, "|")
+    gpu.set(SCROLL_X2, y, "|")
   end
 
+  -- верх и низ скролла
+  gpu.set(SCROLL_X,  LIST_Y - 1, "+")
+  gpu.set(SCROLL_X2, LIST_Y - 1, "+")
+  gpu.set(SCROLL_X,  LIST_Y + LIST_H, "+")
+  gpu.set(SCROLL_X2, LIST_Y + LIST_H, "+")
+
+  -- ползунок (заливка)
   local maxScroll = math.max(0, #items - LIST_H)
-  local thumbH = math.max(2, math.floor(LIST_H * 0.3))
+  local thumbH = math.max(2, math.floor(LIST_H * 0.25))
   local thumbY = LIST_Y
   if maxScroll > 0 then
     thumbY = LIST_Y + math.floor((scrollOffset / maxScroll) * (LIST_H - thumbH))
   end
 
-  -- заливка ползунка
   setBG(C.accent)
   for i = 0, thumbH - 1 do
     if thumbY + i <= LIST_Y + LIST_H - 1 then
-      gpu.set(SCROLL_X, thumbY + i, " ")
+      gpu.set(SCROLL_X,  thumbY + i, " ")
+      gpu.set(SCROLL_X2, thumbY + i, " ")
     end
   end
   setBG(C.bg)
@@ -294,7 +296,6 @@ end
 local function drawInfoBlock()
   fill(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, 6, C.bg)
 
-  -- заголовок ---ИНФО---
   sectionHeader(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, "ИНФО", C.sectionLine, C.white)
 
   local item = items[selectedIndex]
@@ -313,16 +314,13 @@ end
 local function drawQuantitySection()
   fill(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, 7, C.bg)
 
-  -- ---Поле для количества---
   sectionHeader(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, "Поле для количества", C.sectionLine, C.white)
 
-  -- растянутое поле
   local fieldW = RIGHT_INNER_W
   fill(RIGHT_INNER_X, QTY_Y + 1, fieldW, 1, C.inputBg)
   local display = quantity ~= "" and quantity or ""
   text(RIGHT_INNER_X + 1, QTY_Y + 1, display, C.inputFg, C.inputBg)
 
-  -- итог
   local item = items[selectedIndex]
   local qty = tonumber(quantity) or 0
   local totalCoina = 0
@@ -336,7 +334,6 @@ local function drawQuantitySection()
     string.format("Итог: COINA: %s | EMA: %s", totalCoina, totalEma),
     C.yellow, C.bg)
 
-  -- кнопки
   local btnW = 12
   local gap  = 2
 
@@ -354,7 +351,6 @@ end
 local function drawAccountInfo()
   fill(RIGHT_INNER_X, ACC_Y, RIGHT_INNER_W, 8, C.bg)
 
-  -- ---Информация Аккаунта---
   sectionHeader(RIGHT_INNER_X, ACC_Y, RIGHT_INNER_W, "Информация Аккаунта", C.sectionLine, C.white)
 
   local y = ACC_Y + 1
@@ -468,7 +464,7 @@ while true do
 
   elseif name == "scroll" then
     local x, direction = ev[3], ev[5]
-    if x >= LIST_X and x <= LIST_X + LIST_W + 1 then
+    if x >= LIST_X and x <= LIST_X + LIST_W + 2 then
       scroll(-direction)
     end
 
