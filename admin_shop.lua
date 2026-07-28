@@ -175,22 +175,26 @@ local function drawMainFrames()
   setBG(C.bg)
 
   -- Верхняя линия
-  -- Левая часть (mainLine)
+  -- Левая часть (mainLine) - от 1 до SEPARATOR1-1
   setFG(C.mainLine)
-  gpu.set(1, MAIN_Y, "+" .. string.rep("=", SEPARATOR1 - 1) .. "+")
+  local leftTop = "+" .. string.rep("=", SEPARATOR1 - 2) .. "+"
+  gpu.set(1, MAIN_Y, leftTop)
   
-  -- Правая часть (sectionLine)
+  -- Правая часть (sectionLine) - от SEPARATOR1 до WIDTH
   setFG(C.sectionLine)
-  gpu.set(SEPARATOR1, MAIN_Y, string.rep("=", WIDTH - SEPARATOR1 - 1) .. "+")
+  local rightTop = string.rep("=", WIDTH - SEPARATOR1 - 1) .. "+"
+  gpu.set(SEPARATOR1, MAIN_Y, rightTop)
 
   -- Нижняя линия
   -- Левая часть (mainLine)
   setFG(C.mainLine)
-  gpu.set(1, MAIN_Y + MAIN_H - 1, "+" .. string.rep("=", SEPARATOR1 - 1) .. "+")
+  local leftBottom = "+" .. string.rep("=", SEPARATOR1 - 2) .. "+"
+  gpu.set(1, MAIN_Y + MAIN_H - 1, leftBottom)
   
   -- Правая часть (sectionLine)
   setFG(C.sectionLine)
-  gpu.set(SEPARATOR1, MAIN_Y + MAIN_H - 1, string.rep("=", WIDTH - SEPARATOR1 - 1) .. "+")
+  local rightBottom = string.rep("=", WIDTH - SEPARATOR1 - 1) .. "+"
+  gpu.set(SEPARATOR1, MAIN_Y + MAIN_H - 1, rightBottom)
 
   -- Левая вертикальная линия
   setFG(C.mainLine)
@@ -219,12 +223,13 @@ local function drawSeparator()
   setBG(C.bg)
   setFG(C.sectionLine)
 
+  -- Вертикальные разделители
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(SEPARATOR1, y, "|")
     gpu.set(SEPARATOR2, y, "|")
   end
 
-  -- Верхний разделитель
+  -- Верхний разделитель (на стыке линий)
   setFG(C.sectionLine)
   gpu.set(SEPARATOR1, MAIN_Y, "+")
   gpu.set(SEPARATOR2, MAIN_Y, "+")
