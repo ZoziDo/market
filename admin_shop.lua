@@ -8,6 +8,7 @@ local gpu       = component.gpu
 local term      = require("term")
 local event     = require("event")
 local keyboard  = require("keyboard")
+local unicode   = require("unicode")
 
 local WIDTH, HEIGHT = gpu.getResolution()
 local maxW, maxH = gpu.maxResolution()
@@ -300,7 +301,6 @@ local function drawProductList()
   fill(LIST_X, LIST_Y, LIST_W, LIST_H, C.bg)
   if #items == 0 then
     local msg = "ПО ТВОЕМУ ЗАПРОСУ, НИЧЕГО НЕ НАЙДЕНО!"
-    -- Более точный центр (учитываем, что русские буквы занимают 2 байта)
     local visualLen = 35
     local mx = LIST_X + math.floor((LIST_W - visualLen) / 2)
     local my = LIST_Y + math.floor(LIST_H / 2)
@@ -446,7 +446,6 @@ local function scroll(delta)
 end
 
 local function handleClick(x, y)
-  -- сброс фокусов
   searchFocused = false
   qtyFocused = false
 
@@ -473,7 +472,6 @@ local function handleClick(x, y)
     return
   end
 
-  -- клик по полю количества
   local fieldY = QTY_Y + 2
   if y == fieldY and x >= RIGHT_INNER_X and x <= RIGHT_INNER_X + RIGHT_INNER_W then
     qtyFocused = true
@@ -505,7 +503,7 @@ while true do
     local x, direction = ev[3], ev[5]
     if x >= LIST_X and x <= LIST_X + LIST_W + 2 then
       scroll(-direction)
-    end  -- <-- ЭТОТ end ДОЛЖЕН БЫТЬ
+    end
 
   elseif name == "key_down" then
     local _, _, char, code = table.unpack(ev)
@@ -522,8 +520,8 @@ while true do
           searchQuery = searchQuery .. unicode.char(char)
           filterItems()
           redrawAll()
-        end  -- <-- ЭТОТ end ДОЛЖЕН БЫТЬ
-      end  -- <-- ЭТОТ end ДОЛЖЕН БЫТЬ
+        end
+      end
 
     elseif qtyFocused then
       if code == keyboard.keys.enter or code == keyboard.keys.tab then
@@ -535,8 +533,8 @@ while true do
         if #quantity < 8 then
           quantity = quantity .. string.char(char)
           drawQuantitySection()
-        end  -- <-- ЭТОТ end ДОЛЖЕН БЫТЬ
-      end  -- <-- ЭТОТ end ДОЛЖЕН БЫТЬ
+        end
+      end
 
     else
       if code == keyboard.keys.up then
@@ -550,14 +548,13 @@ while true do
         if #quantity < 8 then
           quantity = quantity .. string.char(char)
           drawQuantitySection()
-        end  -- <-- ЭТОТ end ДОЛЖЕН БЫТЬ
+        end
       elseif code == keyboard.keys.q or code == keyboard.keys.escape then
         break
-      end  -- <-- ЭТОТ end ДОЛЖЕН БЫТЬ
-    end  -- <-- ЭТОТ end ДОЛЖЕН БЫТЬ (закрывает if searchFocused/qtyFocused/else)
-  end  -- <-- ЭТОТ end ДОЛЖЕН БЫТЬ (закрывает elseif name == "key_down")
-end  -- <-- ЭТОТ end ДОЛЖЕН БЫТЬ (закрывает while true)
-
+      end
+    end
+  end
+end
 
 term.clear()
 gpu.setForeground(0xFFFFFF)
