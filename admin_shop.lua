@@ -75,7 +75,7 @@ local logs = {
 }
 
 -- Selection state
-local selectedIndex = 1          -- 1-based
+local selectedIndex = 1          -- 1‑based
 local scrollOffset = 1           -- first visible item index
 
 -- ----------------------------------------------------------------------------
@@ -471,4 +471,7 @@ local function main()
     end
 end
 
+-- Start the application
 main()
+
+-- End of file
