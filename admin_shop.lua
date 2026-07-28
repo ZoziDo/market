@@ -449,7 +449,6 @@ local function handleClick(x, y)
   -- сброс фокусов
   searchFocused = false
   qtyFocused = false
-end
 
   if x >= LIST_X and x <= LIST_X + LIST_W and y >= LIST_Y and y <= LIST_Y + LIST_H - 1 then
     local row = y - LIST_Y
@@ -506,7 +505,7 @@ while true do
     local x, direction = ev[3], ev[5]
     if x >= LIST_X and x <= LIST_X + LIST_W + 2 then
       scroll(-direction)
-    end
+    end  -- <-- ЭТОТ end ДОЛЖЕН БЫТЬ
 
   elseif name == "key_down" then
     local _, _, char, code = table.unpack(ev)
@@ -519,13 +518,12 @@ while true do
         filterItems()
         redrawAll()
       elseif char and char >= 32 then
-        -- принимаем любые символы (включая русские)
         if #searchQuery < 30 then
           searchQuery = searchQuery .. unicode.char(char)
           filterItems()
           redrawAll()
-        end
-      end
+        end  -- <-- ЭТОТ end ДОЛЖЕН БЫТЬ
+      end  -- <-- ЭТОТ end ДОЛЖЕН БЫТЬ
 
     elseif qtyFocused then
       if code == keyboard.keys.enter or code == keyboard.keys.tab then
@@ -537,8 +535,8 @@ while true do
         if #quantity < 8 then
           quantity = quantity .. string.char(char)
           drawQuantitySection()
-        end
-      end
+        end  -- <-- ЭТОТ end ДОЛЖЕН БЫТЬ
+      end  -- <-- ЭТОТ end ДОЛЖЕН БЫТЬ
 
     else
       if code == keyboard.keys.up then
@@ -552,13 +550,14 @@ while true do
         if #quantity < 8 then
           quantity = quantity .. string.char(char)
           drawQuantitySection()
-        end
+        end  -- <-- ЭТОТ end ДОЛЖЕН БЫТЬ
       elseif code == keyboard.keys.q or code == keyboard.keys.escape then
         break
-      end
-    end
-  end
-end
+      end  -- <-- ЭТОТ end ДОЛЖЕН БЫТЬ
+    end  -- <-- ЭТОТ end ДОЛЖЕН БЫТЬ (закрывает if searchFocused/qtyFocused/else)
+  end  -- <-- ЭТОТ end ДОЛЖЕН БЫТЬ (закрывает elseif name == "key_down")
+end  -- <-- ЭТОТ end ДОЛЖЕН БЫТЬ (закрывает while true)
+
 
 term.clear()
 gpu.setForeground(0xFFFFFF)
