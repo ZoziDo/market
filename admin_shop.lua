@@ -1,34 +1,3 @@
-local function drawMainFrames()
-  setBG(C.bg)
-
-  -- Верхняя и нижняя линии (общие)
-  setFG(C.mainLine)
-  gpu.set(1, MAIN_Y, "+" .. string.rep("=", WIDTH - 2) .. "+")
-  gpu.set(1, MAIN_Y + MAIN_H - 1, "+" .. string.rep("=", WIDTH - 2) .. "+")
-
-  -- Левая вертикальная линия
-  setFG(C.mainLine)
-  for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
-    gpu.set(1, y, "|")
-  end
-
-  -- Правая вертикальная линия (цвет правого блока)
-  setFG(C.sectionLine)
-  for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
-    gpu.set(WIDTH, y, "|")
-  end
-end
-
-то есть Левая сторона каталога 
-  -- Верхняя и нижняя линии (общие)
-  setFG(C.mainLine)
-  gpu.set(1, MAIN_Y, "+" .. string.rep("=", WIDTH - 2) .. "+")
-  gpu.set(1, MAIN_Y + MAIN_H - 1, "+" .. string.rep("=", WIDTH - 2) .. "+")
-
-Будет такого цвета mainLine
-А правая сторона которая ИНформация будет sectionLine то есть правый блок вверхни и нижние линии будут такогол цвета sectionLine
-
-Вот код
 local component = require("component")
 local gpu = component.gpu
 local term = require("term")
@@ -204,23 +173,13 @@ end
 
 local function drawMainFrames()
   setBG(C.bg)
-
-  -- Верхняя и нижняя линии (общие)
   setFG(C.mainLine)
   gpu.set(1, MAIN_Y, "+" .. string.rep("=", WIDTH - 2) .. "+")
-  gpu.set(1, MAIN_Y + MAIN_H - 1, "+" .. string.rep("=", WIDTH - 2) .. "+")
-
-  -- Левая вертикальная линия
-  setFG(C.mainLine)
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(1, y, "|")
-  end
-
-  -- Правая вертикальная линия (цвет правого блока)
-  setFG(C.sectionLine)
-  for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(WIDTH, y, "|")
   end
+  gpu.set(1, MAIN_Y + MAIN_H - 1, "+" .. string.rep("=", WIDTH - 2) .. "+")
 end
 
 local function drawLeftHeader()
@@ -235,13 +194,11 @@ end
 
 local function drawSeparator()
   setBG(C.bg)
-  setFG(C.sectionLine)   -- <-- правый цвет
-
+  setFG(C.mainLine)
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(SEPARATOR1, y, "|")
     gpu.set(SEPARATOR2, y, "|")
   end
-
   gpu.set(SEPARATOR1, MAIN_Y, "+")
   gpu.set(SEPARATOR2, MAIN_Y, "+")
   gpu.set(SEPARATOR1, MAIN_Y + MAIN_H - 1, "+")
