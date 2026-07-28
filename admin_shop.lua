@@ -192,21 +192,6 @@ local function drawMainFrames()
   end
 end
 
-local function drawSeparator()
-  setBG(C.bg)
-  setFG(C.sectionLine)   -- <-- правый цвет
-
-  for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
-    gpu.set(SEPARATOR1, y, "|")
-    gpu.set(SEPARATOR2, y, "|")
-  end
-
-  gpu.set(SEPARATOR1, MAIN_Y, "+")
-  gpu.set(SEPARATOR2, MAIN_Y, "+")
-  gpu.set(SEPARATOR1, MAIN_Y + MAIN_H - 1, "+")
-  gpu.set(SEPARATOR2, MAIN_Y + MAIN_H - 1, "+")
-end
-
 local function drawLeftHeader()
   sectionHeader(2, MAIN_Y + 1, LEFT_W - 3, "КАТАЛОГ ТОВАРОВ", C.mainLine, C.white)
   local colY = MAIN_Y + 2
@@ -219,11 +204,13 @@ end
 
 local function drawSeparator()
   setBG(C.bg)
-  setFG(C.mainLine)
+  setFG(C.sectionLine)   -- <-- правый цвет
+
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(SEPARATOR1, y, "|")
     gpu.set(SEPARATOR2, y, "|")
   end
+
   gpu.set(SEPARATOR1, MAIN_Y, "+")
   gpu.set(SEPARATOR2, MAIN_Y, "+")
   gpu.set(SEPARATOR1, MAIN_Y + MAIN_H - 1, "+")
