@@ -421,3 +421,70 @@ local function selectItem(index)
   drawScrollbar()
   drawRightPanel()
 end
+
+local function scroll(delta)
+  local maxScroll = math.max(0, #items - LIST_H)
+  scrollOffset = math.max(0, math.min(maxScroll, scrollOffset + delta))
+  drawProductList()
+end
+
+local function handleClick(x, y)
+  if x >= LIST_X and x <= LIST_X + LIST_W and y >= LIST_Y and y <= LIST_Y + LIST_H - 1 then
+    local row = y - LIST_Y
+    local index = scrollOffset + row + 1
+    if index >= 1 and index <= #items then
+      selectItem(index)
+    end
+    return
+  end
+
+  local btnW = 12
+  local gap  = 2
+  local clearX = RIGHT_INNER_X + btnW + gap
+  if y == BTN_Y and x >= clearX and x < clearX + btnW then
+    quantity = ""
+    drawQuantitySection()
+  end
+end
+
+-- ====================== ГЛАВНЫЙ ЦИКЛ ======================
+term.clear()
+redrawAll()
+
+while true do
+  local ev = {event.pull()}
+  local name = ev[1]
+
+  if name == "touch" then
+    handleClick(ev[3], ev[4])
+
+  elseif name == "scroll" then
+    local x, direction = ev[3], ev[5]
+    if x >= LIST_X and x <= LIST_X + LIST_W + 2 then
+      scroll(-direction)
+    end
+
+  elseif name == "key_down" then
+    local _, _, char, code = table.unpack(ev)
+
+    if code == keyboard.keys.up then
+      selectItem(selectedIndex - 1)
+    elseif code == keyboard.keys.down then
+      selectItem(selectedIndex + 1)
+    elseif code == keyboard.keys.back then
+      quantity = quantity:sub(1, -2)
+      drawQuantitySection()
+    elseif char and char >= 48 and char <= 57 then
+      if #quantity < 8 then
+        quantity = quantity .. string.char(char)
+        drawQuantitySection()
+      end
+    elseif code == keyboard.keys.q or code == keyboard.keys.escape then
+      break
+    end
+  end
+end
+
+term.clear()
+gpu.setForeground(0xFFFFFF)
+gpu.setBackground(0x000000)
