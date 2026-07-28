@@ -20,29 +20,32 @@ end
 
 -- ====================== ЦВЕТА ======================
 local C = {
-  bg          = 0x0C0C0C,
-  white       = 0xFFFFFF,
-  gray        = 0xAAAAAA,
-  darkGray    = 0x555555,
-  green       = 0x55FF55,
-  yellow      = 0xFFFF55,
-  red         = 0xFF5555,
-  cyan        = 0x55FFFF,
+  bg           = 0x0C0C0C,
+  white        = 0xFFFFFF,
+  gray         = 0xAAAAAA,
+  darkGray     = 0x555555,
+  green        = 0x55FF55,
+  yellow       = 0xFFFF55,
+  red          = 0xFF5555,
+  cyan         = 0x55FFFF,
 
-  selectedBg  = 0x002440,
-  selectedName= 0x014d52,   -- название + стрелка выбранного
-  star        = 0x077d42,   -- *
+  selectedBg   = 0x002440,
+  selectedName = 0x014d52,
+  star         = 0x077d42,   -- цвет *
 
-  vipTitle    = 0x0c9a76,
-  catalogLine = 0x0b4b3b,
-  infoLine    = 0x0b424b,
-  underLine   = 0x1f2925,
+  vipTitle     = 0x0c9a76,
+  catalogLine  = 0x0b4b3b,
+  infoLine     = 0x0b424b,
+  underLine    = 0x1f2925,
+  accountTitle = 0xaeaeae,   -- Информация Аккаунта
 
-  buttonBg    = 0x1a1a1a,
-  buttonFg    = 0xFFFFFF,
-  inputBg     = 0x1a1a1a,
-  inputFg     = 0xFFFFFF,
-  accent      = 0x0c9a76,
+  buttonBuy    = 0x0a502d,   -- зелёный Купить / Покупки
+  buttonClear  = 0x8b1a1a,   -- красный Стереть
+  buttonSales  = 0x1a5a6b,   -- голубой Продажи
+
+  inputBg      = 0x1a1a1a,
+  inputFg      = 0xFFFFFF,
+  accent       = 0x0c9a76,
 }
 
 -- ====================== ВСПОМОГАТЕЛЬНЫЕ ======================
@@ -90,9 +93,10 @@ local RIGHT_INNER_X = LEFT_W + 2
 local RIGHT_INNER_W = RIGHT_W - 3
 
 local INFO_Y     = MAIN_Y + 2
-local QTY_Y      = INFO_Y + 8
-local TOTAL_Y    = QTY_Y + 3
-local ACC_Y      = TOTAL_Y + 3
+local QTY_Y      = INFO_Y + 7
+local TOTAL_Y    = QTY_Y + 4
+local BTN_Y      = TOTAL_Y + 1
+local ACC_Y      = BTN_Y + 3
 
 local BOT_Y      = HEIGHT - 2
 
@@ -140,7 +144,6 @@ local selectedIndex = 22
 local scrollOffset  = 0
 local quantity      = ""
 
--- аккаунт (тестовые данные)
 local account = {
   nick     = "Player_777",
   coina    = "12500",
@@ -160,12 +163,10 @@ local function drawTopBar()
   local title = "VIP-SHOP"
   text(math.floor((WIDTH - #title) / 2) + 1, 1, title, C.vipTitle, 0x0A0A0A)
 
-  -- линия под названием
   setFG(C.underLine)
   setBG(0x0A0A0A)
   gpu.set(1, 2, string.rep("=", WIDTH))
 
-  -- текст под линией
   text(2, 3, "Управление каталогом товаров", C.white, 0x0A0A0A)
 end
 
@@ -173,22 +174,17 @@ local function drawMainFrames()
   setBG(C.bg)
   setFG(C.catalogLine)
 
-  -- верх
   gpu.set(1, MAIN_Y, "+" .. string.rep("=", WIDTH - 2) .. "+")
-  -- бока
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(1, y, "|")
     gpu.set(WIDTH, y, "|")
   end
-  -- низ
   gpu.set(1, MAIN_Y + MAIN_H - 1, "+" .. string.rep("=", WIDTH - 2) .. "+")
 
-  -- вертикальный разделитель
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(LEFT_W, y, "|")
   end
 
-  -- горизонтальные линии под заголовками
   local headerY = MAIN_Y + 1
   setFG(C.catalogLine)
   for x = 2, LEFT_W - 1 do
@@ -216,6 +212,7 @@ local function drawLeftHeader()
 end
 
 local function drawScrollbar()
+  -- просто заливка цветом (без символа *)
   setBG(C.bg)
   setFG(C.darkGray)
   for y = LIST_Y, LIST_Y + LIST_H - 1 do
@@ -228,12 +225,15 @@ local function drawScrollbar()
   if maxScroll > 0 then
     thumbY = LIST_Y + math.floor((scrollOffset / maxScroll) * (LIST_H - thumbH))
   end
-  setFG(C.accent)
+
+  -- заливка ползунка цветом
+  setBG(C.accent)
   for i = 0, thumbH - 1 do
     if thumbY + i <= LIST_Y + LIST_H - 1 then
-      gpu.set(SCROLL_X, thumbY + i, "*")
+      gpu.set(SCROLL_X, thumbY + i, " ")
     end
   end
+  setBG(C.bg)
 end
 
 local function drawItemRow(index, y)
@@ -253,16 +253,26 @@ local function drawItemRow(index, y)
   local coinaColor= isSelected and C.selectedName or C.yellow
   local emaColor  = isSelected and C.selectedName or C.cyan
 
-  local marker = item.star and "* " or "- "
-  if isSelected then marker = "> " end
-
-  local maxNameLen = COL_ME_X - COL_NAME_X - 2
-  local displayName = marker .. item.name
-  if #displayName > maxNameLen then
-    displayName = displayName:sub(1, maxNameLen - 1) .. "."
+  -- * всегда цвета #077d42, даже если выбрано
+  local marker
+  if isSelected then
+    marker = "> "
+    text(COL_NAME_X, y, marker, C.selectedName, C.selectedBg)
+  else
+    if item.star then
+      text(COL_NAME_X, y, "* ", C.star, C.bg)
+    else
+      text(COL_NAME_X, y, "- ", C.darkGray, C.bg)
+    end
   end
 
-  text(COL_NAME_X, y, displayName, nameColor, isSelected and C.selectedBg or C.bg)
+  local maxNameLen = COL_ME_X - COL_NAME_X - 2
+  local displayName = item.name
+  if #displayName > maxNameLen - 2 then
+    displayName = displayName:sub(1, maxNameLen - 3) .. "."
+  end
+
+  text(COL_NAME_X + 2, y, displayName, nameColor, isSelected and C.selectedBg or C.bg)
   text(COL_ME_X,   y, item.me,     meColor,   isSelected and C.selectedBg or C.bg)
   text(COL_COINA_X,y, item.coina,  coinaColor,isSelected and C.selectedBg or C.bg)
   text(COL_EMA_X,  y, item.ema,    emaColor,  isSelected and C.selectedBg or C.bg)
@@ -280,7 +290,7 @@ local function drawProductList()
 end
 
 local function drawInfoBlock()
-  fill(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, 7, C.bg)
+  fill(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, 6, C.bg)
 
   local item = items[selectedIndex]
   if not item then return end
@@ -295,18 +305,20 @@ local function drawInfoBlock()
   text(RIGHT_INNER_X, y, "EMA  : " .. item.ema, C.cyan, C.bg)
   y = y + 2
 
-  -- разделитель перед количеством
   hLine(RIGHT_INNER_X, y, RIGHT_INNER_W, "-", C.infoLine)
 end
 
 local function drawQuantitySection()
-  fill(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, 5, C.bg)
+  fill(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, 7, C.bg)
 
-  text(RIGHT_INNER_X, QTY_Y, "Количество:", C.gray, C.bg)
+  -- заголовок поля
+  text(RIGHT_INNER_X, QTY_Y, "Поле для количества", C.gray, C.bg)
 
-  -- поле ввода в скобках
-  local field = "[ " .. (quantity ~= "" and quantity or "______") .. " ]"
-  text(RIGHT_INNER_X, QTY_Y + 1, field, C.inputFg, C.inputBg)
+  -- растянутое поле ввода
+  local fieldW = RIGHT_INNER_W - 2
+  fill(RIGHT_INNER_X, QTY_Y + 1, fieldW, 1, C.inputBg)
+  local display = quantity ~= "" and quantity or ""
+  text(RIGHT_INNER_X + 1, QTY_Y + 1, display, C.inputFg, C.inputBg)
 
   -- итог
   local item = items[selectedIndex]
@@ -322,14 +334,28 @@ local function drawQuantitySection()
     string.format("Итог: COINA: %s | EMA: %s", totalCoina, totalEma),
     C.yellow, C.bg)
 
-  -- разделитель перед аккаунтом
-  hLine(RIGHT_INNER_X, TOTAL_Y + 1, RIGHT_INNER_W, "-", C.infoLine)
+  -- кнопки Купить / Стереть
+  local btnW = 12
+  local gap  = 2
+
+  -- [ Купить ] зелёный
+  setBG(C.buttonBuy)
+  setFG(C.white)
+  gpu.fill(RIGHT_INNER_X, BTN_Y, btnW, 1, " ")
+  gpu.set(RIGHT_INNER_X + 1, BTN_Y, "[ Купить ]")
+
+  -- [ Стереть ] красный
+  setBG(C.buttonClear)
+  setFG(C.white)
+  gpu.fill(RIGHT_INNER_X + btnW + gap, BTN_Y, btnW, 1, " ")
+  gpu.set(RIGHT_INNER_X + btnW + gap + 1, BTN_Y, "[ Стереть ]")
 end
 
 local function drawAccountInfo()
   fill(RIGHT_INNER_X, ACC_Y, RIGHT_INNER_W, 8, C.bg)
 
-  text(RIGHT_INNER_X, ACC_Y, "Информация Аккаунта", C.accent, C.bg)
+  -- заголовок внутри линии как ИНФО
+  text(RIGHT_INNER_X, ACC_Y, "Информация Аккаунта", C.accountTitle, C.bg)
   hLine(RIGHT_INNER_X, ACC_Y + 1, RIGHT_INNER_W, "-", C.infoLine)
 
   local y = ACC_Y + 2
@@ -357,16 +383,22 @@ local function drawBottomBar()
   setBG(C.bg)
   gpu.set(1, BOT_Y - 1, "+" .. string.rep("=", WIDTH - 2) .. "+")
 
-  local labels = {"[ КУПИТЬ ]", "[ ПРОДАТЬ ]", "[ ПОКУПКИ ]", "[ ПРОДАЖИ ]"}
-  local totalLen = 0
-  for _, l in ipairs(labels) do totalLen = totalLen + #l + 2 end
-  local startX = math.floor((WIDTH - totalLen) / 2)
+  local btnW = 14
+  local gap  = 4
+  local total = btnW * 2 + gap
+  local startX = math.floor((WIDTH - total) / 2)
 
-  local x = startX
-  for _, label in ipairs(labels) do
-    text(x, BOT_Y, label, C.buttonFg, C.buttonBg)
-    x = x + #label + 2
-  end
+  -- [ Покупки ] зелёный
+  setBG(C.buttonBuy)
+  setFG(C.white)
+  gpu.fill(startX, BOT_Y, btnW, 1, " ")
+  gpu.set(startX + 2, BOT_Y, "[ Покупки ]")
+
+  -- [ Продажи ] голубой
+  setBG(C.buttonSales)
+  setFG(C.white)
+  gpu.fill(startX + btnW + gap, BOT_Y, btnW, 1, " ")
+  gpu.set(startX + btnW + gap + 2, BOT_Y, "[ Продажи ]")
 end
 
 local function drawBottomBorder()
@@ -410,12 +442,24 @@ local function scroll(delta)
 end
 
 local function handleClick(x, y)
+  -- клик по списку
   if x >= LIST_X and x <= LIST_X + LIST_W and y >= LIST_Y and y <= LIST_Y + LIST_H - 1 then
     local row = y - LIST_Y
     local index = scrollOffset + row + 1
     if index >= 1 and index <= #items then
       selectItem(index)
     end
+    return
+  end
+
+  -- клик по кнопке Стереть
+  local btnW = 12
+  local gap  = 2
+  local clearX = RIGHT_INNER_X + btnW + gap
+  if y == BTN_Y and x >= clearX and x < clearX + btnW then
+    quantity = ""
+    drawQuantitySection()
+    return
   end
 end
 
@@ -447,7 +491,7 @@ while true do
       quantity = quantity:sub(1, -2)
       drawQuantitySection()
     elseif char and char >= 48 and char <= 57 then
-      if #quantity < 6 then
+      if #quantity < 8 then
         quantity = quantity .. string.char(char)
         drawQuantitySection()
       end
