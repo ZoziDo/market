@@ -233,12 +233,18 @@ end
 local function drawSeparator()
   setBG(C.bg)
   setFG(C.mainLine)
+
+  -- вертикальные линии
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(SEPARATOR1, y, "|")
     gpu.set(SEPARATOR2, y, "|")
   end
+
+  -- верх
   gpu.set(SEPARATOR1, MAIN_Y, "+")
   gpu.set(SEPARATOR2, MAIN_Y, "+")
+
+  -- низ (рисуем принудительно)
   gpu.set(SEPARATOR1, MAIN_Y + MAIN_H - 1, "+")
   gpu.set(SEPARATOR2, MAIN_Y + MAIN_H - 1, "+")
 end
@@ -413,10 +419,10 @@ local function redrawAll()
   drawLeftHeader()
   drawProductList()
   drawScrollbar()
-  drawSeparator()
   drawRightPanel()
   drawBottomBar()
   drawBottomBorder()
+  drawSeparator()   -- <-- рисуем разделитель самым последним
 end
 
 local function selectItem(index)
