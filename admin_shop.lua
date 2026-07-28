@@ -449,6 +449,7 @@ local function handleClick(x, y)
   -- сброс фокусов
   searchFocused = false
   qtyFocused = false
+end
 
   if x >= LIST_X and x <= LIST_X + LIST_W and y >= LIST_Y and y <= LIST_Y + LIST_H - 1 then
     local row = y - LIST_Y
