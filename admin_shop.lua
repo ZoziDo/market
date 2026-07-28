@@ -173,13 +173,23 @@ end
 
 local function drawMainFrames()
   setBG(C.bg)
+
+  -- Верхняя и нижняя линии (общие)
   setFG(C.mainLine)
   gpu.set(1, MAIN_Y, "+" .. string.rep("=", WIDTH - 2) .. "+")
+  gpu.set(1, MAIN_Y + MAIN_H - 1, "+" .. string.rep("=", WIDTH - 2) .. "+")
+
+  -- Левая вертикальная линия
+  setFG(C.mainLine)
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(1, y, "|")
+  end
+
+  -- Правая вертикальная линия (цвет правого блока)
+  setFG(C.sectionLine)
+  for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(WIDTH, y, "|")
   end
-  gpu.set(1, MAIN_Y + MAIN_H - 1, "+" .. string.rep("=", WIDTH - 2) .. "+")
 end
 
 local function drawLeftHeader()
@@ -194,11 +204,13 @@ end
 
 local function drawSeparator()
   setBG(C.bg)
-  setFG(C.mainLine)
+  setFG(C.sectionLine)   -- <-- правый цвет
+
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(SEPARATOR1, y, "|")
     gpu.set(SEPARATOR2, y, "|")
   end
+
   gpu.set(SEPARATOR1, MAIN_Y, "+")
   gpu.set(SEPARATOR2, MAIN_Y, "+")
   gpu.set(SEPARATOR1, MAIN_Y + MAIN_H - 1, "+")
@@ -276,7 +288,7 @@ end
 
 local function drawInfoBlock()
   fill(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, 7, C.bg)
-  sectionHeader(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, "ИНФО", C.sectionLine, C.white)
+  sectionHeader(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, "ИНФОРМАЦИЯ", C.sectionLine, C.white)
   local item = items[selectedIndex]
   if not item then return end
   local maxLen = RIGHT_INNER_W - 8
@@ -292,7 +304,7 @@ end
 
 local function drawQuantitySection()
   fill(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, 9, C.bg)
-  sectionHeader(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, "Поле для количества", C.sectionLine, C.white)
+  sectionHeader(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, "КОЛИЧЕСТВО", C.sectionLine, C.white)
   local fieldY = QTY_Y + 2
   setFG(C.frame)
   setBG(C.bg)
@@ -326,7 +338,7 @@ end
 
 local function drawAccountInfo()
   fill(RIGHT_INNER_X, ACC_Y, RIGHT_INNER_W, 8, C.bg)
-  sectionHeader(RIGHT_INNER_X, ACC_Y, RIGHT_INNER_W, "Информация Аккаунта", C.sectionLine, C.white)
+  sectionHeader(RIGHT_INNER_X, ACC_Y, RIGHT_INNER_W, "АККАУНТ", C.sectionLine, C.white)
   local y = ACC_Y + 2
   text(RIGHT_INNER_X, y, "НИК      : " .. account.nick, C.white, C.bg)
   y = y + 1
