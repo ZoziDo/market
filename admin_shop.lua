@@ -175,17 +175,25 @@ end
 local function drawMainFrames()
   setBG(C.bg)
 
-  -- Верхняя линия
+  -- Верхняя линия (левая часть)
   setFG(C.mainLine)
-  gpu.set(1, MAIN_Y, "+" .. string.rep("=", LEFT_W - 1))
-  setFG(C.sectionLine)
-  gpu.set(LEFT_W, MAIN_Y, string.rep("=", WIDTH - LEFT_W - 1) .. "+")
+  local leftTop = "+" .. string.rep("=", LEFT_W - 1)
+  gpu.set(1, MAIN_Y, leftTop)
 
-  -- Нижняя линия
-  setFG(C.mainLine)
-  gpu.set(1, MAIN_Y + MAIN_H - 1, "+" .. string.rep("=", LEFT_W - 1))
+  -- Верхняя линия (правая часть)
   setFG(C.sectionLine)
-  gpu.set(LEFT_W, MAIN_Y + MAIN_H - 1, string.rep("=", WIDTH - LEFT_W - 1) .. "+")
+  local rightTop = string.rep("=", WIDTH - LEFT_W - 1) .. "+"
+  gpu.set(LEFT_W, MAIN_Y, rightTop)
+
+  -- Нижняя линия (левая часть)
+  setFG(C.mainLine)
+  local leftBot = "+" .. string.rep("=", LEFT_W - 1)
+  gpu.set(1, MAIN_Y + MAIN_H - 1, leftBot)
+
+  -- Нижняя линия (правая часть)
+  setFG(C.sectionLine)
+  local rightBot = string.rep("=", WIDTH - LEFT_W - 1) .. "+"
+  gpu.set(LEFT_W, MAIN_Y + MAIN_H - 1, rightBot)
 
   -- Левая вертикаль
   setFG(C.mainLine)
