@@ -1,12 +1,14 @@
 -- ============================================================
--- SHOP-ADMIN v3.0
--- Полная визуальная копия GUI со скриншота
+-- VIP-SHOP
+-- Визуальная копия + интерактив
 -- OpenComputers / OpenOS / GPU API / Lua 5.2
 -- ============================================================
 
 local component = require("component")
-local gpu = component.gpu
-local term = require("term")
+local gpu       = component.gpu
+local term      = require("term")
+local event     = require("event")
+local keyboard  = require("keyboard")
 
 -- ====================== РАЗРЕШЕНИЕ ======================
 local WIDTH, HEIGHT = gpu.getResolution()
@@ -18,27 +20,29 @@ end
 
 -- ====================== ЦВЕТА ======================
 local C = {
-  bg          = 0x0C0C0C,
-  panel       = 0x101010,
-  border      = 0x00AAAA,
-  borderDark  = 0x008888,
-  white       = 0xFFFFFF,
-  gray        = 0xAAAAAA,
-  darkGray    = 0x555555,
-  green       = 0x55FF55,
-  yellow      = 0xFFFF55,
-  red         = 0xFF5555,
-  cyan        = 0x55FFFF,
-  blue        = 0x0055AA,
-  blueDark    = 0x003366,
-  title       = 0xFFFFFF,
-  header      = 0x00AAAA,
-  buttonBg    = 0x222222,
-  buttonText  = 0xFFFFFF,
-  logBg       = 0x0A0A0A,
-  logText     = 0xAAAAAA,
-  selectedBg  = 0x0055AA,
-  selectedFg  = 0xFFFFFF,
+  bg            = 0x0C0C0C,
+  border        = 0x00AAAA,
+  borderDark    = 0x008888,
+  white         = 0xFFFFFF,
+  gray          = 0xAAAAAA,
+  darkGray      = 0x555555,
+  green         = 0x55FF55,
+  yellow        = 0xFFFF55,
+  red           = 0xFF5555,
+  cyan          = 0x55FFFF,
+
+  selectedBg    = 0x002440,   -- подсветка выбранного товара
+  star          = 0x0a502d,   -- цвет *
+  vipTitle      = 0x0c9a76,   -- VIP-SHOP
+  catalogLine   = 0x0b4b3b,   -- линии каталога
+  infoLine      = 0x0b424b,   -- линии инфо
+  underLine     = 0x1f2925,   -- линия под VIP-SHOP
+
+  buttonBuy     = 0x0a502d,
+  buttonSell    = 0x5a1a1a,
+  buttonClear   = 0x333333,
+  inputBg       = 0x1a1a1a,
+  inputFg       = 0xFFFFFF,
 }
 
 -- ====================== ВСПОМОГАТЕЛЬНЫЕ ======================
@@ -57,14 +61,12 @@ local function text(x, y, str, fg, bg)
 end
 
 -- ====================== РАЗМЕРЫ ======================
-local TOP_H   = 1
+local TOP_H   = 2
 local BOT_H   = 3
-local MAIN_Y  = 2
+local MAIN_Y  = 3
 local MAIN_H  = HEIGHT - TOP_H - BOT_H
 
 local LEFT_W  = math.floor(WIDTH * 0.62)
-local LEFT_X  = 1
-local RIGHT_X = LEFT_W + 1
 local RIGHT_W = WIDTH - LEFT_W
 
 local LIST_X  = 2
@@ -75,124 +77,90 @@ local SCROLL_X = LEFT_W - 1
 
 local COL_NAME_X  = 3
 local COL_ME_X    = LEFT_W - 28
-local COL_MIN_X   = LEFT_W - 18
-local COL_PRICE_X = LEFT_W - 10
+local COL_COINA_X = LEFT_W - 18
+local COL_EMA_X   = LEFT_W - 10
 
 local RIGHT_INNER_X = LEFT_W + 2
 local RIGHT_INNER_W = RIGHT_W - 3
 
 local INFO_Y  = MAIN_Y + 3
-local INFO_H  = 12
-local LOG_Y   = INFO_Y + INFO_H + 1
-local LOG_H   = MAIN_H - INFO_H - 4
+local INFO_H  = 11
+
+local INPUT_Y = INFO_Y + INFO_H + 1
+local TOTAL_Y = INPUT_Y + 2
+local BTN_Y   = TOTAL_Y + 2
 
 local BOT_Y   = HEIGHT - 2
 
 -- ====================== ДАННЫЕ ======================
 local items = {
-  {name = "Дракониевая пыль",                    me = "365",   min = "0", price = "0 EM",   color = C.green,  star = true},
-  {name = "Бумага",                              me = "2",     min = "0", price = "0 EM",   color = C.green,  star = true},
-  {name = "Медовые соты",                        me = "121",   min = "0", price = "0 EM",   color = C.green,  star = true},
-  {name = "Сборщик фруктов",                     me = "2",     min = "0", price = "0 EM",   color = C.green,  star = true},
-  {name = "Ведро ледяного криотеума",            me = "0",     min = "0", price = "0 EM",   color = C.red,    star = false},
-  {name = "Светло-серая минеральная шерсть",     me = "0",     min = "0", price = "0 EM",   color = C.red,    star = false},
-  {name = "Сырая баранина",                      me = "278",   min = "0", price = "0 EM",   color = C.green,  star = true},
-  {name = "Голова странника Края",               me = "4.7k",  min = "0", price = "0 EM",   color = C.green,  star = true},
-  {name = "МЭ жидкостная шина импорта",          me = "1",     min = "0", price = "0 EM",   color = C.green,  star = true},
-  {name = "Реакторная камера",                   me = "0",     min = "0", price = "11.7 EM",color = C.red,    star = false},
-  {name = "Авто-варщик",                         me = "1",     min = "0", price = "0 EM",   color = C.green,  star = true},
-  {name = "Дракониевый блок",                    me = "0",     min = "0", price = "0 EM",   color = C.red,    star = false},
-  {name = "Яблоко",                              me = "5.5k",  min = "0", price = "0 EM",   color = C.green,  star = true},
-  {name = "item.item_portable_cell_advanced.name",me = "1",    min = "0", price = "0 EM",   color = C.green,  star = true},
-  {name = "Ведро",                               me = "158",   min = "0", price = "0.3 EM", color = C.green,  star = true},
-  {name = "Чан",                                 me = "8",     min = "0", price = "0 EM",   color = C.green,  star = true},
-  {name = "Охлаждающее ядро",                    me = "0",     min = "0", price = "0 EM",   color = C.red,    star = false},
-  {name = "$8Тёмное покрытие",                   me = "0",     min = "0", price = "7.6 EM", color = C.red,    star = false},
-  {name = "$8Тёмный порошок",                    me = "0",     min = "0", price = "0.2 EM", color = C.red,    star = false},
-  {name = "МЭ беспроводная точка доступа",       me = "0",     min = "0", price = "0 EM",   color = C.red,    star = false},
-  {name = "Кристалл истинного кварца",           me = "20.3k", min = "0", price = "0 EM",   color = C.green,  star = true},
-  {name = "Измельчённый никель",                 me = "1.4k",  min = "0", price = "0 EM",   color = C.green,  star = true},
-  {name = "Алмазный нагрудник",                  me = "0",     min = "0", price = "0 EM",   color = C.red,    star = false},
-  {name = "Анализатор",                          me = "8",     min = "0", price = "0 EM",   color = C.green,  star = true},
-  {name = "Одуванчик",                           me = "1.7k",  min = "0", price = "0 EM",   color = C.green,  star = true},
-  {name = "Пробирки ядро",                       me = "0",     min = "0", price = "0 EM",   color = C.red,    star = false},
-  {name = "Стеклянная панель",                   me = "269",   min = "0", price = "0 EM",   color = C.green,  star = true},
-  {name = "Комбайн",                             me = "1",     min = "0", price = "0 EM",   color = C.green,  star = true},
-  {name = "Усиленная жидкостная труба",          me = "512",   min = "0", price = "0 EM",   color = C.green,  star = true},
-  {name = "Расширение: Пространственно-временной унификатор флакса", me = "0", min = "0", price = "0 EM", color = C.red, star = false},
-  {name = "Руда урана",                          me = "5.9k",  min = "0", price = "0 EM",   color = C.green,  star = true},
-  {name = "Электрическая мотыга",                me = "1",     min = "0", price = "0 EM",   color = C.green,  star = true},
-  {name = "Пергамент",                           me = "0",     min = "0", price = "0 EM",   color = C.red,    star = false},
-  {name = "Камень Воскрешения",                  me = "0",     min = "0", price = "0 EM",   color = C.red,    star = false},
-  {name = "Производитель лавы",                  me = "1",     min = "0", price = "0 EM",   color = C.green,  star = true},
-  {name = "Контур печатной платы",               me = "0",     min = "0", price = "7.6 EM", color = C.red,    star = false},
+  {name = "Дракониевая пыль",                    me = "365",   coina = "0", ema = "0",   star = true,  price = 12},
+  {name = "Бумага",                              me = "2",     coina = "0", ema = "0",   star = true,  price = 1},
+  {name = "Медовые соты",                        me = "121",   coina = "0", ema = "0",   star = true,  price = 8},
+  {name = "Сборщик фруктов",                     me = "2",     coina = "0", ema = "0",   star = true,  price = 45},
+  {name = "Ведро ледяного криотеума",            me = "0",     coina = "0", ema = "0",   star = false, price = 30},
+  {name = "Светло-серая минеральная шерсть",     me = "0",     coina = "0", ema = "0",   star = false, price = 5},
+  {name = "Сырая баранина",                      me = "278",   coina = "0", ema = "0",   star = true,  price = 3},
+  {name = "Голова странника Края",               me = "4.7k",  coina = "0", ema = "0",   star = true,  price = 120},
+  {name = "МЭ жидкостная шина импорта",          me = "1",     coina = "0", ema = "0",   star = true,  price = 85},
+  {name = "Реакторная камера",                   me = "0",     coina = "0", ema = "11.7",star = false, price = 200},
+  {name = "Авто-варщик",                         me = "1",     coina = "0", ema = "0",   star = true,  price = 60},
+  {name = "Дракониевый блок",                    me = "0",     coina = "0", ema = "0",   star = false, price = 90},
+  {name = "Яблоко",                              me = "5.5k",  coina = "0", ema = "0",   star = true,  price = 2},
+  {name = "item.item_portable_cell_advanced.name",me = "1",    coina = "0", ema = "0",   star = true,  price = 150},
+  {name = "Ведро",                               me = "158",   coina = "0", ema = "0.3", star = true,  price = 4},
+  {name = "Чан",                                 me = "8",     coina = "0", ema = "0",   star = true,  price = 25},
+  {name = "Охлаждающее ядро",                    me = "0",     coina = "0", ema = "0",   star = false, price = 70},
+  {name = "$8Тёмное покрытие",                   me = "0",     coina = "0", ema = "7.6", star = false, price = 40},
+  {name = "$8Тёмный порошок",                    me = "0",     coina = "0", ema = "0.2", star = false, price = 15},
+  {name = "МЭ беспроводная точка доступа",       me = "0",     coina = "0", ema = "0",   star = false, price = 110},
+  {name = "Кристалл истинного кварца",           me = "20.3k", coina = "0", ema = "0",   star = true,  price = 6},
+  {name = "Измельчённый никель",                 me = "1.4k",  coina = "0", ema = "0",   star = true,  price = 9},
+  {name = "Алмазный нагрудник",                  me = "0",     coina = "0", ema = "0",   star = false, price = 300},
+  {name = "Анализатор",                          me = "8",     coina = "0", ema = "0",   star = true,  price = 55},
+  {name = "Одуванчик",                           me = "1.7k",  coina = "0", ema = "0",   star = true,  price = 1},
+  {name = "Пробирки ядро",                       me = "0",     coina = "0", ema = "0",   star = false, price = 35},
+  {name = "Стеклянная панель",                   me = "269",   coina = "0", ema = "0",   star = true,  price = 2},
+  {name = "Комбайн",                             me = "1",     coina = "0", ema = "0",   star = true,  price = 80},
+  {name = "Усиленная жидкостная труба",          me = "512",   coina = "0", ema = "0",   star = true,  price = 18},
+  {name = "Расширение: Пространственно-временной унификатор флакса", me = "0", coina = "0", ema = "0", star = false, price = 250},
+  {name = "Руда урана",                          me = "5.9k",  coina = "0", ema = "0",   star = true,  price = 14},
+  {name = "Электрическая мотыга",                me = "1",     coina = "0", ema = "0",   star = true,  price = 45},
+  {name = "Пергамент",                           me = "0",     coina = "0", ema = "0",   star = false, price = 3},
+  {name = "Камень Воскрешения",                  me = "0",     coina = "0", ema = "0",   star = false, price = 500},
+  {name = "Производитель лавы",                  me = "1",     coina = "0", ema = "0",   star = true,  price = 95},
+  {name = "Контур печатной платы",               me = "0",     coina = "0", ema = "7.6", star = false, price = 22},
 }
 
 local selectedIndex = 22
 local scrollOffset  = 0
+local quantity      = ""
+local totalPrice    = 0
 
-local selectedItem = {
-  name  = "Измельчённый никель",
-  id    = "ThermalFoundation:material:36",
-  price = "0 EM",
-  me    = "1.4k",
-  min   = "0",
-  craft = "64",
-}
-
-local logLines = {
-  {text = "[697:46] Обменник – скоро",                    color = C.yellow},
-  {text = "[697:16] OK: получено 1215 товаров",           color = C.green},
-  {text = "[697:03] Загрузка БД с КУ...",                 color = C.gray},
-  {text = "[697:03] Цены OK: 0 обн., 0 без пары",         color = C.green},
-  {text = "[697:03] Запрос загрузки цен на ПК-1...",      color = C.gray},
-  {text = "[697:03] Товаров: 1215",                       color = C.cyan},
-  {text = "[697:03] OK: получено 1215 товаров",           color = C.green},
-  {text = "[696:54] Загрузка БД с КУ...",                 color = C.gray},
-  {text = "[696:54] Обновление с ПК-1...",                color = C.gray},
-  {text = "[696:54] Товаров: 1215",                       color = C.cyan},
-  {text = "[696:54] OK: получено 1215 товаров",           color = C.green},
-  {text = "[696:44] Загрузка БД с КУ...",                 color = C.gray},
-  {text = "[696:44] Обновление с ПК-1...",                color = C.gray},
-  {text = "[696:44] OK: получено 1215 товаров",           color = C.green},
-  {text = "[696:31] Загрузка БД с КУ...",                 color = C.gray},
-  {text = "[696:31] Цены OK: 0 обн., 0 без пары",         color = C.green},
-  {text = "[696:31] Запрос загрузки цен на ПК-1...",      color = C.gray},
-  {text = "[01:19] OK: получено 1215 товаров",            color = C.green},
-  {text = "[01:07] Загрузка БД с КУ...",                  color = C.gray},
-  {text = "[01:07] Загрузка БД с ПК-1...",                color = C.gray},
-}
-
-local buttons = {
-  {label = " ОБНОВИТЬ ",   bg = 0x0055AA, fg = C.white},
-  {label = " ИЗМЕНИТЬ ",   bg = 0x333333, fg = C.white},
-  {label = " УДАЛИТЬ ",    bg = 0xAA0000, fg = C.white},
-  {label = " ОБМЕННИК ",   bg = 0x005555, fg = C.white},
-  {label = " БЭКАП КУ ",   bg = 0x333333, fg = C.white},
-  {label = " ЦЕНЫ->БД ",   bg = 0x333333, fg = C.white},
-  {label = " FORTUNE 1 ",  bg = 0xAA8800, fg = C.white},
-  {label = "[-]",          bg = 0x444444, fg = C.yellow},
-  {label = "[+]",          bg = 0x444444, fg = C.yellow},
-  {label = " ВЫХОД ",      bg = 0xAA0000, fg = C.white},
-}
-
--- ====================== ФУНКЦИИ ОТРИСОВКИ ======================
+-- ====================== ОТРИСОВКА ======================
 local function drawBackground()
   fill(1, 1, WIDTH, HEIGHT, C.bg)
 end
 
 local function drawTopBar()
-  fill(1, 1, WIDTH, 1, 0x0A0A0A)
-  text(2, 1, "Управление каталогом товаров", C.white, 0x0A0A0A)
-  local title = "SHOP-ADMIN v3.0"
-  text(math.floor((WIDTH - #title) / 2) + 1, 1, title, C.cyan, 0x0A0A0A)
-  text(WIDTH - 22, 1, "McSkill HiTech", C.gray, 0x0A0A0A)
-  text(WIDTH - 8, 1, "UP:01:19", C.yellow, 0x0A0A0A)
+  fill(1, 1, WIDTH, 2, 0x0A0A0A)
+
+  -- VIP-SHOP
+  local title = "VIP-SHOP"
+  text(math.floor((WIDTH - #title) / 2) + 1, 1, title, C.vipTitle, 0x0A0A0A)
+
+  -- линия под VIP-SHOP
+  setFG(C.underLine)
+  setBG(0x0A0A0A)
+  gpu.set(1, 2, string.rep("═", WIDTH))
+
+  -- текст под линией
+  text(2, 2, "Управление каталогом товаров", C.white, 0x0A0A0A)
 end
 
 local function drawMainFrames()
   setBG(C.bg)
-  setFG(C.border)
+  setFG(C.catalogLine)
 
   gpu.set(1, MAIN_Y, "╔" .. string.rep("═", WIDTH - 2) .. "╗")
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
@@ -201,15 +169,20 @@ local function drawMainFrames()
   end
   gpu.set(1, MAIN_Y + MAIN_H - 1, "╚" .. string.rep("═", WIDTH - 2) .. "╝")
 
+  -- вертикальный разделитель
+  setFG(C.catalogLine)
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(LEFT_W, y, "║")
   end
 
+  -- горизонтальные линии под заголовками
   local headerY = MAIN_Y + 2
-  setFG(C.border)
+  setFG(C.catalogLine)
   for x = 2, LEFT_W - 1 do
     gpu.set(x, headerY, "─")
   end
+
+  setFG(C.infoLine)
   for x = LEFT_W + 1, WIDTH - 1 do
     gpu.set(x, headerY, "─")
   end
@@ -220,13 +193,14 @@ local function drawMainFrames()
 end
 
 local function drawLeftHeader()
-  text(3, MAIN_Y + 1, "КАТАЛОГ ТОВАРОВ", C.header, C.bg)
+  text(3, MAIN_Y + 1, "КАТАЛОГ ТОВАРОВ", C.catalogLine, C.bg)
+
   local colY = MAIN_Y + 3
   fill(2, colY, LEFT_W - 2, 1, C.bg)
-  text(COL_NAME_X,  colY, "ТОВАР",   C.white, C.bg)
-  text(COL_ME_X,    colY, "В ME",    C.white, C.bg)
-  text(COL_MIN_X,   colY, "МИН",     C.white, C.bg)
-  text(COL_PRICE_X, colY, "ЦЕНА EM", C.white, C.bg)
+  text(COL_NAME_X,  colY, "ТОВАР",  C.white, C.bg)
+  text(COL_ME_X,    colY, "В ME",   C.white, C.bg)
+  text(COL_COINA_X, colY, "COINA",  C.white, C.bg)
+  text(COL_EMA_X,   colY, "EMA",    C.white, C.bg)
 end
 
 local function drawScrollbar()
@@ -238,11 +212,17 @@ local function drawScrollbar()
   end
   gpu.set(SCROLL_X, LIST_Y + LIST_H, "┴")
 
-  local thumbH = math.max(3, math.floor(LIST_H * 0.25))
-  local thumbY = LIST_Y + math.floor((LIST_H - thumbH) / 2)
+  local thumbH = math.max(3, math.floor(LIST_H * (#items / math.max(#items, LIST_H))))
+  local maxScroll = math.max(0, #items - LIST_H)
+  local thumbY = LIST_Y
+  if maxScroll > 0 then
+    thumbY = LIST_Y + math.floor((scrollOffset / maxScroll) * (LIST_H - thumbH))
+  end
   setFG(C.cyan)
   for i = 0, thumbH - 1 do
-    gpu.set(SCROLL_X, thumbY + i, "█")
+    if thumbY + i <= LIST_Y + LIST_H - 1 then
+      gpu.set(SCROLL_X, thumbY + i, "█")
+    end
   end
 end
 
@@ -258,10 +238,10 @@ local function drawItemRow(index, y)
     fill(LIST_X, y, LIST_W, 1, C.bg)
   end
 
-  local fgName  = isSelected and C.selectedFg or C.white
-  local fgMe    = isSelected and C.selectedFg or item.color
-  local fgMin   = isSelected and C.selectedFg or C.gray
-  local fgPrice = isSelected and C.selectedFg or (item.price ~= "0 EM" and C.yellow or C.gray)
+  local fgName  = isSelected and C.white or C.white
+  local fgMe    = isSelected and C.white or (item.star and C.green or C.red)
+  local fgCoina = isSelected and C.white or C.gray
+  local fgEma   = isSelected and C.white or (item.ema ~= "0" and C.yellow or C.gray)
 
   local marker = item.star and "* " or "- "
   if isSelected then marker = "> " end
@@ -272,10 +252,13 @@ local function drawItemRow(index, y)
     displayName = displayName:sub(1, maxNameLen - 1) .. "…"
   end
 
+  local starColor = item.star and C.star or C.darkGray
+  if isSelected then starColor = C.white end
+
   text(COL_NAME_X, y, displayName, fgName, isSelected and C.selectedBg or C.bg)
   text(COL_ME_X,   y, item.me,    fgMe,   isSelected and C.selectedBg or C.bg)
-  text(COL_MIN_X,  y, item.min,   fgMin,  isSelected and C.selectedBg or C.bg)
-  text(COL_PRICE_X,y, item.price, fgPrice,isSelected and C.selectedBg or C.bg)
+  text(COL_COINA_X,y, item.coina, fgCoina,isSelected and C.selectedBg or C.bg)
+  text(COL_EMA_X,  y, item.ema,   fgEma,  isSelected and C.selectedBg or C.bg)
 end
 
 local function drawProductList()
@@ -293,134 +276,218 @@ end
 
 local function drawInfoBlock()
   fill(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, INFO_H, C.bg)
+
+  local item = items[selectedIndex]
+  if not item then return end
+
   local y = INFO_Y
 
   text(RIGHT_INNER_X, y, "Товар:", C.gray, C.bg)
-  text(RIGHT_INNER_X + 7, y, selectedItem.name, C.white, C.bg)
+  text(RIGHT_INNER_X + 7, y, item.name, C.white, C.bg)
   y = y + 1
 
-  text(RIGHT_INNER_X, y, selectedItem.id, C.cyan, C.bg)
+  text(RIGHT_INNER_X, y, "ID: item." .. selectedIndex, C.cyan, C.bg)
   y = y + 2
 
   text(RIGHT_INNER_X, y, "Цена: ", C.gray, C.bg)
-  text(RIGHT_INNER_X + 6, y, selectedItem.price, C.yellow, C.bg)
+  text(RIGHT_INNER_X + 6, y, tostring(item.price) .. " EMA", C.yellow, C.bg)
   y = y + 1
 
   text(RIGHT_INNER_X, y, "В ME: ", C.gray, C.bg)
-  text(RIGHT_INNER_X + 6, y, selectedItem.me, C.green, C.bg)
+  text(RIGHT_INNER_X + 6, y, item.me, C.green, C.bg)
   y = y + 1
 
-  text(RIGHT_INNER_X, y, "Мин: ", C.gray, C.bg)
-  text(RIGHT_INNER_X + 5, y, selectedItem.min, C.white, C.bg)
+  text(RIGHT_INNER_X, y, "COINA: ", C.gray, C.bg)
+  text(RIGHT_INNER_X + 7, y, item.coina, C.white, C.bg)
   y = y + 1
 
-  text(RIGHT_INNER_X, y, "Крафт: ", C.gray, C.bg)
-  text(RIGHT_INNER_X + 7, y, selectedItem.craft, C.cyan, C.bg)
-  y = y + 2
-
-  setFG(C.borderDark)
-  setBG(C.bg)
-  gpu.set(RIGHT_INNER_X, y, string.rep("─", RIGHT_INNER_W))
-  y = y + 1
-
-  text(RIGHT_INNER_X, y, "F1  – взять из ME", C.gray, C.bg)
-  y = y + 1
-  text(RIGHT_INNER_X, y, "TAB – след. поле", C.gray, C.bg)
-  y = y + 1
-  text(RIGHT_INNER_X, y, "ENT – сохранить", C.gray, C.bg)
+  text(RIGHT_INNER_X, y, "EMA: ", C.gray, C.bg)
+  text(RIGHT_INNER_X + 5, y, item.ema, C.yellow, C.bg)
 end
 
-local function drawRightSeparator()
-  setFG(C.border)
-  setBG(C.bg)
-  for x = LEFT_W + 1, WIDTH - 1 do
-    gpu.set(x, LOG_Y - 1, "─")
+local function drawQuantityInput()
+  fill(RIGHT_INNER_X, INPUT_Y, RIGHT_INNER_W, 3, C.bg)
+
+  text(RIGHT_INNER_X, INPUT_Y, "Количество:", C.gray, C.bg)
+
+  -- поле ввода
+  local inputW = 12
+  fill(RIGHT_INNER_X, INPUT_Y + 1, inputW, 1, C.inputBg)
+  text(RIGHT_INNER_X, INPUT_Y + 1, quantity .. (quantity == "" and "_" or ""), C.inputFg, C.inputBg)
+
+  -- итоговая цена
+  local item = items[selectedIndex]
+  if item and quantity ~= "" then
+    local qty = tonumber(quantity) or 0
+    totalPrice = qty * item.price
+    text(RIGHT_INNER_X, TOTAL_Y, "Итого: " .. totalPrice .. " EMA", C.yellow, C.bg)
+  else
+    text(RIGHT_INNER_X, TOTAL_Y, "Итого: 0 EMA", C.gray, C.bg)
   end
-  gpu.set(LEFT_W, LOG_Y - 1, "╠")
-  gpu.set(WIDTH, LOG_Y - 1, "╣")
 end
 
-local function drawLog()
-  fill(RIGHT_INNER_X, LOG_Y - 1, RIGHT_INNER_W, 1, C.bg)
-  text(RIGHT_INNER_X, LOG_Y - 1, "Лог:", C.header, C.bg)
+local function drawActionButtons()
+  local btnW = 12
+  local gap  = 2
 
-  fill(RIGHT_INNER_X, LOG_Y, RIGHT_INNER_W, LOG_H, C.logBg)
+  -- Купить
+  setBG(C.buttonBuy)
+  setFG(C.white)
+  gpu.fill(RIGHT_INNER_X, BTN_Y, btnW, 1, " ")
+  gpu.set(RIGHT_INNER_X + 2, BTN_Y, " Купить ")
 
-  local maxLines = LOG_H
-  local start = math.max(1, #logLines - maxLines + 1)
-
-  for i = start, #logLines do
-    local line = logLines[i]
-    local row = LOG_Y + (i - start)
-    if row <= LOG_Y + LOG_H - 1 then
-      local txt = line.text
-      if #txt > RIGHT_INNER_W then
-        txt = txt:sub(1, RIGHT_INNER_W - 1) .. "…"
-      end
-      text(RIGHT_INNER_X, row, txt, line.color, C.logBg)
-    end
-  end
+  -- Очистить
+  setBG(C.buttonClear)
+  setFG(C.white)
+  gpu.fill(RIGHT_INNER_X + btnW + gap, BTN_Y, btnW, 1, " ")
+  gpu.set(RIGHT_INNER_X + btnW + gap + 1, BTN_Y, " Очистить ")
 end
 
 local function drawRightPanel()
-  text(LEFT_W + 3, MAIN_Y + 1, "ИНФО", C.header, C.bg)
-  text(LEFT_W + 10, MAIN_Y + 1, "ADMIN", C.cyan, C.bg)
-  text(WIDTH - 6, MAIN_Y + 1, "PC-2", C.gray, C.bg)
+  text(LEFT_W + 3, MAIN_Y + 1, "ИНФО", C.infoLine, C.bg)
 
   drawInfoBlock()
-  drawRightSeparator()
-  drawLog()
+  drawQuantityInput()
+  drawActionButtons()
 end
 
 local function drawBottomBar()
   fill(1, BOT_Y, WIDTH, 2, 0x0A0A0A)
 
-  setFG(C.border)
+  setFG(C.catalogLine)
   setBG(C.bg)
   gpu.set(1, BOT_Y - 1, "╠" .. string.rep("═", WIDTH - 2) .. "╣")
 
-  local x = 2
-  for i, btn in ipairs(buttons) do
-    local w = #btn.label
-    setBG(btn.bg)
-    setFG(btn.fg)
-    gpu.fill(x, BOT_Y, w, 1, " ")
-    gpu.set(x, BOT_Y, btn.label)
-    x = x + w + 1
+  local btnW = 14
+  local buyX = math.floor(WIDTH / 2) - btnW - 2
+  local sellX = math.floor(WIDTH / 2) + 2
 
-    if i == 6 then
-      x = x + 2
-    elseif i == 9 then
-      x = WIDTH - #buttons[10].label - 1
-    end
-  end
+  -- Покупка
+  setBG(C.buttonBuy)
+  setFG(C.white)
+  gpu.fill(buyX, BOT_Y, btnW, 1, " ")
+  gpu.set(buyX + 3, BOT_Y, "Покупка")
 
-  local exitBtn = buttons[10]
-  local exitX = WIDTH - #exitBtn.label
-  setBG(exitBtn.bg)
-  setFG(exitBtn.fg)
-  gpu.fill(exitX, BOT_Y, #exitBtn.label, 1, " ")
-  gpu.set(exitX, BOT_Y, exitBtn.label)
+  -- Продажа
+  setBG(C.buttonSell)
+  setFG(C.white)
+  gpu.fill(sellX, BOT_Y, btnW, 1, " ")
+  gpu.set(sellX + 3, BOT_Y, "Продажа")
 end
 
 local function drawBottomBorder()
-  setFG(C.border)
+  setFG(C.catalogLine)
   setBG(C.bg)
   gpu.set(1, HEIGHT, "╚" .. string.rep("═", WIDTH - 2) .. "╝")
 end
 
--- ====================== ГЛАВНЫЙ ЗАПУСК ======================
-term.clear()
-drawBackground()
-drawTopBar()
-drawMainFrames()
-drawLeftHeader()
-drawProductList()
-drawRightPanel()
-drawBottomBar()
-drawBottomBorder()
+local function redrawAll()
+  drawBackground()
+  drawTopBar()
+  drawMainFrames()
+  drawLeftHeader()
+  drawProductList()
+  drawRightPanel()
+  drawBottomBar()
+  drawBottomBorder()
+end
 
--- Убираем курсор
-gpu.setForeground(C.bg)
-gpu.setBackground(C.bg)
-term.setCursor(1, HEIGHT)
+-- ====================== ЛОГИКА ======================
+local function selectItem(index)
+  if index < 1 then index = 1 end
+  if index > #items then index = #items end
+  selectedIndex = index
+
+  -- автоскролл
+  if selectedIndex - 1 < scrollOffset then
+    scrollOffset = selectedIndex - 1
+  elseif selectedIndex > scrollOffset + LIST_H then
+    scrollOffset = selectedIndex - LIST_H
+  end
+
+  quantity = ""
+  totalPrice = 0
+  drawProductList()
+  drawRightPanel()
+end
+
+local function scroll(delta)
+  local maxScroll = math.max(0, #items - LIST_H)
+  scrollOffset = math.max(0, math.min(maxScroll, scrollOffset + delta))
+  drawProductList()
+end
+
+local function handleClick(x, y)
+  -- клик по списку товаров
+  if x >= LIST_X and x <= LIST_X + LIST_W and y >= LIST_Y and y <= LIST_Y + LIST_H - 1 then
+    local row = y - LIST_Y
+    local index = scrollOffset + row + 1
+    if index >= 1 and index <= #items then
+      selectItem(index)
+    end
+    return
+  end
+
+  -- клик по кнопке Очистить
+  local btnW = 12
+  local gap  = 2
+  local clearX = RIGHT_INNER_X + btnW + gap
+  if y == BTN_Y and x >= clearX and x < clearX + btnW then
+    quantity = ""
+    totalPrice = 0
+    drawQuantityInput()
+    return
+  end
+
+  -- клик по кнопке Купить (пока просто визуально)
+  if y == BTN_Y and x >= RIGHT_INNER_X and x < RIGHT_INNER_X + btnW then
+    -- здесь можно добавить реальную покупку
+    return
+  end
+end
+
+-- ====================== ГЛАВНЫЙ ЦИКЛ ======================
+term.clear()
+redrawAll()
+
+while true do
+  local ev = {event.pull()}
+  local name = ev[1]
+
+  if name == "touch" then
+    local x, y = ev[3], ev[4]
+    handleClick(x, y)
+
+  elseif name == "scroll" then
+    local x, y, direction = ev[3], ev[4], ev[5]
+    if x >= LIST_X and x <= LIST_X + LIST_W + 1 then
+      scroll(-direction)  -- direction: 1 вверх, -1 вниз
+    end
+
+  elseif name == "key_down" then
+    local _, _, char, code = table.unpack(ev)
+
+    if code == keyboard.keys.up then
+      selectItem(selectedIndex - 1)
+    elseif code == keyboard.keys.down then
+      selectItem(selectedIndex + 1)
+    elseif code == keyboard.keys.enter then
+      -- подтверждение количества (можно расширить)
+    elseif code == keyboard.keys.back then
+      quantity = quantity:sub(1, -2)
+      drawQuantityInput()
+    elseif char and char >= 48 and char <= 57 then -- цифры 0-9
+      if #quantity < 6 then
+        quantity = quantity .. string.char(char)
+        drawQuantityInput()
+      end
+    elseif code == keyboard.keys.q or code == keyboard.keys.escape then
+      break
+    end
+  end
+end
+
+-- выход
+term.clear()
+gpu.setForeground(0xFFFFFF)
+gpu.setBackground(0x000000)
