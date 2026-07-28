@@ -33,8 +33,7 @@ end
 local function sectionHeader(x, y, w, title, lineColor, titleColor)
   lineColor = lineColor or C.sectionLine
   titleColor = titleColor or C.white
-  setBG(C.bg)
-  setFG(lineColor)
+  setBG(C.bg) setFG(lineColor)
   gpu.set(x, y, string.rep("-", w))
   setFG(titleColor)
   gpu.set(x + 1, y, title)
@@ -174,38 +173,13 @@ end
 
 local function drawMainFrames()
   setBG(C.bg)
-
-  -- Верхняя линия (левая часть)
   setFG(C.mainLine)
-  local leftTop = "+" .. string.rep("=", LEFT_W - 1)
-  gpu.set(1, MAIN_Y, leftTop)
-
-  -- Верхняя линия (правая часть)
-  setFG(C.sectionLine)
-  local rightTop = string.rep("=", WIDTH - LEFT_W - 1) .. "+"
-  gpu.set(LEFT_W, MAIN_Y, rightTop)
-
-  -- Нижняя линия (левая часть)
-  setFG(C.mainLine)
-  local leftBot = "+" .. string.rep("=", LEFT_W - 1)
-  gpu.set(1, MAIN_Y + MAIN_H - 1, leftBot)
-
-  -- Нижняя линия (правая часть)
-  setFG(C.sectionLine)
-  local rightBot = string.rep("=", WIDTH - LEFT_W - 1) .. "+"
-  gpu.set(LEFT_W, MAIN_Y + MAIN_H - 1, rightBot)
-
-  -- Левая вертикаль
-  setFG(C.mainLine)
+  gpu.set(1, MAIN_Y, "+" .. string.rep("=", WIDTH - 2) .. "+")
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(1, y, "|")
-  end
-
-  -- Правая вертикаль
-  setFG(C.sectionLine)
-  for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(WIDTH, y, "|")
   end
+  gpu.set(1, MAIN_Y + MAIN_H - 1, "+" .. string.rep("=", WIDTH - 2) .. "+")
 end
 
 local function drawLeftHeader()
@@ -220,7 +194,7 @@ end
 
 local function drawSeparator()
   setBG(C.bg)
-  setFG(C.sectionLine)
+  setFG(C.mainLine)
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(SEPARATOR1, y, "|")
     gpu.set(SEPARATOR2, y, "|")
@@ -270,7 +244,7 @@ local function drawItemRow(index, y)
     text(COL_NAME_X, y, "> ", C.selectedName, C.selectedBg)
   else
     if item.star then
-      text(COL_NAME_X, y, "* ", C.mainLine, C.bg)
+      text(COL_NAME_X, y, "* ", C.star, C.bg)
     else
       text(COL_NAME_X, y, "- ", C.darkGray, C.bg)
     end
@@ -302,7 +276,7 @@ end
 
 local function drawInfoBlock()
   fill(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, 7, C.bg)
-  sectionHeader(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, "ИНФОРМАЦИЯ", C.sectionLine, C.white)
+  sectionHeader(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, "ИНФО", C.sectionLine, C.white)
   local item = items[selectedIndex]
   if not item then return end
   local maxLen = RIGHT_INNER_W - 8
@@ -318,7 +292,7 @@ end
 
 local function drawQuantitySection()
   fill(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, 9, C.bg)
-  sectionHeader(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, "КОЛИЧЕСТВО", C.sectionLine, C.white)
+  sectionHeader(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, "Поле для количества", C.sectionLine, C.white)
   local fieldY = QTY_Y + 2
   setFG(C.frame)
   setBG(C.bg)
@@ -352,11 +326,11 @@ end
 
 local function drawAccountInfo()
   fill(RIGHT_INNER_X, ACC_Y, RIGHT_INNER_W, 8, C.bg)
-  sectionHeader(RIGHT_INNER_X, ACC_Y, RIGHT_INNER_W, "ИНФОРМАЦИЯ АККАУНТА", C.sectionLine, C.white)
+  sectionHeader(RIGHT_INNER_X, ACC_Y, RIGHT_INNER_W, "Информация Аккаунта", C.sectionLine, C.white)
   local y = ACC_Y + 2
-  text(RIGHT_INNER_X, y, "Имя: " .. account.nick, C.white, C.bg)
+  text(RIGHT_INNER_X, y, "НИК      : " .. account.nick, C.white, C.bg)
   y = y + 1
-  text(RIGHT_INNER_X, y, "Баланс: " .. account.coina .. " COINA | " .. account.ema .. " EMA", C.yellow, C.bg)
+  text(RIGHT_INNER_X, y, "Баланс   : " .. account.coina .. " COINA | " .. account.ema .. " EMA", C.yellow, C.bg)
   y = y + 1
   text(RIGHT_INNER_X, y, "Регистрация: " .. account.regDate, C.gray, C.bg)
   y = y + 1
@@ -475,19 +449,15 @@ redrawAll()
 while true do
   local ev = {event.pull()}
   local name = ev[1]
-  
   if name == "touch" then
     handleClick(ev[3], ev[4])
-    
   elseif name == "scroll" then
     local x, direction = ev[3], ev[5]
     if x >= LIST_X and x <= LIST_X + LIST_W + 2 then
       scroll(-direction)
     end
-    
   elseif name == "key_down" then
     local _, _, char, code = table.unpack(ev)
-    
     if searchFocused then
       if code == keyboard.keys.enter or code == keyboard.keys.tab then
         searchFocused = false
@@ -502,7 +472,6 @@ while true do
           redrawAll()
         end
       end
-      
     elseif qtyFocused then
       if code == keyboard.keys.enter or code == keyboard.keys.tab then
         qtyFocused = false
@@ -515,7 +484,6 @@ while true do
           drawQuantitySection()
         end
       end
-      
     else
       if code == keyboard.keys.up then
         selectItem(selectedIndex - 1)
@@ -533,11 +501,9 @@ while true do
         break
       end
     end
-    
   end
-  
 end
-end
+
 term.clear()
 gpu.setForeground(0xFFFFFF)
 gpu.setBackground(0x000000)
