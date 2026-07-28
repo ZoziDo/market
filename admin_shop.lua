@@ -475,15 +475,19 @@ redrawAll()
 while true do
   local ev = {event.pull()}
   local name = ev[1]
+  
   if name == "touch" then
     handleClick(ev[3], ev[4])
+    
   elseif name == "scroll" then
     local x, direction = ev[3], ev[5]
     if x >= LIST_X and x <= LIST_X + LIST_W + 2 then
       scroll(-direction)
-    end
+    end  -- закрывает if для scroll
+    
   elseif name == "key_down" then
     local _, _, char, code = table.unpack(ev)
+    
     if searchFocused then
       if code == keyboard.keys.enter or code == keyboard.keys.tab then
         searchFocused = false
@@ -496,8 +500,9 @@ while true do
           searchQuery = searchQuery .. unicode.char(char)
           filterItems()
           redrawAll()
-        end
-      end
+        end  -- закрывает if #searchQuery
+      end  -- закрывает if code ==...
+      
     elseif qtyFocused then
       if code == keyboard.keys.enter or code == keyboard.keys.tab then
         qtyFocused = false
@@ -508,8 +513,9 @@ while true do
         if #quantity < 8 then
           quantity = quantity .. string.char(char)
           drawQuantitySection()
-        end
-      end
+        end  -- закрывает if #quantity
+      end  -- закрывает if code ==...
+      
     else
       if code == keyboard.keys.up then
         selectItem(selectedIndex - 1)
@@ -522,13 +528,15 @@ while true do
         if #quantity < 8 then
           quantity = quantity .. string.char(char)
           drawQuantitySection()
-        end
+        end  -- закрывает if #quantity
       elseif code == keyboard.keys.q or code == keyboard.keys.escape then
         break
-      end
-    end
-  end
-end
+      end  -- закрывает if code ==...
+    end  -- закрывает if searchFocused/qtyFocused/else
+    
+  end  -- закрывает elseif name == "key_down"
+  
+end  -- закрывает while true
 
 term.clear()
 gpu.setForeground(0xFFFFFF)
