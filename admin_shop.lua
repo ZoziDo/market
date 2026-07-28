@@ -1,7 +1,6 @@
 -- ============================================================
 -- VIP-SHOP
 -- OpenComputers / OpenOS / GPU API / Lua 5.2
--- Только ASCII: + - | = * : пробел
 -- ============================================================
 
 local component = require("component")
@@ -10,7 +9,6 @@ local term      = require("term")
 local event     = require("event")
 local keyboard  = require("keyboard")
 
--- ====================== РАЗРЕШЕНИЕ ======================
 local WIDTH, HEIGHT = gpu.getResolution()
 local maxW, maxH = gpu.maxResolution()
 if WIDTH < maxW or HEIGHT < maxH then
@@ -18,7 +16,6 @@ if WIDTH < maxW or HEIGHT < maxH then
   WIDTH, HEIGHT = gpu.getResolution()
 end
 
--- ====================== ЦВЕТА ======================
 local C = {
   bg           = 0x0C0C0C,
   white        = 0xFFFFFF,
@@ -28,29 +25,23 @@ local C = {
   yellow       = 0xFFFF55,
   red          = 0xFF5555,
   cyan         = 0x55FFFF,
-
-  selectedBg   = 0x3BFCD0,   -- новый цвет подсветки выбранного товара
+  selectedBg   = 0x3BFCD0,
   selectedName = 0x014d52,
   star         = 0x077d42,
-
   vipTitle     = 0x0c9a76,
   underLine    = 0x428A72,
   mainLine     = 0x7FFFD4,
   sectionLine  = 0x27BDEC,
-
   headerBg     = 0x1A2D33,
-  notFound     = 0xF50016,   -- цвет "ничего не найдено"
-
+  notFound     = 0xF50016,
   buttonBuy    = 0x0a502d,
   buttonClear  = 0x8b1a1a,
   buttonSales  = 0x1a5a6b,
-
   inputBg      = 0x1a1a1a,
   inputFg      = 0xFFFFFF,
   accent       = 0x0c9a76,
 }
 
--- ====================== ВСПОМОГАТЕЛЬНЫЕ ======================
 local function setBG(c) gpu.setBackground(c) end
 local function setFG(c) gpu.setForeground(c) end
 
@@ -68,16 +59,13 @@ end
 local function sectionHeader(x, y, w, title, lineColor, titleColor)
   lineColor  = lineColor or C.sectionLine
   titleColor = titleColor or C.white
-
   setBG(C.bg)
   setFG(lineColor)
   gpu.set(x, y, string.rep("-", w))
-
   setFG(titleColor)
   gpu.set(x + 1, y, title)
 end
 
--- ====================== РАЗМЕРЫ ======================
 local TOP_H   = 3
 local BOT_H   = 3
 local MAIN_Y  = 4
@@ -105,12 +93,11 @@ local RIGHT_INNER_W = WIDTH - RIGHT_INNER_X - 1
 local INFO_Y     = MAIN_Y + 1
 local QTY_Y      = INFO_Y + 8
 local TOTAL_Y    = QTY_Y + 5
-local BTN_Y      = TOTAL_Y + 2          -- кнопки ниже на 1 строку
+local BTN_Y      = TOTAL_Y + 2
 local ACC_Y      = BTN_Y + 3
 
 local BOT_Y      = HEIGHT - 2
 
--- ====================== ДАННЫЕ ======================
 local allItems = {
   {name="Дракониевая пыль",              me="365",  coina="12",  ema="0.8",  star=true},
   {name="Бумага",                        me="2",    coina="1",   ema="0.1",  star=true},
@@ -167,7 +154,6 @@ local account = {
   trans    = "148",
 }
 
--- ====================== ПОИСК ======================
 local function filterItems()
   items = {}
   if searchQuery == "" then
@@ -184,7 +170,6 @@ local function filterItems()
   scrollOffset = 0
 end
 
--- ====================== ОТРИСОВКА ======================
 local function drawBackground()
   fill(1, 1, WIDTH, HEIGHT, C.bg)
 end
@@ -199,7 +184,6 @@ local function drawTopBar()
   setBG(0x0A0A0A)
   gpu.set(1, 2, string.rep("=", WIDTH))
 
-  -- Строка поиска
   local searchW = 40
   local searchX = 2
   fill(searchX, 3, searchW, 1, C.inputBg)
@@ -210,7 +194,6 @@ local function drawTopBar()
     text(searchX + 1, 3, searchQuery, C.inputFg, C.inputBg)
   end
 
-  -- кнопка [ Стереть ] рядом с поиском
   local clearX = searchX + searchW + 1
   setBG(C.buttonClear)
   setFG(C.white)
@@ -221,7 +204,6 @@ end
 local function drawMainFrames()
   setBG(C.bg)
   setFG(C.mainLine)
-
   gpu.set(1, MAIN_Y, "+" .. string.rep("=", WIDTH - 2) .. "+")
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(1, y, "|")
@@ -248,10 +230,8 @@ local function drawSeparator()
     gpu.set(SEPARATOR1, y, "|")
     gpu.set(SEPARATOR2, y, "|")
   end
-  -- верх
   gpu.set(SEPARATOR1, MAIN_Y, "+")
   gpu.set(SEPARATOR2, MAIN_Y, "+")
-  -- низ (добавлены ++)
   gpu.set(SEPARATOR1, MAIN_Y + MAIN_H - 1, "+")
   gpu.set(SEPARATOR2, MAIN_Y + MAIN_H - 1, "+")
 end
@@ -340,7 +320,6 @@ end
 
 local function drawInfoBlock()
   fill(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, 7, C.bg)
-
   sectionHeader(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, "ИНФО", C.sectionLine, C.white)
 
   local item = items[selectedIndex]
@@ -358,7 +337,6 @@ end
 
 local function drawQuantitySection()
   fill(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, 9, C.bg)
-
   sectionHeader(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, "Поле для количества", C.sectionLine, C.white)
 
   local fieldY = QTY_Y + 2
@@ -383,7 +361,6 @@ local function drawQuantitySection()
     string.format("Итог: COINA: %s | EMA: %s", totalCoina, totalEma),
     C.yellow, C.bg)
 
-  -- кнопки ниже на 1 строку
   local btnW = 12
   local gap  = 2
 
@@ -400,7 +377,6 @@ end
 
 local function drawAccountInfo()
   fill(RIGHT_INNER_X, ACC_Y, RIGHT_INNER_W, 8, C.bg)
-
   sectionHeader(RIGHT_INNER_X, ACC_Y, RIGHT_INNER_W, "Информация Аккаунта", C.sectionLine, C.white)
 
   local y = ACC_Y + 2
@@ -421,7 +397,6 @@ end
 
 local function drawBottomBar()
   fill(1, BOT_Y, WIDTH, 2, 0x0A0A0A)
-
   setFG(C.mainLine)
   setBG(C.bg)
   gpu.set(1, BOT_Y - 1, "+" .. string.rep("=", WIDTH - 2) .. "+")
@@ -463,7 +438,6 @@ local function redrawAll()
   drawBottomBorder()
 end
 
--- ====================== ЛОГИКА ======================
 local function selectItem(index)
   if #items == 0 then return end
   if index < 1 then index = 1 end
@@ -490,7 +464,6 @@ local function scroll(delta)
 end
 
 local function handleClick(x, y)
-  -- клик по списку
   if x >= LIST_X and x <= LIST_X + LIST_W and y >= LIST_Y and y <= LIST_Y + LIST_H - 1 then
     local row = y - LIST_Y
     local index = scrollOffset + row + 1
@@ -500,7 +473,6 @@ local function handleClick(x, y)
     return
   end
 
-  -- клик по кнопке Стереть в поиске
   local searchW = 40
   local clearX = 2 + searchW + 1
   if y == 3 and x >= clearX and x < clearX + 11 then
@@ -510,13 +482,11 @@ local function handleClick(x, y)
     return
   end
 
-  -- клик по полю поиска
   if y == 3 and x >= 2 and x <= 2 + searchW then
     searchFocused = true
     return
   end
 
-  -- клик по Стереть количества
   local btnW = 12
   local gap  = 2
   local clearQtyX = RIGHT_INNER_X + btnW + gap
@@ -526,7 +496,7 @@ local function handleClick(x, y)
   end
 end
 
--- ====================== ГЛАВНЫЙ ЦИКЛ ======================
+-- ====================== ЗАПУСК ======================
 term.clear()
 filterItems()
 redrawAll()
