@@ -276,7 +276,7 @@ end
 
 local function drawInfoBlock()
   fill(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, 7, C.bg)
-  sectionHeader(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, "ИНФО", C.sectionLine, C.white)
+  sectionHeader(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, "ИНФОРМАЦИЯ", C.sectionLine, C.white)
   local item = items[selectedIndex]
   if not item then return end
   local maxLen = RIGHT_INNER_W - 8
@@ -292,7 +292,7 @@ end
 
 local function drawQuantitySection()
   fill(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, 9, C.bg)
-  sectionHeader(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, "Поле для количества", C.sectionLine, C.white)
+  sectionHeader(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, "КОЛИЧСЕВТО", C.sectionLine, C.white)
   local fieldY = QTY_Y + 2
   setFG(C.frame)
   setBG(C.bg)
@@ -326,11 +326,11 @@ end
 
 local function drawAccountInfo()
   fill(RIGHT_INNER_X, ACC_Y, RIGHT_INNER_W, 8, C.bg)
-  sectionHeader(RIGHT_INNER_X, ACC_Y, RIGHT_INNER_W, "Информация Аккаунта", C.sectionLine, C.white)
+  sectionHeader(RIGHT_INNER_X, ACC_Y, RIGHT_INNER_W, "ИНФОРМАЦИЯ АККАУНТА", C.sectionLine, C.white)
   local y = ACC_Y + 2
-  text(RIGHT_INNER_X, y, "НИК      : " .. account.nick, C.white, C.bg)
+  text(RIGHT_INNER_X, y, "Имя: " .. account.nick, C.white, C.bg)
   y = y + 1
-  text(RIGHT_INNER_X, y, "Баланс   : " .. account.coina .. " COINA | " .. account.ema .. " EMA", C.yellow, C.bg)
+  text(RIGHT_INNER_X, y, "Баланс: " .. account.coina .. " COINA | " .. account.ema .. " EMA", C.yellow, C.bg)
   y = y + 1
   text(RIGHT_INNER_X, y, "Регистрация: " .. account.regDate, C.gray, C.bg)
   y = y + 1
