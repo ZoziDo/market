@@ -63,7 +63,6 @@ local function text(x, y, str, fg, bg)
 end
 
 -- Заголовок прижат влево + линия до конца
--- ---ИНФО--------------------------------
 local function sectionHeader(x, y, w, title, lineColor, titleColor)
   lineColor  = lineColor or C.sectionLine
   titleColor = titleColor or C.white
@@ -72,7 +71,6 @@ local function sectionHeader(x, y, w, title, lineColor, titleColor)
   setFG(lineColor)
   gpu.set(x, y, string.rep("-", w))
 
-  -- текст поверх линии
   setFG(titleColor)
   gpu.set(x + 1, y, title)
 end
@@ -83,23 +81,25 @@ local BOT_H   = 3
 local MAIN_Y  = 4
 local MAIN_H  = HEIGHT - TOP_H - BOT_H
 
-local LEFT_W  = math.floor(WIDTH * 0.60)
-local RIGHT_W = WIDTH - LEFT_W
+local LEFT_W  = math.floor(WIDTH * 0.60)   -- ширина левой панели (до скролла)
+local RIGHT_W = WIDTH - LEFT_W - 2         -- правая панель (после ||)
 
 local LIST_X  = 2
 local LIST_Y  = MAIN_Y + 3
 local LIST_H  = MAIN_H - 4
-local LIST_W  = LEFT_W - 5
-local SCROLL_X = LEFT_W - 3          -- первая линия скролла
-local SCROLL_X2 = LEFT_W - 2         -- вторая линия скролла
+local LIST_W  = LEFT_W - 2
+
+-- Скроллбар = разделитель между панелями
+local SCROLL_X  = LEFT_W          -- первая |
+local SCROLL_X2 = LEFT_W + 1      -- вторая |
 
 local COL_NAME_X  = 3
-local COL_ME_X    = LEFT_W - 32
-local COL_COINA_X = LEFT_W - 22
-local COL_EMA_X   = LEFT_W - 12
+local COL_ME_X    = LEFT_W - 28
+local COL_COINA_X = LEFT_W - 18
+local COL_EMA_X   = LEFT_W - 9
 
-local RIGHT_INNER_X = LEFT_W + 2
-local RIGHT_INNER_W = RIGHT_W - 3
+local RIGHT_INNER_X = LEFT_W + 3
+local RIGHT_INNER_W = WIDTH - RIGHT_INNER_X - 1
 
 local INFO_Y     = MAIN_Y + 2
 local QTY_Y      = INFO_Y + 7
@@ -183,27 +183,20 @@ local function drawMainFrames()
   setBG(C.bg)
   setFG(C.mainLine)
 
+  -- внешняя рамка
   gpu.set(1, MAIN_Y, "+" .. string.rep("=", WIDTH - 2) .. "+")
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(1, y, "|")
     gpu.set(WIDTH, y, "|")
   end
   gpu.set(1, MAIN_Y + MAIN_H - 1, "+" .. string.rep("=", WIDTH - 2) .. "+")
-
-  -- вертикальный разделитель (основная рамка)
-  for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
-    gpu.set(LEFT_W, y, "|")
-  end
-
-  gpu.set(LEFT_W, MAIN_Y, "+")
-  gpu.set(LEFT_W, MAIN_Y + MAIN_H - 1, "+")
 end
 
 local function drawLeftHeader()
-  sectionHeader(2, MAIN_Y + 1, LEFT_W - 4, "КАТАЛОГ ТОВАРОВ", C.mainLine, C.white)
+  sectionHeader(2, MAIN_Y + 1, LEFT_W - 2, "КАТАЛОГ ТОВАРОВ", C.mainLine, C.white)
 
   local colY = MAIN_Y + 2
-  fill(2, colY, LEFT_W - 5, 1, C.bg)
+  fill(2, colY, LEFT_W - 2, 1, C.bg)
   text(COL_NAME_X,  colY, "ТОВАР",  C.white, C.bg)
   text(COL_ME_X,    colY, "В ME",   C.white, C.bg)
   text(COL_COINA_X, colY, "COINA",  C.white, C.bg)
@@ -211,23 +204,24 @@ local function drawLeftHeader()
 end
 
 local function drawScrollbar()
-  -- две линии скролла ||
+  -- Двойная линия || как разделитель + скролл
   setBG(C.bg)
   setFG(C.mainLine)
-  for y = LIST_Y, LIST_Y + LIST_H - 1 do
+
+  for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(SCROLL_X,  y, "|")
     gpu.set(SCROLL_X2, y, "|")
   end
 
-  -- верх и низ скролла
-  gpu.set(SCROLL_X,  LIST_Y - 1, "+")
-  gpu.set(SCROLL_X2, LIST_Y - 1, "+")
-  gpu.set(SCROLL_X,  LIST_Y + LIST_H, "+")
-  gpu.set(SCROLL_X2, LIST_Y + LIST_H, "+")
+  -- верх и низ
+  gpu.set(SCROLL_X,  MAIN_Y, "+")
+  gpu.set(SCROLL_X2, MAIN_Y, "+")
+  gpu.set(SCROLL_X,  MAIN_Y + MAIN_H - 1, "+")
+  gpu.set(SCROLL_X2, MAIN_Y + MAIN_H - 1, "+")
 
-  -- ползунок (заливка)
+  -- ползунок (заливка цветом)
   local maxScroll = math.max(0, #items - LIST_H)
-  local thumbH = math.max(2, math.floor(LIST_H * 0.25))
+  local thumbH = math.max(3, math.floor(LIST_H * 0.25))
   local thumbY = LIST_Y
   if maxScroll > 0 then
     thumbY = LIST_Y + math.floor((scrollOffset / maxScroll) * (LIST_H - thumbH))
@@ -235,9 +229,10 @@ local function drawScrollbar()
 
   setBG(C.accent)
   for i = 0, thumbH - 1 do
-    if thumbY + i <= LIST_Y + LIST_H - 1 then
-      gpu.set(SCROLL_X,  thumbY + i, " ")
-      gpu.set(SCROLL_X2, thumbY + i, " ")
+    local yy = thumbY + i
+    if yy >= LIST_Y and yy <= LIST_Y + LIST_H - 1 then
+      gpu.set(SCROLL_X,  yy, " ")
+      gpu.set(SCROLL_X2, yy, " ")
     end
   end
   setBG(C.bg)
@@ -290,7 +285,6 @@ local function drawProductList()
   for i = startIdx, endIdx do
     drawItemRow(i, LIST_Y + (i - startIdx))
   end
-  drawScrollbar()
 end
 
 local function drawInfoBlock()
@@ -404,6 +398,7 @@ local function redrawAll()
   drawMainFrames()
   drawLeftHeader()
   drawProductList()
+  drawScrollbar()          -- скроллбар = разделитель
   drawRightPanel()
   drawBottomBar()
   drawBottomBorder()
@@ -423,72 +418,6 @@ local function selectItem(index)
 
   quantity = ""
   drawProductList()
+  drawScrollbar()
   drawRightPanel()
 end
-
-local function scroll(delta)
-  local maxScroll = math.max(0, #items - LIST_H)
-  scrollOffset = math.max(0, math.min(maxScroll, scrollOffset + delta))
-  drawProductList()
-end
-
-local function handleClick(x, y)
-  if x >= LIST_X and x <= LIST_X + LIST_W and y >= LIST_Y and y <= LIST_Y + LIST_H - 1 then
-    local row = y - LIST_Y
-    local index = scrollOffset + row + 1
-    if index >= 1 and index <= #items then
-      selectItem(index)
-    end
-    return
-  end
-
-  local btnW = 12
-  local gap  = 2
-  local clearX = RIGHT_INNER_X + btnW + gap
-  if y == BTN_Y and x >= clearX and x < clearX + btnW then
-    quantity = ""
-    drawQuantitySection()
-  end
-end
-
--- ====================== ГЛАВНЫЙ ЦИКЛ ======================
-term.clear()
-redrawAll()
-
-while true do
-  local ev = {event.pull()}
-  local name = ev[1]
-
-  if name == "touch" then
-    handleClick(ev[3], ev[4])
-
-  elseif name == "scroll" then
-    local x, direction = ev[3], ev[5]
-    if x >= LIST_X and x <= LIST_X + LIST_W + 2 then
-      scroll(-direction)
-    end
-
-  elseif name == "key_down" then
-    local _, _, char, code = table.unpack(ev)
-
-    if code == keyboard.keys.up then
-      selectItem(selectedIndex - 1)
-    elseif code == keyboard.keys.down then
-      selectItem(selectedIndex + 1)
-    elseif code == keyboard.keys.back then
-      quantity = quantity:sub(1, -2)
-      drawQuantitySection()
-    elseif char and char >= 48 and char <= 57 then
-      if #quantity < 8 then
-        quantity = quantity .. string.char(char)
-        drawQuantitySection()
-      end
-    elseif code == keyboard.keys.q or code == keyboard.keys.escape then
-      break
-    end
-  end
-end
-
-term.clear()
-gpu.setForeground(0xFFFFFF)
-gpu.setBackground(0x000000)
