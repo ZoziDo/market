@@ -150,6 +150,7 @@ local scrollOffset  = 0
 local quantity      = ""
 local searchQuery   = ""
 local searchFocused = false
+local qtyFocused    = false
 
 local account = {
   nick     = "Player_777",
@@ -233,18 +234,12 @@ end
 local function drawSeparator()
   setBG(C.bg)
   setFG(C.mainLine)
-
-  -- вертикальные линии
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(SEPARATOR1, y, "|")
     gpu.set(SEPARATOR2, y, "|")
   end
-
-  -- верх
   gpu.set(SEPARATOR1, MAIN_Y, "+")
   gpu.set(SEPARATOR2, MAIN_Y, "+")
-
-  -- низ (рисуем принудительно)
   gpu.set(SEPARATOR1, MAIN_Y + MAIN_H - 1, "+")
   gpu.set(SEPARATOR2, MAIN_Y + MAIN_H - 1, "+")
 end
@@ -305,7 +300,9 @@ local function drawProductList()
   fill(LIST_X, LIST_Y, LIST_W, LIST_H, C.bg)
   if #items == 0 then
     local msg = "ПО ТВОЕМУ ЗАПРОСУ, НИЧЕГО НЕ НАЙДЕНО!"
-    local mx = LIST_X + math.floor((LIST_W - #msg) / 2)
+    -- Более точный центр (учитываем, что русские буквы занимают 2 байта)
+    local visualLen = 35
+    local mx = LIST_X + math.floor((LIST_W - visualLen) / 2)
     local my = LIST_Y + math.floor(LIST_H / 2)
     text(mx, my, msg, C.notFound, C.bg)
     return
@@ -422,7 +419,7 @@ local function redrawAll()
   drawRightPanel()
   drawBottomBar()
   drawBottomBorder()
-  drawSeparator()   -- <-- рисуем разделитель самым последним
+  drawSeparator()
 end
 
 local function selectItem(index)
@@ -449,6 +446,10 @@ local function scroll(delta)
 end
 
 local function handleClick(x, y)
+  -- сброс фокусов
+  searchFocused = false
+  qtyFocused = false
+
   if x >= LIST_X and x <= LIST_X + LIST_W and y >= LIST_Y and y <= LIST_Y + LIST_H - 1 then
     local row = y - LIST_Y
     local index = scrollOffset + row + 1
@@ -457,6 +458,7 @@ local function handleClick(x, y)
     end
     return
   end
+
   local searchW = 40
   local clearX = 2 + searchW + 2
   if y == 3 and x >= clearX and x < clearX + 11 then
@@ -465,10 +467,19 @@ local function handleClick(x, y)
     redrawAll()
     return
   end
+
   if y == 3 and x >= 2 and x <= 2 + searchW then
     searchFocused = true
     return
   end
+
+  -- клик по полю количества
+  local fieldY = QTY_Y + 2
+  if y == fieldY and x >= RIGHT_INNER_X and x <= RIGHT_INNER_X + RIGHT_INNER_W then
+    qtyFocused = true
+    return
+  end
+
   local btnW = 12
   local gap  = 2
   local clearQtyX = RIGHT_INNER_X + btnW + gap
@@ -489,13 +500,16 @@ while true do
 
   if name == "touch" then
     handleClick(ev[3], ev[4])
+
   elseif name == "scroll" then
     local x, direction = ev[3], ev[5]
     if x >= LIST_X and x <= LIST_X + LIST_W + 2 then
       scroll(-direction)
     end
+
   elseif name == "key_down" then
     local _, _, char, code = table.unpack(ev)
+
     if searchFocused then
       if code == keyboard.keys.enter or code == keyboard.keys.tab then
         searchFocused = false
@@ -503,13 +517,28 @@ while true do
         searchQuery = searchQuery:sub(1, -2)
         filterItems()
         redrawAll()
-      elseif char and char >= 32 and char <= 126 then
+      elseif char and char >= 32 then
+        -- принимаем любые символы (включая русские)
         if #searchQuery < 30 then
-          searchQuery = searchQuery .. string.char(char)
+          searchQuery = searchQuery .. unicode.char(char)
           filterItems()
           redrawAll()
         end
       end
+
+    elseif qtyFocused then
+      if code == keyboard.keys.enter or code == keyboard.keys.tab then
+        qtyFocused = false
+      elseif code == keyboard.keys.back then
+        quantity = quantity:sub(1, -2)
+        drawQuantitySection()
+      elseif char and char >= 48 and char <= 57 then
+        if #quantity < 8 then
+          quantity = quantity .. string.char(char)
+          drawQuantitySection()
+        end
+      end
+
     else
       if code == keyboard.keys.up then
         selectItem(selectedIndex - 1)
