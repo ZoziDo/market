@@ -537,7 +537,7 @@ while true do
   end
   
 end
-
+end
 term.clear()
 gpu.setForeground(0xFFFFFF)
 gpu.setBackground(0x000000)
