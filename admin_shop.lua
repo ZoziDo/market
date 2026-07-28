@@ -174,8 +174,8 @@ end
 local function drawMainFrames()
   setBG(C.bg)
 
-  -- Верхняя и нижняя линии (общие)
-  setFG(C.mainLine)
+  -- Верхняя и нижняя линии (используем sectionLine для внешних рамок)
+  setFG(C.sectionLine)  -- Изменено с mainLine на sectionLine
   gpu.set(1, MAIN_Y, "+" .. string.rep("=", WIDTH - 2) .. "+")
   gpu.set(1, MAIN_Y + MAIN_H - 1, "+" .. string.rep("=", WIDTH - 2) .. "+")
 
@@ -204,18 +204,21 @@ end
 
 local function drawSeparator()
   setBG(C.bg)
-  setFG(C.sectionLine)   -- <-- правый цвет
+  setFG(C.sectionLine)
 
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(SEPARATOR1, y, "|")
     gpu.set(SEPARATOR2, y, "|")
   end
 
+  -- Верхний и нижний + для разделителя
+  setFG(C.sectionLine)
   gpu.set(SEPARATOR1, MAIN_Y, "+")
   gpu.set(SEPARATOR2, MAIN_Y, "+")
   gpu.set(SEPARATOR1, MAIN_Y + MAIN_H - 1, "+")
   gpu.set(SEPARATOR2, MAIN_Y + MAIN_H - 1, "+")
 end
+
 
 local function drawScrollbar()
   setBG(C.bg)
@@ -376,7 +379,7 @@ local function drawBottomBar()
 end
 
 local function drawBottomBorder()
-  setFG(C.mainLine)
+  setFG(C.sectionLine)  -- Изменено с mainLine на sectionLine
   setBG(C.bg)
   gpu.set(1, HEIGHT, "+" .. string.rep("=", WIDTH - 2) .. "+")
 end
@@ -390,8 +393,8 @@ local function redrawAll()
   drawScrollbar()
   drawRightPanel()
   drawBottomBar()
-  drawBottomBorder()
-  drawSeparator()
+  drawBottomBorder()  -- Рисуем нижнюю границу
+  drawSeparator()     -- Затем разделитель (он перекроет нижние + для разделителя правильным цветом)
 end
 
 local function selectItem(index)
