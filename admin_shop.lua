@@ -1,477 +1,426 @@
--- shop_admin.lua
--- Pixel-perfect replication of the OpenComputers shop admin GUI
+-- ============================================================
+-- SHOP-ADMIN v3.0
+-- Полная визуальная копия GUI со скриншота
+-- OpenComputers / OpenOS / GPU API / Lua 5.2
+-- ============================================================
 
 local component = require("component")
 local gpu = component.gpu
-local event = require("event")
-local unicode = require("unicode")
+local term = require("term")
 
--- Colour palette (matching the screenshot as closely as possible)
+-- ====================== РАЗРЕШЕНИЕ ======================
+local WIDTH, HEIGHT = gpu.getResolution()
+local maxW, maxH = gpu.maxResolution()
+if WIDTH < maxW or HEIGHT < maxH then
+  gpu.setResolution(maxW, maxH)
+  WIDTH, HEIGHT = gpu.getResolution()
+end
+
+-- ====================== ЦВЕТА ======================
 local C = {
-    background  = 0x111111,
-    border      = 0x00E5FF,
-    title       = 0x00FFFF,
-    text        = 0xFFFFFF,
-    gray        = 0x777777,
-    darkGray    = 0x444444,
-    green       = 0x00FF66,
-    yellow      = 0xFFD800,
-    red         = 0xFF3333,
-    blue        = 0x0099FF,
-    purple      = 0xAA00FF,
-    cyan        = 0x00FFFF,
-    selected    = 0x003366,
-    logTime     = 0x888888,
-    logText     = 0xCCCCCC,
+  bg          = 0x0C0C0C,
+  panel       = 0x101010,
+  border      = 0x00AAAA,
+  borderDark  = 0x008888,
+  white       = 0xFFFFFF,
+  gray        = 0xAAAAAA,
+  darkGray    = 0x555555,
+  green       = 0x55FF55,
+  yellow      = 0xFFFF55,
+  red         = 0xFF5555,
+  cyan        = 0x55FFFF,
+  blue        = 0x0055AA,
+  blueDark    = 0x003366,
+  title       = 0xFFFFFF,
+  header      = 0x00AAAA,
+  buttonBg    = 0x222222,
+  buttonText  = 0xFFFFFF,
+  logBg       = 0x0A0A0A,
+  logText     = 0xAAAAAA,
+  selectedBg  = 0x0055AA,
+  selectedFg  = 0xFFFFFF,
 }
 
--- Global screen dimensions (updated on resize)
-local WIDTH, HEIGHT
+-- ====================== ВСПОМОГАТЕЛЬНЫЕ ======================
+local function setBG(c) gpu.setBackground(c) end
+local function setFG(c) gpu.setForeground(c) end
 
--- Data: catalog items (name, amount, min, price, inn, indent)
+local function fill(x, y, w, h, c)
+  setBG(c)
+  gpu.fill(x, y, w, h, " ")
+end
+
+local function text(x, y, str, fg, bg)
+  if bg then setBG(bg) end
+  if fg then setFG(fg) end
+  gpu.set(x, y, str)
+end
+
+-- ====================== РАЗМЕРЫ ======================
+local TOP_H   = 1
+local BOT_H   = 3
+local MAIN_Y  = 2
+local MAIN_H  = HEIGHT - TOP_H - BOT_H
+
+local LEFT_W  = math.floor(WIDTH * 0.62)
+local LEFT_X  = 1
+local RIGHT_X = LEFT_W + 1
+local RIGHT_W = WIDTH - LEFT_W
+
+local LIST_X  = 2
+local LIST_Y  = MAIN_Y + 4
+local LIST_H  = MAIN_H - 5
+local LIST_W  = LEFT_W - 3
+local SCROLL_X = LEFT_W - 1
+
+local COL_NAME_X  = 3
+local COL_ME_X    = LEFT_W - 28
+local COL_MIN_X   = LEFT_W - 18
+local COL_PRICE_X = LEFT_W - 10
+
+local RIGHT_INNER_X = LEFT_W + 2
+local RIGHT_INNER_W = RIGHT_W - 3
+
+local INFO_Y  = MAIN_Y + 3
+local INFO_H  = 12
+local LOG_Y   = INFO_Y + INFO_H + 1
+local LOG_H   = MAIN_H - INFO_H - 4
+
+local BOT_Y   = HEIGHT - 2
+
+-- ====================== ДАННЫЕ ======================
 local items = {
-    {name="HiCropsPlating_Plating_1.name",   amount="0",    min=0, price=0, inn=0, indent=0},
-    {name="Дракониевая пыль",                amount="365",  min=0, price=0, inn=0, indent=0},
-    {name="Бумага",                          amount="2",    min=0, price=0, inn=0, indent=0},
-    {name="Медовые соты",                    amount="121",  min=0, price=0, inn=0, indent=0},
-    {name="Сборщик фруктов",                 amount="2",    min=0, price=0, inn=0, indent=0},
-    {name="Ведро ледяное и ароматное",       amount="0",    min=0, price=0, inn=0, indent=0},
-    {name="Светло-серая мини-зеркальная шерсть", amount="0", min=0, price=0, inn=0, indent=0},
-    {name="Сырая баранина",                  amount="278",  min=0, price=0, inn=0, indent=0},
-    {name="Голова страничная Края",          amount="4.7k", min=0, price=0, inn=0, indent=0},
-    {name="МЗ жидкостная шина импорта",      amount="1",    min=0, price=0, inn=0, indent=0},
-    {name="Реакторная камера",               amount="0",    min=0, price=0, inn=0, indent=0},
-    {name="Авто-вариант",                    amount="1",    min=0, price=0, inn=0, indent=0},
-    {name="Дракониевая блок",                amount="0",    min=0, price=0, inn=0, indent=0},
-    {name="Яблоко",                          amount="5.5k", min=0, price=0, inn=0, indent=0},
-    {name="item.item_portable_cell_advanced.name", amount="1", min=0, price=0, inn=0, indent=0},
-    {name="Ведро ремонтирующего",            amount="158",  min=0, price=0, inn=0, indent=0},
-    {name="Чан",                             amount="0",    min=0, price=0, inn=0, indent=0},
-    {name="Охлаждающее ядро",                amount="0",    min=0, price=0, inn=0, indent=0},
-    {name="S8Tёмное покрытие",               amount="0",    min=0, price=0, inn=0, indent=1},
-    {name="S8Tёмный порошок",                amount="0",    min=0, price=0, inn=0, indent=0},
-    {name="МЗ беспроводная",                 amount="0",    min=0, price=0, inn=0, indent=1},
-    {name="Кристалл истинного кварца",       amount="20.3k",min=0, price=0, inn=0, indent=0},
-    {name="Измельчённый мини-зеркаль",       amount="1.4k", min=0, price=0, inn=0, indent=1},
-    {name="Анализатор",                      amount="0",    min=0, price=0, inn=0, indent=0},
-    {name="Одуванчик",                       amount="1.7k", min=0, price=0, inn=0, indent=0},
-    {name="Стеклянная панель",               amount="269",  min=0, price=0, inn=0, indent=0},
-    {name="Комбайн",                         amount="1",    min=0, price=0, inn=0, indent=0},
-    {name="Усиленная жидкостная труба",      amount="512",  min=0, price=0, inn=0, indent=0},
-    {name="Расширение: Пространственно-временной унификатор флакса", amount="0", min=0, price=0, inn=0, indent=1},
-    {name="Руда урана",                      amount="5.9k", min=0, price=0, inn=0, indent=0},
-    {name="Электрическая мотыга",            amount="1",    min=0, price=0, inn=0, indent=0},
-    {name="Пергамент",                       amount="0",    min=0, price=0, inn=0, indent=0},
-    {name="Камень Воскрешения",              amount="0",    min=0, price=0, inn=0, indent=0},
-    {name="Производитель пыль",              amount="1",    min=0, price=0, inn=0, indent=1},
-    {name="Контур печатной платы",           amount="0",    min=0, price=0, inn=0, indent=1},
+  {name = "Дракониевая пыль",                    me = "365",   min = "0", price = "0 EM",   color = C.green,  star = true},
+  {name = "Бумага",                              me = "2",     min = "0", price = "0 EM",   color = C.green,  star = true},
+  {name = "Медовые соты",                        me = "121",   min = "0", price = "0 EM",   color = C.green,  star = true},
+  {name = "Сборщик фруктов",                     me = "2",     min = "0", price = "0 EM",   color = C.green,  star = true},
+  {name = "Ведро ледяного криотеума",            me = "0",     min = "0", price = "0 EM",   color = C.red,    star = false},
+  {name = "Светло-серая минеральная шерсть",     me = "0",     min = "0", price = "0 EM",   color = C.red,    star = false},
+  {name = "Сырая баранина",                      me = "278",   min = "0", price = "0 EM",   color = C.green,  star = true},
+  {name = "Голова странника Края",               me = "4.7k",  min = "0", price = "0 EM",   color = C.green,  star = true},
+  {name = "МЭ жидкостная шина импорта",          me = "1",     min = "0", price = "0 EM",   color = C.green,  star = true},
+  {name = "Реакторная камера",                   me = "0",     min = "0", price = "11.7 EM",color = C.red,    star = false},
+  {name = "Авто-варщик",                         me = "1",     min = "0", price = "0 EM",   color = C.green,  star = true},
+  {name = "Дракониевый блок",                    me = "0",     min = "0", price = "0 EM",   color = C.red,    star = false},
+  {name = "Яблоко",                              me = "5.5k",  min = "0", price = "0 EM",   color = C.green,  star = true},
+  {name = "item.item_portable_cell_advanced.name",me = "1",    min = "0", price = "0 EM",   color = C.green,  star = true},
+  {name = "Ведро",                               me = "158",   min = "0", price = "0.3 EM", color = C.green,  star = true},
+  {name = "Чан",                                 me = "8",     min = "0", price = "0 EM",   color = C.green,  star = true},
+  {name = "Охлаждающее ядро",                    me = "0",     min = "0", price = "0 EM",   color = C.red,    star = false},
+  {name = "$8Тёмное покрытие",                   me = "0",     min = "0", price = "7.6 EM", color = C.red,    star = false},
+  {name = "$8Тёмный порошок",                    me = "0",     min = "0", price = "0.2 EM", color = C.red,    star = false},
+  {name = "МЭ беспроводная точка доступа",       me = "0",     min = "0", price = "0 EM",   color = C.red,    star = false},
+  {name = "Кристалл истинного кварца",           me = "20.3k", min = "0", price = "0 EM",   color = C.green,  star = true},
+  {name = "Измельчённый никель",                 me = "1.4k",  min = "0", price = "0 EM",   color = C.green,  star = true},
+  {name = "Алмазный нагрудник",                  me = "0",     min = "0", price = "0 EM",   color = C.red,    star = false},
+  {name = "Анализатор",                          me = "8",     min = "0", price = "0 EM",   color = C.green,  star = true},
+  {name = "Одуванчик",                           me = "1.7k",  min = "0", price = "0 EM",   color = C.green,  star = true},
+  {name = "Пробирки ядро",                       me = "0",     min = "0", price = "0 EM",   color = C.red,    star = false},
+  {name = "Стеклянная панель",                   me = "269",   min = "0", price = "0 EM",   color = C.green,  star = true},
+  {name = "Комбайн",                             me = "1",     min = "0", price = "0 EM",   color = C.green,  star = true},
+  {name = "Усиленная жидкостная труба",          me = "512",   min = "0", price = "0 EM",   color = C.green,  star = true},
+  {name = "Расширение: Пространственно-временной унификатор флакса", me = "0", min = "0", price = "0 EM", color = C.red, star = false},
+  {name = "Руда урана",                          me = "5.9k",  min = "0", price = "0 EM",   color = C.green,  star = true},
+  {name = "Электрическая мотыга",                me = "1",     min = "0", price = "0 EM",   color = C.green,  star = true},
+  {name = "Пергамент",                           me = "0",     min = "0", price = "0 EM",   color = C.red,    star = false},
+  {name = "Камень Воскрешения",                  me = "0",     min = "0", price = "0 EM",   color = C.red,    star = false},
+  {name = "Производитель лавы",                  me = "1",     min = "0", price = "0 EM",   color = C.green,  star = true},
+  {name = "Контур печатной платы",               me = "0",     min = "0", price = "7.6 EM", color = C.red,    star = false},
 }
 
--- Log entries (static for demonstration)
-local logs = {
-    "[12:41] Каталог загружен",
-    "[12:42] Обновление цен",
-    "[12:43] Готов к работе",
+local selectedIndex = 22
+local scrollOffset  = 0
+
+local selectedItem = {
+  name  = "Измельчённый никель",
+  id    = "ThermalFoundation:material:36",
+  price = "0 EM",
+  me    = "1.4k",
+  min   = "0",
+  craft = "64",
 }
 
--- Selection state
-local selectedIndex = 1          -- 1‑based
-local scrollOffset = 1           -- first visible item index
+local logLines = {
+  {text = "[697:46] Обменник – скоро",                    color = C.yellow},
+  {text = "[697:16] OK: получено 1215 товаров",           color = C.green},
+  {text = "[697:03] Загрузка БД с КУ...",                 color = C.gray},
+  {text = "[697:03] Цены OK: 0 обн., 0 без пары",         color = C.green},
+  {text = "[697:03] Запрос загрузки цен на ПК-1...",      color = C.gray},
+  {text = "[697:03] Товаров: 1215",                       color = C.cyan},
+  {text = "[697:03] OK: получено 1215 товаров",           color = C.green},
+  {text = "[696:54] Загрузка БД с КУ...",                 color = C.gray},
+  {text = "[696:54] Обновление с ПК-1...",                color = C.gray},
+  {text = "[696:54] Товаров: 1215",                       color = C.cyan},
+  {text = "[696:54] OK: получено 1215 товаров",           color = C.green},
+  {text = "[696:44] Загрузка БД с КУ...",                 color = C.gray},
+  {text = "[696:44] Обновление с ПК-1...",                color = C.gray},
+  {text = "[696:44] OK: получено 1215 товаров",           color = C.green},
+  {text = "[696:31] Загрузка БД с КУ...",                 color = C.gray},
+  {text = "[696:31] Цены OK: 0 обн., 0 без пары",         color = C.green},
+  {text = "[696:31] Запрос загрузки цен на ПК-1...",      color = C.gray},
+  {text = "[01:19] OK: получено 1215 товаров",            color = C.green},
+  {text = "[01:07] Загрузка БД с КУ...",                  color = C.gray},
+  {text = "[01:07] Загрузка БД с ПК-1...",                color = C.gray},
+}
 
--- ----------------------------------------------------------------------------
--- Helper functions
--- ----------------------------------------------------------------------------
-local function setColor(fg, bg)
-    if fg then gpu.setForeground(fg) end
-    if bg then gpu.setBackground(bg) end
+local buttons = {
+  {label = " ОБНОВИТЬ ",   bg = 0x0055AA, fg = C.white},
+  {label = " ИЗМЕНИТЬ ",   bg = 0x333333, fg = C.white},
+  {label = " УДАЛИТЬ ",    bg = 0xAA0000, fg = C.white},
+  {label = " ОБМЕННИК ",   bg = 0x005555, fg = C.white},
+  {label = " БЭКАП КУ ",   bg = 0x333333, fg = C.white},
+  {label = " ЦЕНЫ->БД ",   bg = 0x333333, fg = C.white},
+  {label = " FORTUNE 1 ",  bg = 0xAA8800, fg = C.white},
+  {label = "[-]",          bg = 0x444444, fg = C.yellow},
+  {label = "[+]",          bg = 0x444444, fg = C.yellow},
+  {label = " ВЫХОД ",      bg = 0xAA0000, fg = C.white},
+}
+
+-- ====================== ФУНКЦИИ ОТРИСОВКИ ======================
+local function drawBackground()
+  fill(1, 1, WIDTH, HEIGHT, C.bg)
 end
 
-local function fill(x, y, w, h, char, fg, bg)
-    setColor(fg, bg)
-    for row = y, y + h - 1 do
-        gpu.set(x, row, string.rep(char, w))
-    end
+local function drawTopBar()
+  fill(1, 1, WIDTH, 1, 0x0A0A0A)
+  text(2, 1, "Управление каталогом товаров", C.white, 0x0A0A0A)
+  local title = "SHOP-ADMIN v3.0"
+  text(math.floor((WIDTH - #title) / 2) + 1, 1, title, C.cyan, 0x0A0A0A)
+  text(WIDTH - 22, 1, "McSkill HiTech", C.gray, 0x0A0A0A)
+  text(WIDTH - 8, 1, "UP:01:19", C.yellow, 0x0A0A0A)
 end
 
-local function drawBorder(x, y, w, h, fg, bg, title, titleFg)
-    if not fg then fg = C.border end
-    if not bg then bg = C.background end
-    setColor(fg, bg)
+local function drawMainFrames()
+  setBG(C.bg)
+  setFG(C.border)
 
-    gpu.set(x, y, "+")
-    gpu.set(x + w - 1, y, "+")
-    gpu.set(x + 1, y, string.rep("-", w - 2))
+  gpu.set(1, MAIN_Y, "╔" .. string.rep("═", WIDTH - 2) .. "╗")
+  for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
+    gpu.set(1, y, "║")
+    gpu.set(WIDTH, y, "║")
+  end
+  gpu.set(1, MAIN_Y + MAIN_H - 1, "╚" .. string.rep("═", WIDTH - 2) .. "╝")
 
-    gpu.set(x, y + h - 1, "+")
-    gpu.set(x + w - 1, y + h - 1, "+")
-    gpu.set(x + 1, y + h - 1, string.rep("-", w - 2))
+  for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
+    gpu.set(LEFT_W, y, "║")
+  end
 
-    for row = y + 1, y + h - 2 do
-        gpu.set(x, row, "|")
-        gpu.set(x + w - 1, row, "|")
-    end
+  local headerY = MAIN_Y + 2
+  setFG(C.border)
+  for x = 2, LEFT_W - 1 do
+    gpu.set(x, headerY, "─")
+  end
+  for x = LEFT_W + 1, WIDTH - 1 do
+    gpu.set(x, headerY, "─")
+  end
 
-    if title then
-        local titleLen = unicode.len(title)
-        local startX = x + math.floor((w - titleLen) / 2)
-        if startX < x + 2 then startX = x + 2 end
-        setColor(titleFg or C.title, bg)
-        gpu.set(startX, y, title)
-        setColor(bg, bg)
-        for i = x + 1, x + w - 2 do
-            if i < startX or i >= startX + titleLen then
-                gpu.set(i, y, " ")
-            end
-        end
-        setColor(fg, bg)
-    end
+  gpu.set(LEFT_W, MAIN_Y, "╦")
+  gpu.set(LEFT_W, MAIN_Y + MAIN_H - 1, "╩")
+  gpu.set(LEFT_W, headerY, "╬")
 end
 
-local function formatNumber(num)
-    if type(num) == "string" then return num end
-    if num >= 1000000 then return string.format("%.1fM", num / 1000000) end
-    if num >= 1000 then return string.format("%.1fk", num / 1000) end
-    return tostring(num)
+local function drawLeftHeader()
+  text(3, MAIN_Y + 1, "КАТАЛОГ ТОВАРОВ", C.header, C.bg)
+  local colY = MAIN_Y + 3
+  fill(2, colY, LEFT_W - 2, 1, C.bg)
+  text(COL_NAME_X,  colY, "ТОВАР",   C.white, C.bg)
+  text(COL_ME_X,    colY, "В ME",    C.white, C.bg)
+  text(COL_MIN_X,   colY, "МИН",     C.white, C.bg)
+  text(COL_PRICE_X, colY, "ЦЕНА EM", C.white, C.bg)
 end
 
--- ----------------------------------------------------------------------------
--- Drawing functions (all coordinates computed from WIDTH/HEIGHT)
--- ----------------------------------------------------------------------------
-local function drawHeader()
-    setColor(C.text, C.background)
-    gpu.set(1, 1, "SHOP-ADMIN v3.0")
-    local centerText = "McSkill HiTech"
-    local cx = math.floor((WIDTH - unicode.len(centerText)) / 2) + 1
-    gpu.set(cx, 1, centerText)
-    local rightText = "UP:01:19"
-    gpu.set(WIDTH - unicode.len(rightText) + 1, 1, rightText)
+local function drawScrollbar()
+  setBG(C.bg)
+  setFG(C.borderDark)
+  gpu.set(SCROLL_X, LIST_Y - 1, "┬")
+  for y = LIST_Y, LIST_Y + LIST_H - 1 do
+    gpu.set(SCROLL_X, y, "│")
+  end
+  gpu.set(SCROLL_X, LIST_Y + LIST_H, "┴")
 
-    setColor(C.border, C.background)
-    gpu.set(1, 2, string.rep("=", WIDTH))
+  local thumbH = math.max(3, math.floor(LIST_H * 0.25))
+  local thumbY = LIST_Y + math.floor((LIST_H - thumbH) / 2)
+  setFG(C.cyan)
+  for i = 0, thumbH - 1 do
+    gpu.set(SCROLL_X, thumbY + i, "█")
+  end
 end
 
-local function drawCatalog()
-    local leftX = 1
-    local leftW = math.floor(WIDTH * 0.65)
-    local topY = 3
-    local bottomY = HEIGHT - 3          -- leave space for buttons and blank row
-    local height = bottomY - topY + 1
+local function drawItemRow(index, y)
+  local item = items[index]
+  if not item then return end
 
-    drawBorder(leftX, topY, leftW, height, C.border, C.background, "КАТАЛОГ ТОВАРОВ", C.title)
+  local isSelected = (index == selectedIndex)
 
-    local innerX = leftX + 1
-    local innerY = topY + 1
-    local innerW = leftW - 2
-    local innerH = height - 2
+  if isSelected then
+    fill(LIST_X, y, LIST_W, 1, C.selectedBg)
+  else
+    fill(LIST_X, y, LIST_W, 1, C.bg)
+  end
 
-    -- "Поиск:" line
-    setColor(C.text, C.background)
-    gpu.set(innerX, innerY, "Поиск:")
+  local fgName  = isSelected and C.selectedFg or C.white
+  local fgMe    = isSelected and C.selectedFg or item.color
+  local fgMin   = isSelected and C.selectedFg or C.gray
+  local fgPrice = isSelected and C.selectedFg or (item.price ~= "0 EM" and C.yellow or C.gray)
 
-    -- Column headers
-    local headerY = innerY + 1
-    setColor(C.cyan, C.background)
-    local nameW = math.floor(innerW * 0.40)
-    local amountW = 8
-    local minW = 5
-    local priceW = 10
-    local innW = 6
-    local totalFixed = amountW + minW + priceW + innW + 4
-    if nameW + totalFixed > innerW then
-        nameW = innerW - totalFixed
-        if nameW < 10 then nameW = 10 end
-    end
-    local pos = innerX
-    gpu.set(pos, headerY, "ТОВАР")
-    pos = pos + nameW + 1
-    gpu.set(pos, headerY, "В МЕ")
-    pos = pos + amountW + 1
-    gpu.set(pos, headerY, "МИН")
-    pos = pos + minW + 1
-    gpu.set(pos, headerY, "ЦЕНА ЕМ")
-    pos = pos + priceW + 1
-    gpu.set(pos, headerY, "ИНН")
+  local marker = item.star and "* " or "- "
+  if isSelected then marker = "> " end
 
-    -- Separator
-    setColor(C.gray, C.background)
-    local sepY = headerY + 1
-    gpu.set(innerX, sepY, string.rep("-", innerW))
+  local maxNameLen = COL_ME_X - COL_NAME_X - 2
+  local displayName = marker .. item.name
+  if #displayName > maxNameLen then
+    displayName = displayName:sub(1, maxNameLen - 1) .. "…"
+  end
 
-    -- Items
-    local itemStartY = sepY + 1
-    local maxItems = innerH - 4   -- rows for items
-    if maxItems < 1 then return end
-
-    local totalItems = #items
-    local visibleItems = maxItems
-    local maxScroll = math.max(1, totalItems - visibleItems + 1)
-    if scrollOffset > maxScroll then scrollOffset = maxScroll end
-    if scrollOffset < 1 then scrollOffset = 1 end
-
-    -- Scrollbar
-    local scrollBarX = leftX + leftW - 2
-    local scrollBarTop = itemStartY
-    local scrollBarHeight = maxItems
-    if totalItems > visibleItems then
-        local thumbSize = math.max(2, math.floor(visibleItems / totalItems * scrollBarHeight))
-        local thumbPos = math.floor((scrollOffset - 1) / (totalItems - visibleItems + 1) * (scrollBarHeight - thumbSize)) + scrollBarTop
-        setColor(C.border, C.background)
-        for row = scrollBarTop, scrollBarTop + scrollBarHeight - 1 do
-            gpu.set(scrollBarX, row, " ")
-        end
-        setColor(C.cyan, C.selected)
-        for row = thumbPos, thumbPos + thumbSize - 1 do
-            gpu.set(scrollBarX, row, "█")
-        end
-    else
-        setColor(C.background, C.background)
-        for row = scrollBarTop, scrollBarTop + scrollBarHeight - 1 do
-            gpu.set(scrollBarX, row, " ")
-        end
-    end
-
-    -- Draw items
-    for i = 1, visibleItems do
-        local itemIndex = scrollOffset + i - 1
-        if itemIndex > totalItems then break end
-        local item = items[itemIndex]
-        local row = itemStartY + i - 1
-        if row > innerY + innerH - 1 then break end
-
-        setColor(C.background, C.background)
-        gpu.set(innerX, row, string.rep(" ", innerW))
-
-        local bgColor = C.background
-        local fgColor = C.text
-        if itemIndex == selectedIndex then
-            bgColor = C.selected
-            fgColor = C.title
-        end
-
-        local indent = item.indent or 0
-        local nameStr = item.name
-        if indent > 0 then
-            nameStr = "  " .. nameStr
-        end
-
-        local maxNameLen = nameW - 2
-        if unicode.len(nameStr) > maxNameLen then
-            nameStr = unicode.sub(nameStr, 1, maxNameLen - 1) .. "…"
-        end
-
-        local amountStr = item.amount
-        if type(item.amount) == "number" then
-            amountStr = formatNumber(item.amount)
-        end
-        local minStr = tostring(item.min)
-        local priceStr = tostring(item.price) .. " EM"
-        local innStr = tostring(item.inn)
-
-        setColor(fgColor, bgColor)
-        pos = innerX
-        gpu.set(pos, row, nameStr)
-        pos = pos + nameW + 1
-        gpu.set(pos, row, string.format("%" .. amountW .. "s", amountStr))
-        pos = pos + amountW + 1
-        gpu.set(pos, row, string.format("%" .. minW .. "s", minStr))
-        pos = pos + minW + 1
-        gpu.set(pos, row, string.format("%" .. priceW .. "s", priceStr))
-        pos = pos + priceW + 1
-        gpu.set(pos, row, string.format("%" .. innW .. "s", innStr))
-    end
-
-    -- Clear remaining lines
-    for row = itemStartY + visibleItems, innerY + innerH - 1 do
-        setColor(C.background, C.background)
-        gpu.set(innerX, row, string.rep(" ", innerW))
-    end
+  text(COL_NAME_X, y, displayName, fgName, isSelected and C.selectedBg or C.bg)
+  text(COL_ME_X,   y, item.me,    fgMe,   isSelected and C.selectedBg or C.bg)
+  text(COL_MIN_X,  y, item.min,   fgMin,  isSelected and C.selectedBg or C.bg)
+  text(COL_PRICE_X,y, item.price, fgPrice,isSelected and C.selectedBg or C.bg)
 end
 
-local function drawInfoPanel()
-    local leftX = math.floor(WIDTH * 0.65) + 2
-    local topY = 3
-    local bottomY = 3 + math.floor((HEIGHT - 3 - 2) * 0.40)  -- 40% of main area
-    local rightX = WIDTH
-    local w = rightX - leftX + 1
-    local h = bottomY - topY + 1
+local function drawProductList()
+  fill(LIST_X, LIST_Y, LIST_W, LIST_H, C.bg)
+  local visibleCount = LIST_H
+  local startIdx = scrollOffset + 1
+  local endIdx   = math.min(#items, startIdx + visibleCount - 1)
 
-    drawBorder(leftX, topY, w, h, C.border, C.background, "INFO | ADMIN | PC-2", C.title)
-
-    local innerX = leftX + 1
-    local innerY = topY + 1
-    local innerW = w - 2
-    local innerH = h - 2
-
-    setColor(C.background, C.background)
-    for row = innerY, innerY + innerH - 1 do
-        gpu.set(innerX, row, string.rep(" ", innerW))
-    end
-
-    local item = items[selectedIndex] or items[1]
-    local lines = {
-        "",
-        " " .. item.name,
-        " Цена: " .. tostring(item.price) .. " EM",
-        " В ME: " .. tostring(item.amount),
-        " Мин: " .. tostring(item.min),
-        " Крафт: нет",
-    }
-
-    setColor(C.text, C.background)
-    for i, line in ipairs(lines) do
-        local row = innerY + i - 1
-        if row <= innerY + innerH - 1 then
-            gpu.set(innerX, row, line)
-        end
-    end
+  for i = startIdx, endIdx do
+    local rowY = LIST_Y + (i - startIdx)
+    drawItemRow(i, rowY)
+  end
+  drawScrollbar()
 end
 
-local function drawLogPanel()
-    local leftX = math.floor(WIDTH * 0.65) + 2
-    local topY = 3 + math.floor((HEIGHT - 3 - 2) * 0.40) + 1
-    local rightX = WIDTH
-    local bottomY = HEIGHT - 3
-    local w = rightX - leftX + 1
-    local h = bottomY - topY + 1
+local function drawInfoBlock()
+  fill(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, INFO_H, C.bg)
+  local y = INFO_Y
 
-    drawBorder(leftX, topY, w, h, C.border, C.background, "LOG", C.title)
+  text(RIGHT_INNER_X, y, "Товар:", C.gray, C.bg)
+  text(RIGHT_INNER_X + 7, y, selectedItem.name, C.white, C.bg)
+  y = y + 1
 
-    local innerX = leftX + 1
-    local innerY = topY + 1
-    local innerW = w - 2
-    local innerH = h - 2
+  text(RIGHT_INNER_X, y, selectedItem.id, C.cyan, C.bg)
+  y = y + 2
 
-    setColor(C.background, C.background)
-    for row = innerY, innerY + innerH - 1 do
-        gpu.set(innerX, row, string.rep(" ", innerW))
-    end
+  text(RIGHT_INNER_X, y, "Цена: ", C.gray, C.bg)
+  text(RIGHT_INNER_X + 6, y, selectedItem.price, C.yellow, C.bg)
+  y = y + 1
 
-    local maxLogLines = innerH
-    local startIdx = math.max(1, #logs - maxLogLines + 1)
-    setColor(C.logText, C.background)
-    for i = startIdx, #logs do
-        local row = innerY + (i - startIdx)
-        if row <= innerY + innerH - 1 then
-            local line = logs[i]
-            if unicode.len(line) > innerW then
-                line = unicode.sub(line, 1, innerW - 1) .. "…"
-            end
-            gpu.set(innerX, row, line)
-        end
-    end
+  text(RIGHT_INNER_X, y, "В ME: ", C.gray, C.bg)
+  text(RIGHT_INNER_X + 6, y, selectedItem.me, C.green, C.bg)
+  y = y + 1
+
+  text(RIGHT_INNER_X, y, "Мин: ", C.gray, C.bg)
+  text(RIGHT_INNER_X + 5, y, selectedItem.min, C.white, C.bg)
+  y = y + 1
+
+  text(RIGHT_INNER_X, y, "Крафт: ", C.gray, C.bg)
+  text(RIGHT_INNER_X + 7, y, selectedItem.craft, C.cyan, C.bg)
+  y = y + 2
+
+  setFG(C.borderDark)
+  setBG(C.bg)
+  gpu.set(RIGHT_INNER_X, y, string.rep("─", RIGHT_INNER_W))
+  y = y + 1
+
+  text(RIGHT_INNER_X, y, "F1  – взять из ME", C.gray, C.bg)
+  y = y + 1
+  text(RIGHT_INNER_X, y, "TAB – след. поле", C.gray, C.bg)
+  y = y + 1
+  text(RIGHT_INNER_X, y, "ENT – сохранить", C.gray, C.bg)
 end
 
-local function drawButtons()
-    -- Clear blank row above buttons
-    setColor(C.background, C.background)
-    gpu.set(1, HEIGHT - 2, string.rep(" ", WIDTH))
-
-    local buttons = {
-        {label=" ОБНОВИТЬ ", fg=C.text, bg=C.blue},
-        {label=" ИЗМЕНИТЬ ", fg=C.text, bg=C.green},
-        {label=" УДАЛИТЬ ",  fg=C.text, bg=C.red},
-        {label=" ОБМЕННИК ", fg=C.text, bg=C.purple},
-    }
-
-    local totalWidth = 0
-    for _, b in ipairs(buttons) do
-        totalWidth = totalWidth + unicode.len(b.label) + 1
-    end
-    totalWidth = totalWidth - 1
-
-    local startX = math.floor((WIDTH - totalWidth) / 2) + 1
-    local currentX = startX
-    local row = HEIGHT - 1
-
-    for _, b in ipairs(buttons) do
-        local label = b.label
-        local len = unicode.len(label)
-        setColor(b.fg, b.bg)
-        gpu.set(currentX, row, label)
-        if _ < #buttons then
-            setColor(C.background, C.background)
-            gpu.set(currentX + len, row, " ")
-        end
-        currentX = currentX + len + 1
-    end
+local function drawRightSeparator()
+  setFG(C.border)
+  setBG(C.bg)
+  for x = LEFT_W + 1, WIDTH - 1 do
+    gpu.set(x, LOG_Y - 1, "─")
+  end
+  gpu.set(LEFT_W, LOG_Y - 1, "╠")
+  gpu.set(WIDTH, LOG_Y - 1, "╣")
 end
 
-local function draw()
-    gpu.setBackground(C.background)
-    gpu.setForeground(C.text)
-    gpu.fill(1, 1, WIDTH, HEIGHT, " ")
-    drawHeader()
-    drawCatalog()
-    drawInfoPanel()
-    drawLogPanel()
-    drawButtons()
-end
+local function drawLog()
+  fill(RIGHT_INNER_X, LOG_Y - 1, RIGHT_INNER_W, 1, C.bg)
+  text(RIGHT_INNER_X, LOG_Y - 1, "Лог:", C.header, C.bg)
 
--- ----------------------------------------------------------------------------
--- Main loop
--- ----------------------------------------------------------------------------
-local function main()
-    -- Set initial resolution
-    local maxW, maxH = gpu.maxResolution()
-    gpu.setResolution(maxW, maxH)
-    WIDTH, HEIGHT = maxW, maxH
+  fill(RIGHT_INNER_X, LOG_Y, RIGHT_INNER_W, LOG_H, C.logBg)
 
-    draw()
+  local maxLines = LOG_H
+  local start = math.max(1, #logLines - maxLines + 1)
 
-    while true do
-        local ev, _, _, _, key = event.pull()
-        if ev == "key_down" then
-            local handled = true
-            if key == 200 then -- Up
-                if selectedIndex > 1 then
-                    selectedIndex = selectedIndex - 1
-                    if selectedIndex < scrollOffset then
-                        scrollOffset = selectedIndex
-                    end
-                end
-            elseif key == 208 then -- Down
-                if selectedIndex < #items then
-                    selectedIndex = selectedIndex + 1
-                    local visible = HEIGHT - 3 - 4   -- approximate visible items
-                    if selectedIndex > scrollOffset + visible - 1 then
-                        scrollOffset = selectedIndex - visible + 1
-                    end
-                end
-            elseif key == 201 then -- Page Up
-                local visible = HEIGHT - 3 - 4
-                selectedIndex = math.max(1, selectedIndex - visible)
-                scrollOffset = math.max(1, scrollOffset - visible)
-            elseif key == 209 then -- Page Down
-                local visible = HEIGHT - 3 - 4
-                selectedIndex = math.min(#items, selectedIndex + visible)
-                scrollOffset = math.min(#items - visible + 1, scrollOffset + visible)
-            elseif key == 199 then -- Home
-                selectedIndex = 1
-                scrollOffset = 1
-            elseif key == 207 then -- End
-                selectedIndex = #items
-                local visible = HEIGHT - 3 - 4
-                scrollOffset = math.max(1, #items - visible + 1)
-            elseif key == 28 then -- Enter (just redraw)
-                -- optional action
-            elseif key == 1 then -- Escape
-                break
-            else
-                handled = false
-            end
-            if handled then
-                draw()
-            end
-        elseif ev == "resize" then
-            -- Update dimensions
-            local newW, newH = gpu.getResolution()
-            WIDTH, HEIGHT = newW, newH
-            draw()
-        end
+  for i = start, #logLines do
+    local line = logLines[i]
+    local row = LOG_Y + (i - start)
+    if row <= LOG_Y + LOG_H - 1 then
+      local txt = line.text
+      if #txt > RIGHT_INNER_W then
+        txt = txt:sub(1, RIGHT_INNER_W - 1) .. "…"
+      end
+      text(RIGHT_INNER_X, row, txt, line.color, C.logBg)
     end
+  end
 end
 
--- Start the application
-main()
+local function drawRightPanel()
+  text(LEFT_W + 3, MAIN_Y + 1, "ИНФО", C.header, C.bg)
+  text(LEFT_W + 10, MAIN_Y + 1, "ADMIN", C.cyan, C.bg)
+  text(WIDTH - 6, MAIN_Y + 1, "PC-2", C.gray, C.bg)
 
--- End of file
+  drawInfoBlock()
+  drawRightSeparator()
+  drawLog()
+end
+
+local function drawBottomBar()
+  fill(1, BOT_Y, WIDTH, 2, 0x0A0A0A)
+
+  setFG(C.border)
+  setBG(C.bg)
+  gpu.set(1, BOT_Y - 1, "╠" .. string.rep("═", WIDTH - 2) .. "╣")
+
+  local x = 2
+  for i, btn in ipairs(buttons) do
+    local w = #btn.label
+    setBG(btn.bg)
+    setFG(btn.fg)
+    gpu.fill(x, BOT_Y, w, 1, " ")
+    gpu.set(x, BOT_Y, btn.label)
+    x = x + w + 1
+
+    if i == 6 then
+      x = x + 2
+    elseif i == 9 then
+      x = WIDTH - #buttons[10].label - 1
+    end
+  end
+
+  local exitBtn = buttons[10]
+  local exitX = WIDTH - #exitBtn.label
+  setBG(exitBtn.bg)
+  setFG(exitBtn.fg)
+  gpu.fill(exitX, BOT_Y, #exitBtn.label, 1, " ")
+  gpu.set(exitX, BOT_Y, exitBtn.label)
+end
+
+local function drawBottomBorder()
+  setFG(C.border)
+  setBG(C.bg)
+  gpu.set(1, HEIGHT, "╚" .. string.rep("═", WIDTH - 2) .. "╝")
+end
+
+-- ====================== ГЛАВНЫЙ ЗАПУСК ======================
+term.clear()
+drawBackground()
+drawTopBar()
+drawMainFrames()
+drawLeftHeader()
+drawProductList()
+drawRightPanel()
+drawBottomBar()
+drawBottomBorder()
+
+-- Убираем курсор
+gpu.setForeground(C.bg)
+gpu.setBackground(C.bg)
+term.setCursor(1, HEIGHT)
