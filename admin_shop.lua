@@ -38,7 +38,7 @@ local C = {
   mainLine     = 0x7FFFD4,
   sectionLine  = 0x27BDEC,
 
-  headerBg     = 0x1A2D33,   -- заливка строки заголовков колонок
+  headerBg     = 0x1A2D33,
 
   buttonBuy    = 0x0a502d,
   buttonClear  = 0x8b1a1a,
@@ -83,28 +83,28 @@ local MAIN_Y  = 4
 local MAIN_H  = HEIGHT - TOP_H - BOT_H
 
 local LEFT_W  = math.floor(WIDTH * 0.60)
-local RIGHT_W = WIDTH - LEFT_W - 2
+
+-- Скролл отдельно, на 2 символа левее разделителя
+local SCROLL_X   = LEFT_W - 2
+local SEPARATOR1 = LEFT_W
+local SEPARATOR2 = LEFT_W + 1
 
 local LIST_X  = 2
 local LIST_Y  = MAIN_Y + 3
 local LIST_H  = MAIN_H - 4
-local LIST_W  = LEFT_W - 2
-
-local SCROLL_X  = LEFT_W
-local SCROLL_X2 = LEFT_W + 1
+local LIST_W  = SCROLL_X - 3
 
 local COL_NAME_X  = 3
-local COL_ME_X    = LEFT_W - 28
-local COL_COINA_X = LEFT_W - 18
-local COL_EMA_X   = LEFT_W - 9
+local COL_ME_X    = SCROLL_X - 26
+local COL_COINA_X = SCROLL_X - 16
+local COL_EMA_X   = SCROLL_X - 7
 
 local RIGHT_INNER_X = LEFT_W + 3
 local RIGHT_INNER_W = WIDTH - RIGHT_INNER_X - 1
 
--- ИНФО теперь на одном уровне с КАТАЛОГ ТОВАРОВ
 local INFO_Y     = MAIN_Y + 1
-local QTY_Y      = INFO_Y + 7
-local TOTAL_Y    = QTY_Y + 4
+local QTY_Y      = INFO_Y + 8
+local TOTAL_Y    = QTY_Y + 5
 local BTN_Y      = TOTAL_Y + 1
 local ACC_Y      = BTN_Y + 3
 
@@ -193,30 +193,37 @@ local function drawMainFrames()
 end
 
 local function drawLeftHeader()
-  sectionHeader(2, MAIN_Y + 1, LEFT_W - 2, "КАТАЛОГ ТОВАРОВ", C.mainLine, C.white)
+  sectionHeader(2, MAIN_Y + 1, LEFT_W - 3, "КАТАЛОГ ТОВАРОВ", C.mainLine, C.white)
 
-  -- строка заголовков колонок с заливкой 0x1A2D33
   local colY = MAIN_Y + 2
-  fill(2, colY, LEFT_W - 2, 1, C.headerBg)
+  fill(2, colY, LEFT_W - 3, 1, C.headerBg)
   text(COL_NAME_X,  colY, "ТОВАР",  C.white, C.headerBg)
   text(COL_ME_X,    colY, "В ME",   C.white, C.headerBg)
   text(COL_COINA_X, colY, "COINA",  C.white, C.headerBg)
   text(COL_EMA_X,   colY, "EMA",    C.white, C.headerBg)
 end
 
-local function drawScrollbar()
+local function drawSeparator()
+  -- чистый разделитель ||
   setBG(C.bg)
   setFG(C.mainLine)
-
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
-    gpu.set(SCROLL_X,  y, "|")
-    gpu.set(SCROLL_X2, y, "|")
+    gpu.set(SEPARATOR1, y, "|")
+    gpu.set(SEPARATOR2, y, "|")
   end
+  gpu.set(SEPARATOR1, MAIN_Y, "+")
+  gpu.set(SEPARATOR2, MAIN_Y, "+")
+  gpu.set(SEPARATOR1, MAIN_Y + MAIN_H - 1, "+")
+  gpu.set(SEPARATOR2, MAIN_Y + MAIN_H - 1, "+")
+end
 
-  gpu.set(SCROLL_X,  MAIN_Y, "+")
-  gpu.set(SCROLL_X2, MAIN_Y, "+")
-  gpu.set(SCROLL_X,  MAIN_Y + MAIN_H - 1, "+")
-  gpu.set(SCROLL_X2, MAIN_Y + MAIN_H - 1, "+")
+local function drawScrollbar()
+  -- отдельный скроллбар слева от ||
+  setBG(C.bg)
+  setFG(C.darkGray)
+  for y = LIST_Y, LIST_Y + LIST_H - 1 do
+    gpu.set(SCROLL_X, y, " ")
+  end
 
   local maxScroll = math.max(0, #items - LIST_H)
   local thumbH = math.max(3, math.floor(LIST_H * 0.25))
@@ -229,8 +236,7 @@ local function drawScrollbar()
   for i = 0, thumbH - 1 do
     local yy = thumbY + i
     if yy >= LIST_Y and yy <= LIST_Y + LIST_H - 1 then
-      gpu.set(SCROLL_X,  yy, " ")
-      gpu.set(SCROLL_X2, yy, " ")
+      gpu.set(SCROLL_X, yy, " ")
     end
   end
   setBG(C.bg)
@@ -286,14 +292,15 @@ local function drawProductList()
 end
 
 local function drawInfoBlock()
-  fill(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, 6, C.bg)
+  fill(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, 7, C.bg)
 
   sectionHeader(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, "ИНФО", C.sectionLine, C.white)
 
+  -- один отступ после заголовка
   local item = items[selectedIndex]
   if not item then return end
 
-  local y = INFO_Y + 1
+  local y = INFO_Y + 2
   text(RIGHT_INNER_X, y, "Товар: " .. item.name, C.white, C.bg)
   y = y + 1
   text(RIGHT_INNER_X, y, "В ME : " .. item.me, C.green, C.bg)
@@ -304,14 +311,20 @@ local function drawInfoBlock()
 end
 
 local function drawQuantitySection()
-  fill(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, 7, C.bg)
+  fill(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, 8, C.bg)
 
-  sectionHeader(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, "Поле для количества", C.sectionLine, C.white)
+  sectionHeader(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, "ПОЛЕ ДЛЯ КОЛИЧЕСТВА", C.sectionLine, C.white)
 
+  -- один отступ + поле ввода
+  local fieldY = QTY_Y + 2
   local fieldW = RIGHT_INNER_W
-  fill(RIGHT_INNER_X, QTY_Y + 1, fieldW, 1, C.inputBg)
-  local display = quantity ~= "" and quantity or ""
-  text(RIGHT_INNER_X + 1, QTY_Y + 1, display, C.inputFg, C.inputBg)
+  fill(RIGHT_INNER_X, fieldY, fieldW, 1, C.inputBg)
+
+  if quantity == "" then
+    text(RIGHT_INNER_X + 1, fieldY, "Введите количество...", C.darkGray, C.inputBg)
+  else
+    text(RIGHT_INNER_X + 1, fieldY, quantity, C.inputFg, C.inputBg)
+  end
 
   local item = items[selectedIndex]
   local qty = tonumber(quantity) or 0
@@ -343,9 +356,10 @@ end
 local function drawAccountInfo()
   fill(RIGHT_INNER_X, ACC_Y, RIGHT_INNER_W, 8, C.bg)
 
-  sectionHeader(RIGHT_INNER_X, ACC_Y, RIGHT_INNER_W, "Информация Аккаунта", C.sectionLine, C.white)
+  sectionHeader(RIGHT_INNER_X, ACC_Y, RIGHT_INNER_W, "ИНФОРМАЦИЯ АККАУНТА", C.sectionLine, C.white)
 
-  local y = ACC_Y + 1
+  -- один отступ после заголовка
+  local y = ACC_Y + 2
   text(RIGHT_INNER_X, y, "НИК      : " .. account.nick, C.white, C.bg)
   y = y + 1
   text(RIGHT_INNER_X, y, "Баланс   : " .. account.coina .. " COINA | " .. account.ema .. " EMA", C.yellow, C.bg)
@@ -368,13 +382,13 @@ local function drawBottomBar()
   setBG(C.bg)
   gpu.set(1, BOT_Y - 1, "+" .. string.rep("=", WIDTH - 2) .. "+")
 
-  -- кнопки прижаты к правому краю
+  -- кнопки прижаты влево
   local btnW = 14
   local gap  = 2
-  local rightMargin = 2
+  local leftMargin = 2
 
-  local salesX = WIDTH - rightMargin - btnW
-  local buyX   = salesX - gap - btnW
+  local buyX  = leftMargin
+  local salesX = buyX + btnW + gap
 
   setBG(C.buttonBuy)
   setFG(C.white)
@@ -400,6 +414,7 @@ local function redrawAll()
   drawLeftHeader()
   drawProductList()
   drawScrollbar()
+  drawSeparator()
   drawRightPanel()
   drawBottomBar()
   drawBottomBorder()
