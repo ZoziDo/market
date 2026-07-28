@@ -31,17 +31,16 @@ local C = {
 
   selectedBg   = 0x002440,
   selectedName = 0x014d52,
-  star         = 0x077d42,   -- цвет *
+  star         = 0x077d42,
 
   vipTitle     = 0x0c9a76,
-  catalogLine  = 0x0b4b3b,
-  infoLine     = 0x0b424b,
-  underLine    = 0x1f2925,
-  accountTitle = 0xaeaeae,   -- Информация Аккаунта
+  underLine    = 0x428A72,   -- линия после VIP-SHOP
+  mainLine     = 0x7FFFD4,   -- основные линии рамок
+  sectionLine  = 0x27BDEC,   -- линии секций ИНФО / Поле / Аккаунт
 
-  buttonBuy    = 0x0a502d,   -- зелёный Купить / Покупки
-  buttonClear  = 0x8b1a1a,   -- красный Стереть
-  buttonSales  = 0x1a5a6b,   -- голубой Продажи
+  buttonBuy    = 0x0a502d,
+  buttonClear  = 0x8b1a1a,
+  buttonSales  = 0x1a5a6b,
 
   inputBg      = 0x1a1a1a,
   inputFg      = 0xFFFFFF,
@@ -63,10 +62,24 @@ local function text(x, y, str, fg, bg)
   gpu.set(x, y, str)
 end
 
-local function hLine(x, y, w, ch, color)
-  setFG(color or C.catalogLine)
+-- Рисует линию с текстом внутри: ---ТЕКСТ---
+local function sectionHeader(x, y, w, title, lineColor, titleColor)
+  lineColor  = lineColor or C.sectionLine
+  titleColor = titleColor or C.white
+
+  local side = math.floor((w - #title - 2) / 2)
+  if side < 1 then side = 1 end
+
+  local left  = string.rep("-", side)
+  local right = string.rep("-", w - side - #title - 2)
+
   setBG(C.bg)
-  gpu.set(x, y, string.rep(ch or "-", w))
+  setFG(lineColor)
+  gpu.set(x, y, left)
+  setFG(titleColor)
+  gpu.set(x + side, y, " " .. title .. " ")
+  setFG(lineColor)
+  gpu.set(x + side + #title + 2, y, right)
 end
 
 -- ====================== РАЗМЕРЫ ======================
@@ -81,13 +94,13 @@ local RIGHT_W = WIDTH - LEFT_W
 local LIST_X  = 2
 local LIST_Y  = MAIN_Y + 3
 local LIST_H  = MAIN_H - 4
-local LIST_W  = LEFT_W - 3
-local SCROLL_X = LEFT_W - 1
+local LIST_W  = LEFT_W - 4          -- чуть уже, чтобы скролл был отдельно
+local SCROLL_X = LEFT_W - 2         -- скролл на 1 символ левее рамки
 
 local COL_NAME_X  = 3
-local COL_ME_X    = LEFT_W - 30
-local COL_COINA_X = LEFT_W - 20
-local COL_EMA_X   = LEFT_W - 10
+local COL_ME_X    = LEFT_W - 31
+local COL_COINA_X = LEFT_W - 21
+local COL_EMA_X   = LEFT_W - 11
 
 local RIGHT_INNER_X = LEFT_W + 2
 local RIGHT_INNER_W = RIGHT_W - 3
@@ -163,6 +176,7 @@ local function drawTopBar()
   local title = "VIP-SHOP"
   text(math.floor((WIDTH - #title) / 2) + 1, 1, title, C.vipTitle, 0x0A0A0A)
 
+  -- линия после VIP-SHOP
   setFG(C.underLine)
   setBG(0x0A0A0A)
   gpu.set(1, 2, string.rep("=", WIDTH))
@@ -172,7 +186,7 @@ end
 
 local function drawMainFrames()
   setBG(C.bg)
-  setFG(C.catalogLine)
+  setFG(C.mainLine)
 
   gpu.set(1, MAIN_Y, "+" .. string.rep("=", WIDTH - 2) .. "+")
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
@@ -181,30 +195,21 @@ local function drawMainFrames()
   end
   gpu.set(1, MAIN_Y + MAIN_H - 1, "+" .. string.rep("=", WIDTH - 2) .. "+")
 
+  -- вертикальный разделитель
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(LEFT_W, y, "|")
   end
 
-  local headerY = MAIN_Y + 1
-  setFG(C.catalogLine)
-  for x = 2, LEFT_W - 1 do
-    gpu.set(x, headerY, "-")
-  end
-  setFG(C.infoLine)
-  for x = LEFT_W + 1, WIDTH - 1 do
-    gpu.set(x, headerY, "-")
-  end
-
   gpu.set(LEFT_W, MAIN_Y, "+")
   gpu.set(LEFT_W, MAIN_Y + MAIN_H - 1, "+")
-  gpu.set(LEFT_W, headerY, "+")
 end
 
 local function drawLeftHeader()
-  text(3, MAIN_Y + 1, "КАТАЛОГ ТОВАРОВ", C.catalogLine, C.bg)
+  -- КАТАЛОГ ТОВАРОВ внутри линии
+  sectionHeader(2, MAIN_Y + 1, LEFT_W - 2, "КАТАЛОГ ТОВАРОВ", C.mainLine, C.white)
 
   local colY = MAIN_Y + 2
-  fill(2, colY, LEFT_W - 2, 1, C.bg)
+  fill(2, colY, LEFT_W - 3, 1, C.bg)
   text(COL_NAME_X,  colY, "ТОВАР",  C.white, C.bg)
   text(COL_ME_X,    colY, "В ME",   C.white, C.bg)
   text(COL_COINA_X, colY, "COINA",  C.white, C.bg)
@@ -212,11 +217,11 @@ local function drawLeftHeader()
 end
 
 local function drawScrollbar()
-  -- просто заливка цветом (без символа *)
+  -- скролл отдельно от рамки (на 1 символ левее)
   setBG(C.bg)
   setFG(C.darkGray)
   for y = LIST_Y, LIST_Y + LIST_H - 1 do
-    gpu.set(SCROLL_X, y, "|")
+    gpu.set(SCROLL_X, y, " ")
   end
 
   local maxScroll = math.max(0, #items - LIST_H)
@@ -226,7 +231,7 @@ local function drawScrollbar()
     thumbY = LIST_Y + math.floor((scrollOffset / maxScroll) * (LIST_H - thumbH))
   end
 
-  -- заливка ползунка цветом
+  -- заливка ползунка
   setBG(C.accent)
   for i = 0, thumbH - 1 do
     if thumbY + i <= LIST_Y + LIST_H - 1 then
@@ -253,11 +258,8 @@ local function drawItemRow(index, y)
   local coinaColor= isSelected and C.selectedName or C.yellow
   local emaColor  = isSelected and C.selectedName or C.cyan
 
-  -- * всегда цвета #077d42, даже если выбрано
-  local marker
   if isSelected then
-    marker = "> "
-    text(COL_NAME_X, y, marker, C.selectedName, C.selectedBg)
+    text(COL_NAME_X, y, "> ", C.selectedName, C.selectedBg)
   else
     if item.star then
       text(COL_NAME_X, y, "* ", C.star, C.bg)
@@ -292,10 +294,13 @@ end
 local function drawInfoBlock()
   fill(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, 6, C.bg)
 
+  -- заголовок ---ИНФО---
+  sectionHeader(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, "ИНФО", C.sectionLine, C.white)
+
   local item = items[selectedIndex]
   if not item then return end
 
-  local y = INFO_Y
+  local y = INFO_Y + 1
   text(RIGHT_INNER_X, y, "Товар: " .. item.name, C.white, C.bg)
   y = y + 1
   text(RIGHT_INNER_X, y, "В ME : " .. item.me, C.green, C.bg)
@@ -303,19 +308,16 @@ local function drawInfoBlock()
   text(RIGHT_INNER_X, y, "COINA: " .. item.coina, C.yellow, C.bg)
   y = y + 1
   text(RIGHT_INNER_X, y, "EMA  : " .. item.ema, C.cyan, C.bg)
-  y = y + 2
-
-  hLine(RIGHT_INNER_X, y, RIGHT_INNER_W, "-", C.infoLine)
 end
 
 local function drawQuantitySection()
   fill(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, 7, C.bg)
 
-  -- заголовок поля
-  text(RIGHT_INNER_X, QTY_Y, "Поле для количества", C.gray, C.bg)
+  -- ---Поле для количества---
+  sectionHeader(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, "Поле для количества", C.sectionLine, C.white)
 
-  -- растянутое поле ввода
-  local fieldW = RIGHT_INNER_W - 2
+  -- растянутое поле
+  local fieldW = RIGHT_INNER_W
   fill(RIGHT_INNER_X, QTY_Y + 1, fieldW, 1, C.inputBg)
   local display = quantity ~= "" and quantity or ""
   text(RIGHT_INNER_X + 1, QTY_Y + 1, display, C.inputFg, C.inputBg)
@@ -334,17 +336,15 @@ local function drawQuantitySection()
     string.format("Итог: COINA: %s | EMA: %s", totalCoina, totalEma),
     C.yellow, C.bg)
 
-  -- кнопки Купить / Стереть
+  -- кнопки
   local btnW = 12
   local gap  = 2
 
-  -- [ Купить ] зелёный
   setBG(C.buttonBuy)
   setFG(C.white)
   gpu.fill(RIGHT_INNER_X, BTN_Y, btnW, 1, " ")
   gpu.set(RIGHT_INNER_X + 1, BTN_Y, "[ Купить ]")
 
-  -- [ Стереть ] красный
   setBG(C.buttonClear)
   setFG(C.white)
   gpu.fill(RIGHT_INNER_X + btnW + gap, BTN_Y, btnW, 1, " ")
@@ -354,11 +354,10 @@ end
 local function drawAccountInfo()
   fill(RIGHT_INNER_X, ACC_Y, RIGHT_INNER_W, 8, C.bg)
 
-  -- заголовок внутри линии как ИНФО
-  text(RIGHT_INNER_X, ACC_Y, "Информация Аккаунта", C.accountTitle, C.bg)
-  hLine(RIGHT_INNER_X, ACC_Y + 1, RIGHT_INNER_W, "-", C.infoLine)
+  -- ---Информация Аккаунта---
+  sectionHeader(RIGHT_INNER_X, ACC_Y, RIGHT_INNER_W, "Информация Аккаунта", C.sectionLine, C.white)
 
-  local y = ACC_Y + 2
+  local y = ACC_Y + 1
   text(RIGHT_INNER_X, y, "НИК      : " .. account.nick, C.white, C.bg)
   y = y + 1
   text(RIGHT_INNER_X, y, "Баланс   : " .. account.coina .. " COINA | " .. account.ema .. " EMA", C.yellow, C.bg)
@@ -369,8 +368,6 @@ local function drawAccountInfo()
 end
 
 local function drawRightPanel()
-  text(LEFT_W + 3, MAIN_Y + 1, "ИНФО", C.infoLine, C.bg)
-
   drawInfoBlock()
   drawQuantitySection()
   drawAccountInfo()
@@ -379,7 +376,7 @@ end
 local function drawBottomBar()
   fill(1, BOT_Y, WIDTH, 2, 0x0A0A0A)
 
-  setFG(C.catalogLine)
+  setFG(C.mainLine)
   setBG(C.bg)
   gpu.set(1, BOT_Y - 1, "+" .. string.rep("=", WIDTH - 2) .. "+")
 
@@ -388,13 +385,11 @@ local function drawBottomBar()
   local total = btnW * 2 + gap
   local startX = math.floor((WIDTH - total) / 2)
 
-  -- [ Покупки ] зелёный
   setBG(C.buttonBuy)
   setFG(C.white)
   gpu.fill(startX, BOT_Y, btnW, 1, " ")
   gpu.set(startX + 2, BOT_Y, "[ Покупки ]")
 
-  -- [ Продажи ] голубой
   setBG(C.buttonSales)
   setFG(C.white)
   gpu.fill(startX + btnW + gap, BOT_Y, btnW, 1, " ")
@@ -402,7 +397,7 @@ local function drawBottomBar()
 end
 
 local function drawBottomBorder()
-  setFG(C.catalogLine)
+  setFG(C.mainLine)
   setBG(C.bg)
   gpu.set(1, HEIGHT, "+" .. string.rep("=", WIDTH - 2) .. "+")
 end
@@ -442,7 +437,6 @@ local function scroll(delta)
 end
 
 local function handleClick(x, y)
-  -- клик по списку
   if x >= LIST_X and x <= LIST_X + LIST_W and y >= LIST_Y and y <= LIST_Y + LIST_H - 1 then
     local row = y - LIST_Y
     local index = scrollOffset + row + 1
@@ -452,14 +446,12 @@ local function handleClick(x, y)
     return
   end
 
-  -- клик по кнопке Стереть
   local btnW = 12
   local gap  = 2
   local clearX = RIGHT_INNER_X + btnW + gap
   if y == BTN_Y and x >= clearX and x < clearX + btnW then
     quantity = ""
     drawQuantitySection()
-    return
   end
 end
 
