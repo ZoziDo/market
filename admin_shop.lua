@@ -174,10 +174,23 @@ end
 local function drawMainFrames()
   setBG(C.bg)
 
-  -- Верхняя и нижняя линии (общие)
+  -- Верхняя линия
+  -- Левая часть (mainLine)
   setFG(C.mainLine)
-  gpu.set(1, MAIN_Y, "+" .. string.rep("=", WIDTH - 2) .. "+")
-  gpu.set(1, MAIN_Y + MAIN_H - 1, "+" .. string.rep("=", WIDTH - 2) .. "+")
+  gpu.set(1, MAIN_Y, "+" .. string.rep("=", SEPARATOR1 - 1) .. "+")
+  
+  -- Правая часть (sectionLine)
+  setFG(C.sectionLine)
+  gpu.set(SEPARATOR1, MAIN_Y, string.rep("=", WIDTH - SEPARATOR1 - 1) .. "+")
+
+  -- Нижняя линия
+  -- Левая часть (mainLine)
+  setFG(C.mainLine)
+  gpu.set(1, MAIN_Y + MAIN_H - 1, "+" .. string.rep("=", SEPARATOR1 - 1) .. "+")
+  
+  -- Правая часть (sectionLine)
+  setFG(C.sectionLine)
+  gpu.set(SEPARATOR1, MAIN_Y + MAIN_H - 1, string.rep("=", WIDTH - SEPARATOR1 - 1) .. "+")
 
   -- Левая вертикальная линия
   setFG(C.mainLine)
@@ -204,15 +217,19 @@ end
 
 local function drawSeparator()
   setBG(C.bg)
-  setFG(C.sectionLine)   -- <-- правый цвет
+  setFG(C.sectionLine)
 
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(SEPARATOR1, y, "|")
     gpu.set(SEPARATOR2, y, "|")
   end
 
+  -- Верхний разделитель
+  setFG(C.sectionLine)
   gpu.set(SEPARATOR1, MAIN_Y, "+")
   gpu.set(SEPARATOR2, MAIN_Y, "+")
+  
+  -- Нижний разделитель
   gpu.set(SEPARATOR1, MAIN_Y + MAIN_H - 1, "+")
   gpu.set(SEPARATOR2, MAIN_Y + MAIN_H - 1, "+")
 end
@@ -340,9 +357,9 @@ local function drawAccountInfo()
   fill(RIGHT_INNER_X, ACC_Y, RIGHT_INNER_W, 8, C.bg)
   sectionHeader(RIGHT_INNER_X, ACC_Y, RIGHT_INNER_W, "АККАУНТ", C.sectionLine, C.white)
   local y = ACC_Y + 2
-  text(RIGHT_INNER_X, y, "НИК      : " .. account.nick, C.white, C.bg)
+  text(RIGHT_INNER_X, y, "Имя: " .. account.nick, C.white, C.bg)
   y = y + 1
-  text(RIGHT_INNER_X, y, "Баланс   : " .. account.coina .. " COINA | " .. account.ema .. " EMA", C.yellow, C.bg)
+  text(RIGHT_INNER_X, y, "Баланс: " .. account.coina .. " COINA | " .. account.ema .. " EMA", C.yellow, C.bg)
   y = y + 1
   text(RIGHT_INNER_X, y, "Регистрация: " .. account.regDate, C.gray, C.bg)
   y = y + 1
