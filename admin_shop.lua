@@ -33,7 +33,8 @@ end
 local function sectionHeader(x, y, w, title, lineColor, titleColor)
   lineColor = lineColor or C.sectionLine
   titleColor = titleColor or C.white
-  setBG(C.bg) setFG(lineColor)
+  setBG(C.bg)
+  setFG(lineColor)
   gpu.set(x, y, string.rep("-", w))
   setFG(titleColor)
   gpu.set(x + 1, y, title)
@@ -174,32 +175,25 @@ end
 local function drawMainFrames()
   setBG(C.bg)
 
-  -- ===== ВЕРХНЯЯ ЛИНИЯ =====
-  -- левая часть
+  -- Верхняя линия
   setFG(C.mainLine)
   gpu.set(1, MAIN_Y, "+" .. string.rep("=", LEFT_W - 1))
-
-  -- правая часть
   setFG(C.sectionLine)
   gpu.set(LEFT_W, MAIN_Y, string.rep("=", WIDTH - LEFT_W - 1) .. "+")
 
-  -- ===== НИЖНЯЯ ЛИНИЯ =====
-  -- левая часть
+  -- Нижняя линия
   setFG(C.mainLine)
   gpu.set(1, MAIN_Y + MAIN_H - 1, "+" .. string.rep("=", LEFT_W - 1))
-
-  -- правая часть
   setFG(C.sectionLine)
   gpu.set(LEFT_W, MAIN_Y + MAIN_H - 1, string.rep("=", WIDTH - LEFT_W - 1) .. "+")
 
-  -- ===== ВЕРТИКАЛЬНЫЕ ЛИНИИ =====
-  -- левая
+  -- Левая вертикаль
   setFG(C.mainLine)
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(1, y, "|")
   end
 
-  -- правая
+  -- Правая вертикаль
   setFG(C.sectionLine)
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(WIDTH, y, "|")
@@ -218,18 +212,13 @@ end
 
 local function drawSeparator()
   setBG(C.bg)
-  setFG(C.sectionLine)   -- правый цвет
-
+  setFG(C.sectionLine)
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(SEPARATOR1, y, "|")
     gpu.set(SEPARATOR2, y, "|")
   end
-
-  -- верх разделителя
   gpu.set(SEPARATOR1, MAIN_Y, "+")
   gpu.set(SEPARATOR2, MAIN_Y, "+")
-
-  -- низ разделителя
   gpu.set(SEPARATOR1, MAIN_Y + MAIN_H - 1, "+")
   gpu.set(SEPARATOR2, MAIN_Y + MAIN_H - 1, "+")
 end
