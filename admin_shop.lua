@@ -15,7 +15,7 @@ end
 local C = {
   bg = 0x0C0C0C, white = 0xFFFFFF, gray = 0xAAAAAA, darkGray = 0x555555,
   green = 0x55FF55, yellow = 0xFFFF55, red = 0xFF5555, cyan = 0x55FFFF,
-  selectedBg = 0x002440, selectedName = 0x00e6b1, star = 0x077d42,
+  selectedBg = 0x002440, selectedName = 0x00e6b1, star = 0x077d42,КОЛ
   vipTitle = 0x0c9a76, underLine = 0x428A72, mainLine = 0x7FFFD4,
   sectionLine = 0x27BDEC, headerBg = 0x1A2D33, notFound = 0xF50016,
   buttonBuy = 0x0a502d, buttonClear = 0x8b1a1a, buttonSales = 0x1a5a6b,
@@ -173,13 +173,38 @@ end
 
 local function drawMainFrames()
   setBG(C.bg)
+
+  -- Верхняя и нижняя линии (общие)
   setFG(C.mainLine)
   gpu.set(1, MAIN_Y, "+" .. string.rep("=", WIDTH - 2) .. "+")
+  gpu.set(1, MAIN_Y + MAIN_H - 1, "+" .. string.rep("=", WIDTH - 2) .. "+")
+
+  -- Левая вертикальная линия
+  setFG(C.mainLine)
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(1, y, "|")
+  end
+
+  -- Правая вертикальная линия (цвет правого блока)
+  setFG(C.sectionLine)
+  for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
     gpu.set(WIDTH, y, "|")
   end
-  gpu.set(1, MAIN_Y + MAIN_H - 1, "+" .. string.rep("=", WIDTH - 2) .. "+")
+end
+
+local function drawSeparator()
+  setBG(C.bg)
+  setFG(C.sectionLine)   -- <-- правый цвет
+
+  for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
+    gpu.set(SEPARATOR1, y, "|")
+    gpu.set(SEPARATOR2, y, "|")
+  end
+
+  gpu.set(SEPARATOR1, MAIN_Y, "+")
+  gpu.set(SEPARATOR2, MAIN_Y, "+")
+  gpu.set(SEPARATOR1, MAIN_Y + MAIN_H - 1, "+")
+  gpu.set(SEPARATOR2, MAIN_Y + MAIN_H - 1, "+")
 end
 
 local function drawLeftHeader()
@@ -292,7 +317,7 @@ end
 
 local function drawQuantitySection()
   fill(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, 9, C.bg)
-  sectionHeader(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, "КОЛИЧСЕВТО", C.sectionLine, C.white)
+  sectionHeader(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, "КОЛИЧЕСТВО", C.sectionLine, C.white)
   local fieldY = QTY_Y + 2
   setFG(C.frame)
   setBG(C.bg)
