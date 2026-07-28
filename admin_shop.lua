@@ -483,7 +483,7 @@ while true do
     local x, direction = ev[3], ev[5]
     if x >= LIST_X and x <= LIST_X + LIST_W + 2 then
       scroll(-direction)
-    end  -- закрывает if для scroll
+    end
     
   elseif name == "key_down" then
     local _, _, char, code = table.unpack(ev)
@@ -500,8 +500,8 @@ while true do
           searchQuery = searchQuery .. unicode.char(char)
           filterItems()
           redrawAll()
-        end  -- закрывает if #searchQuery
-      end  -- закрывает if code ==...
+        end
+      end
       
     elseif qtyFocused then
       if code == keyboard.keys.enter or code == keyboard.keys.tab then
@@ -513,8 +513,8 @@ while true do
         if #quantity < 8 then
           quantity = quantity .. string.char(char)
           drawQuantitySection()
-        end  -- закрывает if #quantity
-      end  -- закрывает if code ==...
+        end
+      end
       
     else
       if code == keyboard.keys.up then
@@ -528,15 +528,15 @@ while true do
         if #quantity < 8 then
           quantity = quantity .. string.char(char)
           drawQuantitySection()
-        end  -- закрывает if #quantity
+        end
       elseif code == keyboard.keys.q or code == keyboard.keys.escape then
         break
-      end  -- закрывает if code ==...
-    end  -- закрывает if searchFocused/qtyFocused/else
+      end
+    end
     
-  end  -- закрывает elseif name == "key_down"
+  end
   
-end  -- закрывает while true
+end
 
 term.clear()
 gpu.setForeground(0xFFFFFF)
