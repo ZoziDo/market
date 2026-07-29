@@ -167,6 +167,7 @@ function exportFromME(itemName, damage, amount)
   return 0
 end
 
+-- ИСПРАВЛЕННАЯ ФУНКЦИЯ
 function loadBuyItemsFast()
   if not component.isAvailable("me_interface") then 
     return 
@@ -189,7 +190,7 @@ function loadBuyItemsFast()
     local name = meItem.name
     if blacklist[name] then
       -- пропускаем
-    elseif true then
+    else
       local qty = meItem.size or 0
       if qty == 0 then
         -- пропускаем
@@ -221,11 +222,11 @@ function loadBuyItemsFast()
                 canBuy = true
               }
             end
-          end
-        end
-      end
-    end
-  end
+          end -- if priceCoin <= 0
+        end -- if not mapping
+      end -- if qty == 0
+    end -- if blacklist
+  end -- for
 
   shopItems = {}
   for key, itemData in pairs(tempShopItems) do
@@ -440,7 +441,7 @@ local function performPurchase()
 end
 
 -- ============================================
--- ФУНКЦИИ ОТРИСОВКИ (из вашего кода)
+-- ФУНКЦИИ ОТРИСОВКИ
 -- ============================================
 local function drawBackground()
   fill(1, 1, WIDTH, HEIGHT, C.bg)
@@ -614,7 +615,6 @@ local function drawQuantitySection()
   end
   text(RIGHT_INNER_X, TOTAL_Y, string.format("Итог: COINA: %s | EMA: %s", totalCoina, totalEma), C.yellow, C.bg)
   
-  -- Кнопка покупки с обновленной функцией
   local btnW = 12
   local gap = 2
   setBG(C.buttonBuy)
@@ -712,7 +712,6 @@ local function handleClick(x, y)
   searchFocused = false
   qtyFocused = false
   
-  -- Клик по списку товаров
   if x >= LIST_X and x <= LIST_X + LIST_W and y >= LIST_Y and y <= LIST_Y + LIST_H - 1 then
     local row = y - LIST_Y
     local index = scrollOffset + row + 1
@@ -722,7 +721,6 @@ local function handleClick(x, y)
     return
   end
   
-  -- Очистка поиска
   local searchW = 40
   local clearX = 2 + searchW + 2
   if y == 3 and x >= clearX and x < clearX + 11 then
@@ -732,20 +730,17 @@ local function handleClick(x, y)
     return
   end
   
-  -- Фокус на поиск
   if y == 3 and x >= 2 and x <= 2 + searchW then
     searchFocused = true
     return
   end
   
-  -- Фокус на поле количества
   local fieldY = QTY_Y + 2
   if y == fieldY and x >= RIGHT_INNER_X and x <= RIGHT_INNER_X + RIGHT_INNER_W then
     qtyFocused = true
     return
   end
   
-  -- Кнопка покупки
   local btnW = 12
   local gap = 2
   local buyX = RIGHT_INNER_X
@@ -754,7 +749,6 @@ local function handleClick(x, y)
     return
   end
   
-  -- Кнопка очистки количества
   local clearQtyX = RIGHT_INNER_X + btnW + gap
   if y == BTN_Y and x >= clearQtyX and x < clearQtyX + btnW then
     quantity = ""
