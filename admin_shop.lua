@@ -13,7 +13,7 @@ end
 local C = {
   bg = 0x0C0C0C, white = 0xFFFFFF, gray = 0xAAAAAA, darkGray = 0x555555,
   green = 0x55FF55, yellow = 0xFFFF55, red = 0xFF5555, cyan = 0x55FFFF,
-  selectedBg = 0x002440, selectedName = 0x00e6b1, star = 0x077d42,КОЛ
+  selectedBg = 0x002440, selectedName = 0x00e6b1, star = 0x077d42,
   vipTitle = 0x0c9a76, underLine = 0x428A72, mainLine = 0x7FFFD4,
   sectionLine = 0x27BDEC, headerBg = 0x1A2D33, notFound = 0xF50016,
   buttonBuy = 0x0a502d, buttonClear = 0x8b1a1a, buttonSales = 0x1a5a6b,
