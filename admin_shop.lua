@@ -16,19 +16,43 @@ if WIDTH < maxW or HEIGHT < maxH then
 end
 
 local C = {
-  bg = 0x0C0C0C, white = 0xFFFFFF, gray = 0xAAAAAA, darkGray = 0x555555,
-  green = 0x55FF55, yellow = 0xFFFF55, red = 0xFF5555, cyan = 0x55FFFF,
-  selectedBg = 0x002440, selectedName = 0x00e6b1, star = 0x077d42,
-  vipTitle = 0x0c9a76, underLine = 0x428A72, mainLine = 0x7FFFD4,
-  sectionLine = 0x27BDEC, headerBg = 0x1A2D33, notFound = 0xF50016,
-  buttonBuy = 0x0a502d, buttonClear = 0x8b1a1a, buttonSales = 0x1a5a6b,
-  inputBg = 0x1a1a1a, inputFg = 0xFFFFFF, accent = 0x0c9a76, frame = 0x27BDEC, bgHover = 0x1a2a3a,
+  bg = 0x0C0C0C,
+  white = 0xFFFFFF,
+  gray = 0xAAAAAA,
+  darkGray = 0x555555,
+  green = 0x55FF55,
+  yellow = 0xFFFF55,
+  red = 0xFF5555,
+  cyan = 0x55FFFF,
+  selectedBg = 0x002440,
+  selectedName = 0x00e6b1,
+  star = 0x077d42,
+  vipTitle = 0x0c9a76,
+  underLine = 0x428A72,
+  mainLine = 0x7FFFD4,
+  sectionLine = 0x27BDEC,
+  headerBg = 0x1A2D33,
+  notFound = 0xF50016,
+  buttonBuy = 0x0a502d,
+  buttonClear = 0x8b1a1a,
+  buttonSales = 0x1a5a6b,
+  inputBg = 0x1a1a1a,
+  inputFg = 0xFFFFFF,
+  accent = 0x0c9a76,
+  frame = 0x27BDEC,
+  bgHover = 0x1a2a3a,
 }
 
 local function setBG(c) gpu.setBackground(c) end
 local function setFG(c) gpu.setForeground(c) end
 local function fill(x, y, w, h, c) setBG(c) gpu.fill(x, y, w, h, " ") end
-local function text(x, y, str, fg, bg) if bg then setBG(bg) end if fg then setFG(fg) end gpu.set(x, y, str) end
+
+local function text(x, y, str, fg, bg)
+  if bg then setBG(bg) end
+  if fg then setFG(fg) end
+  gpu.set(x, y, str)
+end
+
 local function sectionHeader(x, y, w, title, lineColor, titleColor)
   lineColor = lineColor or C.sectionLine
   titleColor = titleColor or C.white
@@ -38,8 +62,20 @@ local function sectionHeader(x, y, w, title, lineColor, titleColor)
   setFG(titleColor)
   gpu.set(x + 1, y, title)
 end
-local function truncate(str, maxLen) if #str <= maxLen then return str end return str:sub(1, maxLen - 3) .. "..." end
-local function sortableName(name) if not name then return "" end local lower = string.lower(name) return lower:gsub("(%d+)", function(d) return string.format("%08d", tonumber(d)) end) end
+
+local function truncate(str, maxLen)
+  if #str <= maxLen then return str end
+  return str:sub(1, maxLen - 3) .. "..."
+end
+
+local function sortableName(name)
+  if not name then return "" end
+  local lower = string.lower(name)
+  local result = lower:gsub("(%d+)", function(d)
+    return string.format("%08d", tonumber(d))
+  end)
+  return result
+end
 
 local TOP_H = 3
 local BOT_H = 3
