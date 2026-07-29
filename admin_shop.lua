@@ -29,7 +29,6 @@ local function setBG(c) gpu.setBackground(c) end
 local function setFG(c) gpu.setForeground(c) end
 local function fill(x, y, w, h, c) setBG(c) gpu.fill(x, y, w, h, " ") end
 local function text(x, y, str, fg, bg) if bg then setBG(bg) end if fg then setFG(fg) end gpu.set(x, y, str) end
-
 local function sectionHeader(x, y, w, title, lineColor, titleColor)
   lineColor = lineColor or C.sectionLine
   titleColor = titleColor or C.white
@@ -39,17 +38,8 @@ local function sectionHeader(x, y, w, title, lineColor, titleColor)
   setFG(titleColor)
   gpu.set(x + 1, y, title)
 end
-
-local function truncate(str, maxLen)
-  if #str <= maxLen then return str end
-  return str:sub(1, maxLen - 3) .. "..."
-end
-
-local function sortableName(name)
-  if not name then return "" end
-  local lower = string.lower(name)
-  return lower:gsub("(%d+)", function(d) return string.format("%08d", tonumber(d)) end)
-end
+local function truncate(str, maxLen) if #str <= maxLen then return str end return str:sub(1, maxLen - 3) .. "..." end
+local function sortableName(name) if not name then return "" end local lower = string.lower(name) return lower:gsub("(%d+)", function(d) return string.format("%08d", tonumber(d)) end) end
 
 local TOP_H = 3
 local BOT_H = 3
@@ -79,7 +69,6 @@ local BOT_Y = HEIGHT - 2
 local allItems = {}
 local items = {}
 local shopMode = "buy"
-
 local selectedIndex = 1
 local scrollOffset = 0
 local quantity = ""
@@ -205,7 +194,6 @@ end
 function loadItems()
   local newItems = {}
   ME.init()
-  
   if shopMode == "buy" then
     local catalog = loadCatalogFromFile()
     if catalog then
@@ -253,7 +241,6 @@ function loadItems()
       end
     end
   end
-  
   table.sort(newItems, function(a, b) return sortableName(a.name) < sortableName(b.name) end)
   allItems = newItems
   items = {}
@@ -266,8 +253,7 @@ function updateMEQuantities()
     local qty = ME.getItemQuantity(item.internalName, item.damage or 0)
     item.meRaw = qty
     item.qty = qty
-    if qty >= 1000 then item.me = string.format("%.1fk", qty / 1000)
-    else item.me = tostring(qty) end
+    if qty >= 1000 then item.me = string.format("%.1fk", qty / 1000) else item.me = tostring(qty) end
   end
   drawProductList()
   drawScrollbar()
@@ -312,14 +298,12 @@ function performBuy()
   local qty = tonumber(quantity) or 0
   if qty <= 0 then showTempMessage("❌ Введите количество", 2) return end
   if qty > item.qty then showTempMessage("❌ Недостаточно товара в МЭ", 2) return end
-  
   local totalCoin = qty * (item.priceCoin or 0)
   local totalEma = qty * (item.priceEma or 0)
   if totalCoin > tonumber(account.coina) or totalEma > tonumber(account.ema) then
     showTempMessage("❌ Недостаточно средств", 2)
     return
   end
-  
   local exported = ME.exportItem(item.internalName, item.damage or 0, qty, "down")
   if exported > 0 then
     account.coina = tostring(tonumber(account.coina) - totalCoin)
@@ -339,7 +323,6 @@ function performSell()
   local qty = tonumber(quantity) or 0
   if qty <= 0 then showTempMessage("❌ Введите количество", 2) return end
   if not selector then showTempMessage("❌ Селектор не найден", 2) return end
-  
   local imported = ME.importItem(item.internalName, item.damage or 0, qty, "up")
   if imported > 0 then
     local totalCoin = imported * (item.priceCoin or 0)
@@ -369,7 +352,6 @@ local function drawTopBar()
   setFG(C.underLine)
   setBG(0x0A0A0A)
   gpu.set(1, 2, string.rep("=", WIDTH))
-  
   local searchW = 40
   local searchX = 2
   local searchY = 3
@@ -452,27 +434,22 @@ local function drawItemRow(index, y)
   if isSelected then bgColor = C.selectedBg
   elseif isHovered then bgColor = C.bgHover end
   fill(LIST_X, y, LIST_W, 1, bgColor)
-  
   local nameColor = isSelected and C.selectedName or (isHovered and C.white or C.white)
   local markerColor = item.star and C.star or C.darkGray
   local marker = item.star and "* " or "- "
   if isSelected then text(COL_NAME_X, y, "> ", C.selectedName, bgColor)
   else text(COL_NAME_X, y, marker, markerColor, bgColor) end
-  
   local maxNameLen = COL_ME_X - COL_NAME_X - 2
   local displayName = truncate(item.name, maxNameLen - 2)
   text(COL_NAME_X + 2, y, displayName, nameColor, bgColor)
-  
   local meColor = C.green
   if item.meRaw == 0 then meColor = C.red
   elseif item.meRaw < 10 then meColor = C.yellow end
   if isSelected then meColor = C.selectedName end
   text(COL_ME_X, y, item.me, meColor, bgColor)
-  
   local coinaColor = C.yellow
   if isSelected then coinaColor = C.selectedName end
   text(COL_COINA_X, y, item.coina, coinaColor, bgColor)
-  
   local emaColor = C.cyan
   if isSelected then emaColor = C.selectedName end
   text(COL_EMA_X, y, item.ema, emaColor, bgColor)
@@ -511,7 +488,6 @@ end
 local function drawQuantitySection()
   fill(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, 9, C.bg)
   sectionHeader(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, "КОЛИЧЕСТВО", C.sectionLine, C.white)
-  
   local fieldY = QTY_Y + 2
   setFG(C.frame)
   setBG(C.bg)
@@ -524,7 +500,6 @@ local function drawQuantitySection()
     if qtyFocused then display = display .. "_" end
     text(RIGHT_INNER_X + 2, fieldY, display, C.inputFg, C.inputBg)
   end
-  
   local item = items[selectedIndex]
   local qty = tonumber(quantity) or 0
   local totalCoina = 0
@@ -534,7 +509,6 @@ local function drawQuantitySection()
     totalEma = qty * (tonumber(item.ema) or 0)
   end
   text(RIGHT_INNER_X, TOTAL_Y, string.format("Итог: COINA: %.2f | EMA: %.2f", totalCoina, totalEma), C.yellow, C.bg)
-  
   local btnW = 12
   local gap = 2
   local btnText = shopMode == "buy" and "[ Купить ]" or "[ Продать ]"
@@ -662,14 +636,12 @@ end
 local function handleClick(x, y)
   searchFocused = false
   qtyFocused = false
-  
   if x >= LIST_X and x <= LIST_X + LIST_W and y >= LIST_Y and y <= LIST_Y + LIST_H - 1 then
     local row = y - LIST_Y
     local index = scrollOffset + row + 1
     if index >= 1 and index <= #items then selectItem(index) end
     return
   end
-  
   if x == SCROLL_X and y >= LIST_Y and y <= LIST_Y + LIST_H - 1 then
     if #items > LIST_H then
       local relY = y - LIST_Y
@@ -681,7 +653,6 @@ local function handleClick(x, y)
     end
     return
   end
-  
   local searchW = 40
   local clearX = 2 + searchW + 2
   if y == 3 then
@@ -697,22 +668,18 @@ local function handleClick(x, y)
       return
     end
   end
-  
   local fieldY = QTY_Y + 2
   if y == fieldY and x >= RIGHT_INNER_X and x <= RIGHT_INNER_X + RIGHT_INNER_W then
     qtyFocused = true
     drawQuantitySection()
     return
   end
-  
   local btnW = 12
   local gap = 2
   local clearQtyX = RIGHT_INNER_X + btnW + gap
-  
   if y == BTN_Y then
     if x >= RIGHT_INNER_X and x < RIGHT_INNER_X + btnW then
-      if shopMode == "buy" then performBuy()
-      else performSell() end
+      if shopMode == "buy" then performBuy() else performSell() end
       return
     end
     if x >= clearQtyX and x < clearQtyX + btnW then
@@ -721,7 +688,6 @@ local function handleClick(x, y)
       return
     end
   end
-  
   if y == BOT_Y then
     local buyX = 2
     local salesX = buyX + 14 + 2
@@ -750,7 +716,6 @@ local function handleKey(char, code)
       return
     end
   end
-  
   if qtyFocused then
     if code == keyboard.keys.enter or code == keyboard.keys.tab then
       qtyFocused = false
@@ -768,7 +733,6 @@ local function handleKey(char, code)
       return
     end
   end
-  
   if code == keyboard.keys.up then
     selectItem(selectedIndex - 1)
     return
@@ -782,7 +746,6 @@ local function handleKey(char, code)
     smoothScroll(LIST_H)
     return
   end
-  
   if char and char >= 48 and char <= 57 then
     if #quantity < 8 then
       quantity = quantity .. string.char(char)
@@ -790,13 +753,11 @@ local function handleKey(char, code)
     end
     return
   end
-  
   if code == keyboard.keys.back then
     quantity = quantity:sub(1, -2)
     drawQuantitySection()
     return
   end
-  
   if code == keyboard.keys.q or code == keyboard.keys.escape then
     return true
   end
@@ -842,7 +803,6 @@ end)
 while true do
   local ev = {event.pull(0.05)}
   local name = ev[1]
-  
   if name == "touch" then
     handleClick(ev[3], ev[4])
   elseif name == "scroll" then
@@ -870,9 +830,7 @@ while true do
   end
 end
 
-if updateTimer then
-  event.cancel(updateTimer)
-end
+if updateTimer then event.cancel(updateTimer) end
 term.clear()
 gpu.setForeground(0xFFFFFF)
 gpu.setBackground(0x000000)
