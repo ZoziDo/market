@@ -52,9 +52,19 @@ local C = {
 -- ============================================
 -- 3. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 -- ============================================
-local function setBG(c) gpu.setBackground(c) end
-local function setFG(c) gpu.setForeground(c) end
-local function fill(x, y, w, h, c) setBG(c) gpu.fill(x, y, w, h, " ") end
+local function setBG(c) 
+  gpu.setBackground(c) 
+end
+
+local function setFG(c) 
+  gpu.setForeground(c) 
+end
+
+local function fill(x, y, w, h, c) 
+  setBG(c) 
+  gpu.fill(x, y, w, h, " ") 
+end
+
 local function text(x, y, str, fg, bg)
   if bg then setBG(bg) end
   if fg then setFG(fg) end
@@ -72,14 +82,10 @@ local function sectionHeader(x, y, w, title, lineColor, titleColor)
 end
 
 local function truncate(str, maxLen)
-  if #str <= maxLen then return str end
+  if #str <= maxLen then 
+    return str 
+  end
   return str:sub(1, maxLen - 3) .. "..."
-end
-
-local function normalizeName(name)
-  if not name then return "" end
-  local lastColon = name:match(".*:([^:]+)$")
-  return lastColon or name
 end
 
 local function sortableName(name)
@@ -170,7 +176,6 @@ local ME = {
   available = false
 }
 
--- Проверка наличия МЭ интерфейса
 function ME.init()
   for addr in component.list("me_interface") do
     ME.interface = component.proxy(addr)
@@ -187,7 +192,6 @@ function ME.init()
   return ME.available
 end
 
--- Получение количества предмета в МЭ сети
 function ME.getItemQuantity(internalName, damage)
   if not ME.available or not ME.interface then
     return 0
@@ -196,45 +200,21 @@ function ME.getItemQuantity(internalName, damage)
   damage = damage or 0
   local total = 0
   
-  -- Пробуем через getItemsInNetwork
-  local ok, items = pcall(ME.interface.getItemsInNetwork, ME.interface)
-  if ok and items then
-    for _, item in ipairs(items) do
-      local name = item.name or ""
-      local itemDamage = item.damage or 0
+  local ok, meItems = pcall(ME.interface.getItemsInNetwork, ME.interface)
+  if ok and meItems then
+    for _, meItem in ipairs(meItems) do
+      local name = meItem.name or ""
+      local itemDamage = meItem.damage or 0
       if name == internalName and itemDamage == damage then
-        total = total + (item.size or item.qty or 0)
+        total = total + (meItem.size or meItem.qty or 0)
       end
     end
     return total
   end
   
-  -- Альтернативный метод
-  local ok, result = pcall(function()
-    return ME.interface.getItemDetail(internalName, damage)
-  end)
-  
-  if ok and result and result.count then
-    return result.count
-  end
-  
   return 0
 end
 
--- Получение всех предметов из МЭ сети
-function ME.getAllItems()
-  if not ME.available or not ME.interface then
-    return {}
-  end
-  
-  local ok, items = pcall(ME.interface.getItemsInNetwork, ME.interface)
-  if ok and items then
-    return items
-  end
-  return {}
-end
-
--- Экспорт предмета из МЭ
 function ME.exportItem(internalName, damage, quantity, direction)
   if not ME.available or not ME.interface then
     return 0
@@ -257,7 +237,6 @@ function ME.exportItem(internalName, damage, quantity, direction)
   return 0
 end
 
--- Импорт предмета в МЭ
 function ME.importItem(internalName, damage, quantity, direction)
   if not ME.available or not ME.interface then
     return 0
@@ -316,39 +295,31 @@ local function loadSellItemsFromFile()
 end
 
 -- ============================================
--- 9. ЗАГРУЗКА ТОВАРОВ С МЭ
+-- 9. ЗАГРУЗКА ТОВАРОВ
 -- ============================================
 function loadItems()
   local newItems = {}
   
-  -- Инициализируем МЭ
   ME.init()
   
   if shopMode == "buy" then
-    -- Загружаем каталог
     local catalog = loadCatalogFromFile()
     if catalog then
       for key, itemData in pairs(catalog) do
         local name = itemData.displayName or key
-        
-        -- Получаем реальное количество из МЭ
         local meQty = ME.getItemQuantity(key, itemData.damage or 0)
         local meDisplay = tostring(meQty)
         if meQty >= 1000 then
           meDisplay = string.format("%.1fk", meQty / 1000)
         end
         
-        local coina = itemData.priceCoin or "0"
-        local ema = itemData.priceEma or "0"
-        local star = itemData.star or false
-        
         table.insert(newItems, {
           name = name,
           me = meDisplay,
           meRaw = meQty,
-          coina = tostring(coina),
-          ema = tostring(ema),
-          star = star,
+          coina = tostring(itemData.priceCoin or "0"),
+          ema = tostring(itemData.priceEma or "0"),
+          star = itemData.star or false,
           internalName = key,
           damage = itemData.damage or 0,
           priceCoin = itemData.priceCoin or 0,
@@ -357,29 +328,23 @@ function loadItems()
         })
       end
     end
-  else -- sell
-    -- Загружаем товары для продажи
+  else
     local sellItems = loadSellItemsFromFile()
     if sellItems then
       for _, itemData in ipairs(sellItems) do
         local name = itemData.displayName or itemData.internalName or "Unknown"
-        
-        -- Получаем реальное количество из МЭ
         local meQty = ME.getItemQuantity(itemData.internalName, itemData.damage or 0)
         local meDisplay = tostring(meQty)
         if meQty >= 1000 then
           meDisplay = string.format("%.1fk", meQty / 1000)
         end
         
-        local coina = itemData.priceCoin or "0"
-        local ema = itemData.priceEma or "0"
-        
         table.insert(newItems, {
           name = name,
           me = meDisplay,
           meRaw = meQty,
-          coina = tostring(coina),
-          ema = tostring(ema),
+          coina = tostring(itemData.priceCoin or "0"),
+          ema = tostring(itemData.priceEma or "0"),
           star = false,
           internalName = itemData.internalName,
           damage = itemData.damage or 0,
@@ -391,21 +356,24 @@ function loadItems()
     end
   end
   
-  -- Сортировка
   table.sort(newItems, function(a, b)
     return sortableName(a.name) < sortableName(b.name)
   end)
   
   allItems = newItems
   items = {}
-  for i, v in ipairs(allItems) do items[i] = v end
+  for i, v in ipairs(allItems) do 
+    items[i] = v 
+  end
 end
 
 -- ============================================
--- 10. ОБНОВЛЕНИЕ КОЛИЧЕСТВА ИЗ МЭ
+-- 10. ОБНОВЛЕНИЕ МЭ
 -- ============================================
 function updateMEQuantities()
-  if not ME.available then return end
+  if not ME.available then 
+    return 
+  end
   
   for _, item in ipairs(allItems) do
     local qty = ME.getItemQuantity(item.internalName, item.damage or 0)
@@ -419,19 +387,20 @@ function updateMEQuantities()
     end
   end
   
-  -- Обновляем отображение
   drawProductList()
   drawScrollbar()
   drawRightPanel()
 end
 
 -- ============================================
--- 11. ФИЛЬТРАЦИЯ И ПОИСК
+-- 11. ФИЛЬТРАЦИЯ
 -- ============================================
 local function filterItems()
   items = {}
   if searchQuery == "" then
-    for i, v in ipairs(allItems) do items[i] = v end
+    for i, v in ipairs(allItems) do 
+      items[i] = v 
+    end
   else
     local q = searchQuery:lower()
     for _, v in ipairs(allItems) do
@@ -446,10 +415,12 @@ local function filterItems()
 end
 
 -- ============================================
--- 12. РАБОТА С СЕЛЕКТОРОМ
+-- 12. СЕЛЕКТОР
 -- ============================================
 function updateSelectorDisplay(item)
-  if not selector then return end
+  if not selector then 
+    return 
+  end
   
   if not item then
     pcall(selector.setSlot, 0, nil)
@@ -458,7 +429,9 @@ function updateSelectorDisplay(item)
   end
   
   local raw = item.internalName or item.name
-  if not raw then return end
+  if not raw then 
+    return 
+  end
   
   local id = raw
   if not id:find(":") then
@@ -492,7 +465,6 @@ function performBuy()
     return
   end
   
-  -- Проверка баланса
   local totalCoin = qty * (item.priceCoin or 0)
   local totalEma = qty * (item.priceEma or 0)
   
@@ -501,21 +473,15 @@ function performBuy()
     return
   end
   
-  -- Экспорт из МЭ
   local exported = ME.exportItem(item.internalName, item.damage or 0, qty, "down")
   
   if exported > 0 then
-    -- Списываем средства
     account.coina = tostring(tonumber(account.coina) - totalCoin)
     account.ema = tostring(tonumber(account.ema) - totalEma)
     account.trans = tostring(tonumber(account.trans) + 1)
     
     showTempMessage(string.format("✅ Куплено %d шт.", exported), 2)
-    
-    -- Обновляем количество в МЭ
     updateMEQuantities()
-    
-    -- Обновляем информацию
     drawRightPanel()
   else
     showTempMessage("❌ Ошибка выдачи товара", 2)
@@ -535,34 +501,14 @@ function performSell()
     return
   end
   
-  -- Проверка наличия в инвентаре (через селектор)
   if not selector then
     showTempMessage("❌ Селектор не найден", 2)
     return
   end
   
-  local hasAmount = 0
-  for slot = 1, 36 do
-    local stack = pcall(selector.getStackInSlot, selector, slot)
-    if stack then
-      local name = stack.name or ""
-      local dmg = stack.damage or 0
-      if name == item.internalName and dmg == (item.damage or 0) then
-        hasAmount = hasAmount + (stack.size or stack.qty or 0)
-      end
-    end
-  end
-  
-  if hasAmount < qty then
-    showTempMessage("❌ Недостаточно предметов в инвентаре", 2)
-    return
-  end
-  
-  -- Импорт в МЭ
   local imported = ME.importItem(item.internalName, item.damage or 0, qty, "up")
   
   if imported > 0 then
-    -- Начисляем средства
     local totalCoin = imported * (item.priceCoin or 0)
     local totalEma = imported * (item.priceEma or 0)
     
@@ -571,11 +517,7 @@ function performSell()
     account.trans = tostring(tonumber(account.trans) + 1)
     
     showTempMessage(string.format("✅ Продано %d шт.", imported), 2)
-    
-    -- Обновляем количество в МЭ
     updateMEQuantities()
-    
-    -- Обновляем информацию
     drawRightPanel()
   else
     showTempMessage("❌ Ошибка приема товара", 2)
@@ -592,21 +534,17 @@ end
 local function drawTopBar()
   fill(1, 1, WIDTH, 3, 0x0A0A0A)
   
-  -- Заголовок
   local title = "VIP-SHOP"
   text(math.floor((WIDTH - #title) / 2) + 1, 1, title, C.vipTitle, 0x0A0A0A)
   
-  -- Статус МЭ
   local meStatus = ME.available and "МЭ: ONLINE" or "МЭ: OFFLINE"
   local meColor = ME.available and C.green or C.red
   text(WIDTH - #meStatus - 2, 1, meStatus, meColor, 0x0A0A0A)
   
-  -- Разделитель
   setFG(C.underLine)
   setBG(0x0A0A0A)
   gpu.set(1, 2, string.rep("=", WIDTH))
   
-  -- Поле поиска
   local searchW = 40
   local searchX = 2
   local searchY = 3
@@ -625,7 +563,6 @@ local function drawTopBar()
     text(searchX + 1, searchY, display, C.inputFg, C.inputBg)
   end
   
-  -- Кнопка очистки
   local clearX = searchX + searchW + 2
   setBG(C.buttonClear)
   setFG(C.white)
@@ -699,7 +636,9 @@ end
 
 local function drawItemRow(index, y)
   local item = items[index]
-  if not item then return end
+  if not item then 
+    return 
+  end
   
   local isSelected = (index == selectedIndex)
   local isHovered = (index == hoveredIndex)
@@ -727,22 +666,27 @@ local function drawItemRow(index, y)
   local displayName = truncate(item.name, maxNameLen - 2)
   text(COL_NAME_X + 2, y, displayName, nameColor, bgColor)
   
-  -- Количество в МЭ с цветом
   local meColor = C.green
   if item.meRaw == 0 then
     meColor = C.red
   elseif item.meRaw < 10 then
     meColor = C.yellow
   end
-  if isSelected then meColor = C.selectedName end
+  if isSelected then 
+    meColor = C.selectedName 
+  end
   text(COL_ME_X, y, item.me, meColor, bgColor)
   
   local coinaColor = C.yellow
-  if isSelected then coinaColor = C.selectedName end
+  if isSelected then 
+    coinaColor = C.selectedName 
+  end
   text(COL_COINA_X, y, item.coina, coinaColor, bgColor)
   
   local emaColor = C.cyan
-  if isSelected then emaColor = C.selectedName end
+  if isSelected then 
+    emaColor = C.selectedName 
+  end
   text(COL_EMA_X, y, item.ema, emaColor, bgColor)
 end
 
@@ -770,14 +714,15 @@ local function drawInfoBlock()
   sectionHeader(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, "ИНФОРМАЦИЯ", C.sectionLine, C.white)
   
   local item = items[selectedIndex]
-  if not item then return end
+  if not item then 
+    return 
+  end
   
   local maxLen = RIGHT_INNER_W - 8
   local y = INFO_Y + 2
   text(RIGHT_INNER_X, y, "Товар: " .. truncate(item.name, maxLen), C.white, C.bg)
   y = y + 1
   
-  -- Показываем точное количество
   local qtyText = string.format("В ME : %d шт.", item.meRaw)
   text(RIGHT_INNER_X, y, qtyText, C.green, C.bg)
   y = y + 1
@@ -807,7 +752,6 @@ local function drawQuantitySection()
     text(RIGHT_INNER_X + 2, fieldY, display, C.inputFg, C.inputBg)
   end
   
-  -- Итог
   local item = items[selectedIndex]
   local qty = tonumber(quantity) or 0
   local totalCoina = 0
@@ -820,7 +764,6 @@ local function drawQuantitySection()
   local totalText = string.format("Итог: COINA: %.2f | EMA: %.2f", totalCoina, totalEma)
   text(RIGHT_INNER_X, TOTAL_Y, totalText, C.yellow, C.bg)
   
-  -- Кнопки
   local btnW = 12
   local gap = 2
   local btnText = shopMode == "buy" and "[ Купить ]" or "[ Продать ]"
@@ -893,13 +836,17 @@ end
 -- ============================================
 function smoothScroll(steps)
   local total = #items
-  if total <= LIST_H then return end
+  if total <= LIST_H then 
+    return 
+  end
   
   local maxScroll = total - LIST_H
   local newScroll = scrollOffset + steps
   newScroll = math.max(0, math.min(newScroll, maxScroll))
   
-  if newScroll == scrollOffset then return end
+  if newScroll == scrollOffset then 
+    return 
+  end
   
   local step = steps > 0 and 1 or -1
   local target = newScroll
@@ -916,9 +863,15 @@ end
 -- 16. ВЫБОР ЭЛЕМЕНТА
 -- ============================================
 local function selectItem(index)
-  if #items == 0 then return end
-  if index < 1 then index = 1 end
-  if index > #items then index = #items end
+  if #items == 0 then 
+    return 
+  end
+  if index < 1 then 
+    index = 1 
+  end
+  if index > #items then 
+    index = #items 
+  end
   
   selectedIndex = index
   
@@ -943,7 +896,9 @@ end
 -- 17. ПЕРЕКЛЮЧЕНИЕ РЕЖИМОВ
 -- ============================================
 function setShopMode(mode)
-  if mode == shopMode then return end
+  if mode == shopMode then 
+    return 
+  end
   
   shopMode = mode
   selectedIndex = 1
@@ -982,7 +937,6 @@ local function handleClick(x, y)
   searchFocused = false
   qtyFocused = false
   
-  -- Клик по списку товаров
   if x >= LIST_X and x <= LIST_X + LIST_W and y >= LIST_Y and y <= LIST_Y + LIST_H - 1 then
     local row = y - LIST_Y
     local index = scrollOffset + row + 1
@@ -992,7 +946,6 @@ local function handleClick(x, y)
     return
   end
   
-  -- Клик по скроллбару
   if x == SCROLL_X and y >= LIST_Y and y <= LIST_Y + LIST_H - 1 then
     if #items > LIST_H then
       local relY = y - LIST_Y
@@ -1005,7 +958,6 @@ local function handleClick(x, y)
     return
   end
   
-  -- Поиск
   local searchW = 40
   local clearX = 2 + searchW + 2
   if y == 3 then
@@ -1022,7 +974,6 @@ local function handleClick(x, y)
     end
   end
   
-  -- Поле ввода количества
   local fieldY = QTY_Y + 2
   if y == fieldY and x >= RIGHT_INNER_X and x <= RIGHT_INNER_X + RIGHT_INNER_W then
     qtyFocused = true
@@ -1030,14 +981,12 @@ local function handleClick(x, y)
     return
   end
   
-  -- Кнопки
   local btnW = 12
   local gap = 2
   local clearQtyX = RIGHT_INNER_X + btnW + gap
   
   if y == BTN_Y then
     if x >= RIGHT_INNER_X and x < RIGHT_INNER_X + btnW then
-      -- Купить/Продать
       if shopMode == "buy" then
         performBuy()
       else
@@ -1052,7 +1001,6 @@ local function handleClick(x, y)
     end
   end
   
-  -- Кнопки внизу
   if y == BOT_Y then
     local buyX = 2
     local salesX = buyX + 14 + 2
@@ -1068,10 +1016,9 @@ local function handleClick(x, y)
 end
 
 -- ============================================
--- 19. КЛАВИАТУРНЫЙ ВВОД
+-- 19. КЛАВИАТУРА
 -- ============================================
 local function handleKey(char, code)
-  -- Поиск
   if searchFocused then
     if code == keyboard.keys.enter or code == keyboard.keys.tab then
       searchFocused = false
@@ -1092,7 +1039,6 @@ local function handleKey(char, code)
     end
   end
   
-  -- Ввод количества
   if qtyFocused then
     if code == keyboard.keys.enter or code == keyboard.keys.tab then
       qtyFocused = false
@@ -1111,7 +1057,6 @@ local function handleKey(char, code)
     end
   end
   
-  -- Навигация
   if code == keyboard.keys.up then
     selectItem(selectedIndex - 1)
     return
@@ -1126,7 +1071,6 @@ local function handleKey(char, code)
     return
   end
   
-  -- Быстрый ввод количества
   if char and char >= 48 and char <= 57 then
     if #quantity < 8 then
       quantity = quantity .. string.char(char)
@@ -1135,21 +1079,19 @@ local function handleKey(char, code)
     return
   end
   
-  -- Backspace
   if code == keyboard.keys.back then
     quantity = quantity:sub(1, -2)
     drawQuantitySection()
     return
   end
   
-  -- Выход
   if code == keyboard.keys.q or code == keyboard.keys.escape then
     return true
   end
 end
 
 -- ============================================
--- 20. ВСПОМОГАТЕЛЬНЫЕ UI
+-- 20. СООБЩЕНИЯ
 -- ============================================
 local tempMessage = ""
 local tempMessageTimer = nil
@@ -1169,7 +1111,7 @@ function showTempMessage(msg, duration)
 end
 
 -- ============================================
--- 21. ПОЛНАЯ ПЕРЕРИСОВКА
+-- 21. ПЕРЕРИСОВКА
 -- ============================================
 function redrawAll()
   drawBackground()
@@ -1191,7 +1133,6 @@ loadItems()
 filterItems()
 redrawAll()
 
--- Автообновление количества в МЭ каждые 5 секунд
 local updateTimer = event.timer(5, function()
   if ME.available then
     updateMEQuantities()
@@ -1235,9 +1176,6 @@ while true do
   end
 end
 
--- ============================================
--- 24. ВЫХОД
--- ============================================
 if updateTimer then
   event.cancel(updateTimer)
 end
