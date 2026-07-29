@@ -187,36 +187,44 @@ function loadBuyItemsFast()
   
   for _, meItem in ipairs(rawItems) do
     local name = meItem.name
-    if blacklist[name] then goto continue end
-    local qty = meItem.size or 0
-    if qty == 0 then goto continue end
-
-    local damage = meItem.damage or 0
-    local mapKey = name .. ":" .. damage
-    
-    local mapping = catalogData[mapKey]
-    if not mapping then goto continue end
-
-    local displayName = mapping.displayName
-    local priceCoin = mapping.priceCoin or 0
-    local priceEma = mapping.priceEma or 0
-    if priceCoin <= 0 and priceEma <= 0 then goto continue end
-
-    local key = name .. ":" .. damage
-    if tempShopItems[key] then
-      tempShopItems[key].qty = tempShopItems[key].qty + qty
-    else
-      tempShopItems[key] = {
-        internalName = name,
-        displayName = displayName,
-        qty = qty,
-        priceCoin = priceCoin,
-        priceEma = priceEma,
-        damage = damage,
-        canBuy = true
-      }
+    if blacklist[name] then
+      -- пропускаем
+    elseif true then
+      local qty = meItem.size or 0
+      if qty == 0 then
+        -- пропускаем
+      else
+        local damage = meItem.damage or 0
+        local mapKey = name .. ":" .. damage
+        
+        local mapping = catalogData[mapKey]
+        if not mapping then
+          -- пропускаем
+        else
+          local displayName = mapping.displayName
+          local priceCoin = mapping.priceCoin or 0
+          local priceEma = mapping.priceEma or 0
+          if priceCoin <= 0 and priceEma <= 0 then
+            -- пропускаем
+          else
+            local key = name .. ":" .. damage
+            if tempShopItems[key] then
+              tempShopItems[key].qty = tempShopItems[key].qty + qty
+            else
+              tempShopItems[key] = {
+                internalName = name,
+                displayName = displayName,
+                qty = qty,
+                priceCoin = priceCoin,
+                priceEma = priceEma,
+                damage = damage,
+                canBuy = true
+              }
+            end
+          end
+        end
+      end
     end
-    ::continue::
   end
 
   shopItems = {}
