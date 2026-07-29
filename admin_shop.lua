@@ -8,9 +8,6 @@ local fs = require("filesystem")
 local json = require("json")
 local os = require("os")
 
--- ============================================
--- 1. НАСТРОЙКА ЭКРАНА
--- ============================================
 local WIDTH, HEIGHT = gpu.getResolution()
 local maxW, maxH = gpu.maxResolution()
 if WIDTH < maxW or HEIGHT < maxH then
@@ -18,9 +15,6 @@ if WIDTH < maxW or HEIGHT < maxH then
   WIDTH, HEIGHT = gpu.getResolution()
 end
 
--- ============================================
--- 2. ЦВЕТА
--- ============================================
 local C = {
   bg = 0x0C0C0C,
   white = 0xFFFFFF,
@@ -49,22 +43,9 @@ local C = {
   bgHover = 0x1a2a3a,
 }
 
--- ============================================
--- 3. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
--- ============================================
-local function setBG(c) 
-  gpu.setBackground(c) 
-end
-
-local function setFG(c) 
-  gpu.setForeground(c) 
-end
-
-local function fill(x, y, w, h, c) 
-  setBG(c) 
-  gpu.fill(x, y, w, h, " ") 
-end
-
+local function setBG(c) gpu.setBackground(c) end
+local function setFG(c) gpu.setForeground(c) end
+local function fill(x, y, w, h, c) setBG(c) gpu.fill(x, y, w, h, " ") end
 local function text(x, y, str, fg, bg)
   if bg then setBG(bg) end
   if fg then setFG(fg) end
@@ -82,24 +63,16 @@ local function sectionHeader(x, y, w, title, lineColor, titleColor)
 end
 
 local function truncate(str, maxLen)
-  if #str <= maxLen then 
-    return str 
-  end
+  if #str <= maxLen then return str end
   return str:sub(1, maxLen - 3) .. "..."
 end
 
 local function sortableName(name)
   if not name then return "" end
   local lower = string.lower(name)
-  local result = lower:gsub("(%d+)", function(d)
-    return string.format("%08d", tonumber(d))
-  end)
-  return result
+  return lower:gsub("(%d+)", function(d) return string.format("%08d", tonumber(d)) end)
 end
 
--- ============================================
--- 4. КОНФИГУРАЦИЯ UI
--- ============================================
 local TOP_H = 3
 local BOT_H = 3
 local MAIN_Y = 4
@@ -125,16 +98,10 @@ local BTN_Y = TOTAL_Y + 2
 local ACC_Y = BTN_Y + 3
 local BOT_Y = HEIGHT - 2
 
--- ============================================
--- 5. ДАННЫЕ
--- ============================================
 local allItems = {}
 local items = {}
 local shopMode = "buy"
 
--- ============================================
--- 6. СОСТОЯНИЕ
--- ============================================
 local selectedIndex = 1
 local scrollOffset = 0
 local quantity = ""
@@ -146,7 +113,6 @@ local mouseDebounceTimer = nil
 local pendingMouseX = 0
 local pendingMouseY = 0
 
--- Селектор
 local selector = nil
 for addr in component.list("openperipheral_selector") do
   selector = component.proxy(addr)
@@ -159,7 +125,6 @@ if not selector then
   end
 end
 
--- Данные аккаунта
 local account = {
   nick = "Player_777",
   coina = "12500",
@@ -168,13 +133,7 @@ local account = {
   trans = "148",
 }
 
--- ============================================
--- 7. СИСТЕМА МЭ
--- ============================================
-local ME = {
-  interface = nil,
-  available = false
-}
+local ME = { interface = nil, available = false }
 
 function ME.init()
   for addr in component.list("me_interface") do
@@ -193,13 +152,9 @@ function ME.init()
 end
 
 function ME.getItemQuantity(internalName, damage)
-  if not ME.available or not ME.interface then
-    return 0
-  end
-  
+  if not ME.available or not ME.interface then return 0 end
   damage = damage or 0
   local total = 0
-  
   local ok, meItems = pcall(ME.interface.getItemsInNetwork, ME.interface)
   if ok and meItems then
     for _, meItem in ipairs(meItems) do
@@ -209,59 +164,38 @@ function ME.getItemQuantity(internalName, damage)
         total = total + (meItem.size or meItem.qty or 0)
       end
     end
-    return total
   end
-  
-  return 0
+  return total
 end
 
 function ME.exportItem(internalName, damage, quantity, direction)
-  if not ME.available or not ME.interface then
-    return 0
-  end
-  
+  if not ME.available or not ME.interface then return 0 end
   direction = direction or "down"
   damage = damage or 0
-  
   local fingerprint = { id = internalName, dmg = damage }
   local ok, result = pcall(ME.interface.exportItem, ME.interface, fingerprint, direction, quantity)
-  
   if ok then
-    if type(result) == "number" then
-      return result
-    elseif type(result) == "boolean" and result == true then
-      return quantity
-    end
+    if type(result) == "number" then return result end
+    if type(result) == "boolean" and result == true then return quantity end
     return 0
   end
   return 0
 end
 
 function ME.importItem(internalName, damage, quantity, direction)
-  if not ME.available or not ME.interface then
-    return 0
-  end
-  
+  if not ME.available or not ME.interface then return 0 end
   direction = direction or "up"
   damage = damage or 0
-  
   local fingerprint = { id = internalName, dmg = damage }
   local ok, result = pcall(ME.interface.importItem, ME.interface, fingerprint, direction, quantity)
-  
   if ok then
-    if type(result) == "number" then
-      return result
-    elseif type(result) == "boolean" and result == true then
-      return quantity
-    end
+    if type(result) == "number" then return result end
+    if type(result) == "boolean" and result == true then return quantity end
     return 0
   end
   return 0
 end
 
--- ============================================
--- 8. РАБОТА С ФАЙЛАМИ
--- ============================================
 local function loadCatalogFromFile()
   local catalogPath = "/data/catalog.json"
   if fs.exists(catalogPath) then
@@ -270,9 +204,7 @@ local function loadCatalogFromFile()
       local content = file:read("*a")
       file:close()
       local ok, data = pcall(json.decode, content)
-      if ok and data then
-        return data
-      end
+      if ok and data then return data end
     end
   end
   return nil
@@ -286,20 +218,14 @@ local function loadSellItemsFromFile()
       local content = file:read("*a")
       file:close()
       local ok, data = pcall(json.decode, content)
-      if ok and data then
-        return data
-      end
+      if ok and data then return data end
     end
   end
   return nil
 end
 
--- ============================================
--- 9. ЗАГРУЗКА ТОВАРОВ
--- ============================================
 function loadItems()
   local newItems = {}
-  
   ME.init()
   
   if shopMode == "buy" then
@@ -309,10 +235,7 @@ function loadItems()
         local name = itemData.displayName or key
         local meQty = ME.getItemQuantity(key, itemData.damage or 0)
         local meDisplay = tostring(meQty)
-        if meQty >= 1000 then
-          meDisplay = string.format("%.1fk", meQty / 1000)
-        end
-        
+        if meQty >= 1000 then meDisplay = string.format("%.1fk", meQty / 1000) end
         table.insert(newItems, {
           name = name,
           me = meDisplay,
@@ -335,10 +258,7 @@ function loadItems()
         local name = itemData.displayName or itemData.internalName or "Unknown"
         local meQty = ME.getItemQuantity(itemData.internalName, itemData.damage or 0)
         local meDisplay = tostring(meQty)
-        if meQty >= 1000 then
-          meDisplay = string.format("%.1fk", meQty / 1000)
-        end
-        
+        if meQty >= 1000 then meDisplay = string.format("%.1fk", meQty / 1000) end
         table.insert(newItems, {
           name = name,
           me = meDisplay,
@@ -356,57 +276,34 @@ function loadItems()
     end
   end
   
-  table.sort(newItems, function(a, b)
-    return sortableName(a.name) < sortableName(b.name)
-  end)
-  
+  table.sort(newItems, function(a, b) return sortableName(a.name) < sortableName(b.name) end)
   allItems = newItems
   items = {}
-  for i, v in ipairs(allItems) do 
-    items[i] = v 
-  end
+  for i, v in ipairs(allItems) do items[i] = v end
 end
 
--- ============================================
--- 10. ОБНОВЛЕНИЕ МЭ
--- ============================================
 function updateMEQuantities()
-  if not ME.available then 
-    return 
-  end
-  
+  if not ME.available then return end
   for _, item in ipairs(allItems) do
     local qty = ME.getItemQuantity(item.internalName, item.damage or 0)
     item.meRaw = qty
     item.qty = qty
-    
-    if qty >= 1000 then
-      item.me = string.format("%.1fk", qty / 1000)
-    else
-      item.me = tostring(qty)
-    end
+    if qty >= 1000 then item.me = string.format("%.1fk", qty / 1000)
+    else item.me = tostring(qty) end
   end
-  
   drawProductList()
   drawScrollbar()
   drawRightPanel()
 end
 
--- ============================================
--- 11. ФИЛЬТРАЦИЯ
--- ============================================
 local function filterItems()
   items = {}
   if searchQuery == "" then
-    for i, v in ipairs(allItems) do 
-      items[i] = v 
-    end
+    for i, v in ipairs(allItems) do items[i] = v end
   else
     local q = searchQuery:lower()
     for _, v in ipairs(allItems) do
-      if v.name:lower():find(q, 1, true) then
-        items[#items + 1] = v
-      end
+      if v.name:lower():find(q, 1, true) then items[#items + 1] = v end
     end
   end
   selectedIndex = 1
@@ -414,72 +311,42 @@ local function filterItems()
   hoveredIndex = 0
 end
 
--- ============================================
--- 12. СЕЛЕКТОР
--- ============================================
 function updateSelectorDisplay(item)
-  if not selector then 
-    return 
-  end
-  
+  if not selector then return end
   if not item then
     pcall(selector.setSlot, 0, nil)
     pcall(selector.setSlot, 1, nil)
     return
   end
-  
   local raw = item.internalName or item.name
-  if not raw then 
-    return 
-  end
-  
+  if not raw then return end
   local id = raw
-  if not id:find(":") then
-    id = "minecraft:" .. id
-  end
+  if not id:find(":") then id = "minecraft:" .. id end
   local dmg = item.damage or 0
   local stack = { id = id, dmg = dmg }
-  
   pcall(selector.setSlot, 0, stack)
   pcall(selector.setSlot, 1, stack)
 end
 
--- ============================================
--- 13. ПОКУПКА/ПРОДАЖА
--- ============================================
 function performBuy()
   local item = items[selectedIndex]
-  if not item then
-    showTempMessage("❌ Товар не выбран", 2)
-    return
-  end
-  
+  if not item then showTempMessage("❌ Товар не выбран", 2) return end
   local qty = tonumber(quantity) or 0
-  if qty <= 0 then
-    showTempMessage("❌ Введите количество", 2)
-    return
-  end
-  
-  if qty > item.qty then
-    showTempMessage("❌ Недостаточно товара в МЭ", 2)
-    return
-  end
+  if qty <= 0 then showTempMessage("❌ Введите количество", 2) return end
+  if qty > item.qty then showTempMessage("❌ Недостаточно товара в МЭ", 2) return end
   
   local totalCoin = qty * (item.priceCoin or 0)
   local totalEma = qty * (item.priceEma or 0)
-  
   if totalCoin > tonumber(account.coina) or totalEma > tonumber(account.ema) then
     showTempMessage("❌ Недостаточно средств", 2)
     return
   end
   
   local exported = ME.exportItem(item.internalName, item.damage or 0, qty, "down")
-  
   if exported > 0 then
     account.coina = tostring(tonumber(account.coina) - totalCoin)
     account.ema = tostring(tonumber(account.ema) - totalEma)
     account.trans = tostring(tonumber(account.trans) + 1)
-    
     showTempMessage(string.format("✅ Куплено %d шт.", exported), 2)
     updateMEQuantities()
     drawRightPanel()
@@ -490,32 +357,18 @@ end
 
 function performSell()
   local item = items[selectedIndex]
-  if not item then
-    showTempMessage("❌ Товар не выбран", 2)
-    return
-  end
-  
+  if not item then showTempMessage("❌ Товар не выбран", 2) return end
   local qty = tonumber(quantity) or 0
-  if qty <= 0 then
-    showTempMessage("❌ Введите количество", 2)
-    return
-  end
-  
-  if not selector then
-    showTempMessage("❌ Селектор не найден", 2)
-    return
-  end
+  if qty <= 0 then showTempMessage("❌ Введите количество", 2) return end
+  if not selector then showTempMessage("❌ Селектор не найден", 2) return end
   
   local imported = ME.importItem(item.internalName, item.damage or 0, qty, "up")
-  
   if imported > 0 then
     local totalCoin = imported * (item.priceCoin or 0)
     local totalEma = imported * (item.priceEma or 0)
-    
     account.coina = tostring(tonumber(account.coina) + totalCoin)
     account.ema = tostring(tonumber(account.ema) + totalEma)
     account.trans = tostring(tonumber(account.trans) + 1)
-    
     showTempMessage(string.format("✅ Продано %d шт.", imported), 2)
     updateMEQuantities()
     drawRightPanel()
@@ -524,23 +377,17 @@ function performSell()
   end
 end
 
--- ============================================
--- 14. ОТРИСОВКА
--- ============================================
 local function drawBackground()
   fill(1, 1, WIDTH, HEIGHT, C.bg)
 end
 
 local function drawTopBar()
   fill(1, 1, WIDTH, 3, 0x0A0A0A)
-  
   local title = "VIP-SHOP"
   text(math.floor((WIDTH - #title) / 2) + 1, 1, title, C.vipTitle, 0x0A0A0A)
-  
   local meStatus = ME.available and "МЭ: ONLINE" or "МЭ: OFFLINE"
   local meColor = ME.available and C.green or C.red
   text(WIDTH - #meStatus - 2, 1, meStatus, meColor, 0x0A0A0A)
-  
   setFG(C.underLine)
   setBG(0x0A0A0A)
   gpu.set(1, 2, string.rep("=", WIDTH))
@@ -552,17 +399,13 @@ local function drawTopBar()
   setBG(C.bg)
   gpu.set(searchX - 1, searchY, "[" .. string.rep(" ", searchW) .. "]")
   fill(searchX, searchY, searchW, 1, C.inputBg)
-  
   if searchQuery == "" and not searchFocused then
     text(searchX + 1, searchY, "Поиск...", C.darkGray, C.inputBg)
   else
     local display = searchQuery
-    if searchFocused then
-      display = display .. "_"
-    end
+    if searchFocused then display = display .. "_" end
     text(searchX + 1, searchY, display, C.inputFg, C.inputBg)
   end
-  
   local clearX = searchX + searchW + 2
   setBG(C.buttonClear)
   setFG(C.white)
@@ -584,7 +427,6 @@ end
 local function drawLeftHeader()
   local modeText = shopMode == "buy" and "ПОКУПКИ" or "ПРОДАЖИ"
   sectionHeader(2, MAIN_Y + 1, LEFT_W - 3, modeText, C.mainLine, C.white)
-  
   local colY = MAIN_Y + 2
   fill(2, colY, LEFT_W - 3, 1, C.headerBg)
   text(COL_NAME_X, colY, "ТОВАР", C.white, C.headerBg)
@@ -609,90 +451,57 @@ end
 local function drawScrollbar()
   setBG(C.bg)
   setFG(C.darkGray)
-  for y = LIST_Y, LIST_Y + LIST_H - 1 do
-    gpu.set(SCROLL_X, y, " ")
-  end
-  
+  for y = LIST_Y, LIST_Y + LIST_H - 1 do gpu.set(SCROLL_X, y, " ") end
   local maxScroll = math.max(0, #items - LIST_H)
-  if #items <= LIST_H then
-    return
-  end
-  
+  if #items <= LIST_H then return end
   local thumbH = math.max(3, math.floor(LIST_H * 0.25))
   local thumbY = LIST_Y
-  if maxScroll > 0 then
-    thumbY = LIST_Y + math.floor((scrollOffset / maxScroll) * (LIST_H - thumbH))
-  end
-  
+  if maxScroll > 0 then thumbY = LIST_Y + math.floor((scrollOffset / maxScroll) * (LIST_H - thumbH)) end
   setBG(C.accent)
   for i = 0, thumbH - 1 do
     local yy = thumbY + i
-    if yy >= LIST_Y and yy <= LIST_Y + LIST_H - 1 then
-      gpu.set(SCROLL_X, yy, " ")
-    end
+    if yy >= LIST_Y and yy <= LIST_Y + LIST_H - 1 then gpu.set(SCROLL_X, yy, " ") end
   end
   setBG(C.bg)
 end
 
 local function drawItemRow(index, y)
   local item = items[index]
-  if not item then 
-    return 
-  end
-  
+  if not item then return end
   local isSelected = (index == selectedIndex)
   local isHovered = (index == hoveredIndex)
-  
   local bgColor = C.bg
-  if isSelected then
-    bgColor = C.selectedBg
-  elseif isHovered then
-    bgColor = C.bgHover
-  end
-  
+  if isSelected then bgColor = C.selectedBg
+  elseif isHovered then bgColor = C.bgHover end
   fill(LIST_X, y, LIST_W, 1, bgColor)
   
   local nameColor = isSelected and C.selectedName or (isHovered and C.white or C.white)
   local markerColor = item.star and C.star or C.darkGray
   local marker = item.star and "* " or "- "
-  
-  if isSelected then
-    text(COL_NAME_X, y, "> ", C.selectedName, bgColor)
-  else
-    text(COL_NAME_X, y, marker, markerColor, bgColor)
-  end
+  if isSelected then text(COL_NAME_X, y, "> ", C.selectedName, bgColor)
+  else text(COL_NAME_X, y, marker, markerColor, bgColor) end
   
   local maxNameLen = COL_ME_X - COL_NAME_X - 2
   local displayName = truncate(item.name, maxNameLen - 2)
   text(COL_NAME_X + 2, y, displayName, nameColor, bgColor)
   
   local meColor = C.green
-  if item.meRaw == 0 then
-    meColor = C.red
-  elseif item.meRaw < 10 then
-    meColor = C.yellow
-  end
-  if isSelected then 
-    meColor = C.selectedName 
-  end
+  if item.meRaw == 0 then meColor = C.red
+  elseif item.meRaw < 10 then meColor = C.yellow end
+  if isSelected then meColor = C.selectedName end
   text(COL_ME_X, y, item.me, meColor, bgColor)
   
   local coinaColor = C.yellow
-  if isSelected then 
-    coinaColor = C.selectedName 
-  end
+  if isSelected then coinaColor = C.selectedName end
   text(COL_COINA_X, y, item.coina, coinaColor, bgColor)
   
   local emaColor = C.cyan
-  if isSelected then 
-    emaColor = C.selectedName 
-  end
+  if isSelected then emaColor = C.selectedName end
   text(COL_EMA_X, y, item.ema, emaColor, bgColor)
 end
 
 local function drawProductList()
   fill(LIST_X, LIST_Y, LIST_W, LIST_H, C.bg)
-  
   if #items == 0 then
     local msg = "ПО ТВОЕМУ ЗАПРОСУ, НИЧЕГО НЕ НАЙДЕНО!"
     local mx = LIST_X + math.floor((LIST_W - #msg) / 2)
@@ -700,33 +509,22 @@ local function drawProductList()
     text(mx, my, msg, C.notFound, C.bg)
     return
   end
-  
   local startIdx = scrollOffset + 1
   local endIdx = math.min(#items, startIdx + LIST_H - 1)
-  
-  for i = startIdx, endIdx do
-    drawItemRow(i, LIST_Y + (i - startIdx))
-  end
+  for i = startIdx, endIdx do drawItemRow(i, LIST_Y + (i - startIdx)) end
 end
 
 local function drawInfoBlock()
   fill(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, 7, C.bg)
   sectionHeader(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, "ИНФОРМАЦИЯ", C.sectionLine, C.white)
-  
   local item = items[selectedIndex]
-  if not item then 
-    return 
-  end
-  
+  if not item then return end
   local maxLen = RIGHT_INNER_W - 8
   local y = INFO_Y + 2
   text(RIGHT_INNER_X, y, "Товар: " .. truncate(item.name, maxLen), C.white, C.bg)
   y = y + 1
-  
-  local qtyText = string.format("В ME : %d шт.", item.meRaw)
-  text(RIGHT_INNER_X, y, qtyText, C.green, C.bg)
+  text(RIGHT_INNER_X, y, string.format("В ME : %d шт.", item.meRaw), C.green, C.bg)
   y = y + 1
-  
   text(RIGHT_INNER_X, y, "COINA: " .. item.coina, C.yellow, C.bg)
   y = y + 1
   text(RIGHT_INNER_X, y, "EMA  : " .. item.ema, C.cyan, C.bg)
@@ -741,14 +539,11 @@ local function drawQuantitySection()
   setBG(C.bg)
   gpu.set(RIGHT_INNER_X, fieldY, "[" .. string.rep(" ", RIGHT_INNER_W - 2) .. "]")
   fill(RIGHT_INNER_X + 1, fieldY, RIGHT_INNER_W - 2, 1, C.inputBg)
-  
   if quantity == "" then
     text(RIGHT_INNER_X + 2, fieldY, "Введите количество...", C.darkGray, C.inputBg)
   else
     local display = quantity
-    if qtyFocused then
-      display = display .. "_"
-    end
+    if qtyFocused then display = display .. "_" end
     text(RIGHT_INNER_X + 2, fieldY, display, C.inputFg, C.inputBg)
   end
   
@@ -760,20 +555,16 @@ local function drawQuantitySection()
     totalCoina = qty * (tonumber(item.coina) or 0)
     totalEma = qty * (tonumber(item.ema) or 0)
   end
-  
-  local totalText = string.format("Итог: COINA: %.2f | EMA: %.2f", totalCoina, totalEma)
-  text(RIGHT_INNER_X, TOTAL_Y, totalText, C.yellow, C.bg)
+  text(RIGHT_INNER_X, TOTAL_Y, string.format("Итог: COINA: %.2f | EMA: %.2f", totalCoina, totalEma), C.yellow, C.bg)
   
   local btnW = 12
   local gap = 2
   local btnText = shopMode == "buy" and "[ Купить ]" or "[ Продать ]"
   local btnColor = shopMode == "buy" and C.buttonBuy or C.buttonSales
-  
   setBG(btnColor)
   setFG(C.white)
   gpu.fill(RIGHT_INNER_X, BTN_Y, btnW, 1, " ")
   gpu.set(RIGHT_INNER_X + 1, BTN_Y, btnText)
-  
   setBG(C.buttonClear)
   setFG(C.white)
   gpu.fill(RIGHT_INNER_X + btnW + gap, BTN_Y, btnW, 1, " ")
@@ -783,7 +574,6 @@ end
 local function drawAccountInfo()
   fill(RIGHT_INNER_X, ACC_Y, RIGHT_INNER_W, 8, C.bg)
   sectionHeader(RIGHT_INNER_X, ACC_Y, RIGHT_INNER_W, "АККАУНТ", C.sectionLine, C.white)
-  
   local y = ACC_Y + 2
   text(RIGHT_INNER_X, y, "Имя: " .. account.nick, C.white, C.bg)
   y = y + 1
@@ -805,18 +595,14 @@ local function drawBottomBar()
   setFG(C.mainLine)
   setBG(C.bg)
   gpu.set(1, BOT_Y - 1, "+" .. string.rep("=", WIDTH - 2) .. "+")
-  
   local btnW = 14
   local gap = 2
-  local leftMargin = 2
-  
-  local buyX = leftMargin
+  local buyX = 2
   local buyColor = shopMode == "buy" and C.buttonBuy or C.bg
   setBG(buyColor)
   setFG(C.white)
   gpu.fill(buyX, BOT_Y, btnW, 1, " ")
   gpu.set(buyX + 2, BOT_Y, "[ Покупки ]")
-  
   local salesX = buyX + btnW + gap
   local salesColor = shopMode == "sell" and C.buttonSales or C.bg
   setBG(salesColor)
@@ -831,26 +617,15 @@ local function drawBottomBorder()
   gpu.set(1, HEIGHT, "+" .. string.rep("=", WIDTH - 2) .. "+")
 end
 
--- ============================================
--- 15. ПЛАВНЫЙ СКРОЛЛ
--- ============================================
 function smoothScroll(steps)
   local total = #items
-  if total <= LIST_H then 
-    return 
-  end
-  
+  if total <= LIST_H then return end
   local maxScroll = total - LIST_H
   local newScroll = scrollOffset + steps
   newScroll = math.max(0, math.min(newScroll, maxScroll))
-  
-  if newScroll == scrollOffset then 
-    return 
-  end
-  
+  if newScroll == scrollOffset then return end
   local step = steps > 0 and 1 or -1
   local target = newScroll
-  
   while scrollOffset ~= target do
     scrollOffset = scrollOffset + step
     drawProductList()
@@ -859,47 +634,24 @@ function smoothScroll(steps)
   end
 end
 
--- ============================================
--- 16. ВЫБОР ЭЛЕМЕНТА
--- ============================================
 local function selectItem(index)
-  if #items == 0 then 
-    return 
-  end
-  if index < 1 then 
-    index = 1 
-  end
-  if index > #items then 
-    index = #items 
-  end
-  
+  if #items == 0 then return end
+  if index < 1 then index = 1 end
+  if index > #items then index = #items end
   selectedIndex = index
-  
-  if selectedIndex - 1 < scrollOffset then
-    scrollOffset = selectedIndex - 1
-  elseif selectedIndex > scrollOffset + LIST_H then
-    scrollOffset = selectedIndex - LIST_H
-  end
-  
+  if selectedIndex - 1 < scrollOffset then scrollOffset = selectedIndex - 1
+  elseif selectedIndex > scrollOffset + LIST_H then scrollOffset = selectedIndex - LIST_H end
   quantity = ""
   hoveredIndex = 0
-  
   local item = items[selectedIndex]
   updateSelectorDisplay(item)
-  
   drawProductList()
   drawScrollbar()
   drawRightPanel()
 end
 
--- ============================================
--- 17. ПЕРЕКЛЮЧЕНИЕ РЕЖИМОВ
--- ============================================
 function setShopMode(mode)
-  if mode == shopMode then 
-    return 
-  end
-  
+  if mode == shopMode then return end
   shopMode = mode
   selectedIndex = 1
   scrollOffset = 0
@@ -908,15 +660,11 @@ function setShopMode(mode)
   searchQuery = ""
   searchFocused = false
   qtyFocused = false
-  
   loadItems()
   filterItems()
   redrawAll()
 end
 
--- ============================================
--- 18. ОБРАБОТЧИКИ СОБЫТИЙ
--- ============================================
 local function processMouseMove(x, y)
   if y >= LIST_Y and y <= LIST_Y + LIST_H - 1 and x >= LIST_X and x <= LIST_X + LIST_W then
     local row = y - LIST_Y
@@ -940,9 +688,7 @@ local function handleClick(x, y)
   if x >= LIST_X and x <= LIST_X + LIST_W and y >= LIST_Y and y <= LIST_Y + LIST_H - 1 then
     local row = y - LIST_Y
     local index = scrollOffset + row + 1
-    if index >= 1 and index <= #items then
-      selectItem(index)
-    end
+    if index >= 1 and index <= #items then selectItem(index) end
     return
   end
   
@@ -987,11 +733,8 @@ local function handleClick(x, y)
   
   if y == BTN_Y then
     if x >= RIGHT_INNER_X and x < RIGHT_INNER_X + btnW then
-      if shopMode == "buy" then
-        performBuy()
-      else
-        performSell()
-      end
+      if shopMode == "buy" then performBuy()
+      else performSell() end
       return
     end
     if x >= clearQtyX and x < clearQtyX + btnW then
@@ -1004,20 +747,11 @@ local function handleClick(x, y)
   if y == BOT_Y then
     local buyX = 2
     local salesX = buyX + 14 + 2
-    if x >= buyX and x < buyX + 14 then
-      setShopMode("buy")
-      return
-    end
-    if x >= salesX and x < salesX + 14 then
-      setShopMode("sell")
-      return
-    end
+    if x >= buyX and x < buyX + 14 then setShopMode("buy") return end
+    if x >= salesX and x < salesX + 14 then setShopMode("sell") return end
   end
 end
 
--- ============================================
--- 19. КЛАВИАТУРА
--- ============================================
 local function handleKey(char, code)
   if searchFocused then
     if code == keyboard.keys.enter or code == keyboard.keys.tab then
@@ -1085,22 +819,15 @@ local function handleKey(char, code)
     return
   end
   
-  if code == keyboard.keys.q or code == keyboard.keys.escape then
-    return true
-  end
+  if code == keyboard.keys.q or code == keyboard.keys.escape then return true end
 end
 
--- ============================================
--- 20. СООБЩЕНИЯ
--- ============================================
 local tempMessage = ""
 local tempMessageTimer = nil
 
 function showTempMessage(msg, duration)
   tempMessage = msg
-  if tempMessageTimer then
-    event.cancel(tempMessageTimer)
-  end
+  if tempMessageTimer then event.cancel(tempMessageTimer) end
   tempMessageTimer = event.timer(duration or 2, function()
     tempMessage = ""
     tempMessageTimer = nil
@@ -1110,9 +837,6 @@ function showTempMessage(msg, duration)
   drawBottomBar()
 end
 
--- ============================================
--- 21. ПЕРЕРИСОВКА
--- ============================================
 function redrawAll()
   drawBackground()
   drawTopBar()
@@ -1126,23 +850,15 @@ function redrawAll()
   drawSeparator()
 end
 
--- ============================================
--- 22. ИНИЦИАЛИЗАЦИЯ
--- ============================================
 loadItems()
 filterItems()
 redrawAll()
 
 local updateTimer = event.timer(5, function()
-  if ME.available then
-    updateMEQuantities()
-  end
+  if ME.available then updateMEQuantities() end
   return true
 end)
 
--- ============================================
--- 23. ГЛАВНЫЙ ЦИКЛ
--- ============================================
 while true do
   local ev = {event.pull(0.05)}
   local name = ev[1]
@@ -1157,12 +873,10 @@ while true do
   elseif name == "mouse_move" then
     pendingMouseX = ev[3]
     pendingMouseY = ev[4]
-    
     if mouseDebounceTimer then
       event.cancel(mouseDebounceTimer)
       mouseDebounceTimer = nil
     end
-    
     mouseDebounceTimer = event.timer(0.05, function()
       mouseDebounceTimer = nil
       processMouseMove(pendingMouseX, pendingMouseY)
@@ -1170,16 +884,11 @@ while true do
     end)
   elseif name == "key_down" then
     local _, _, char, code = table.unpack(ev)
-    if handleKey(char, code) then
-      break
-    end
+    if handleKey(char, code) then break end
   end
 end
 
-if updateTimer then
-  event.cancel(updateTimer)
-end
-
+if updateTimer then event.cancel(updateTimer) end
 term.clear()
 gpu.setForeground(0xFFFFFF)
 gpu.setBackground(0x000000)
