@@ -1,5 +1,6 @@
--- v3.0 - Полностью обновлённый GUI динамического обменника
+-- v3.2 - ПОЛНЫЙ GUI ORE EXCHANGER: 6-строчный логотип, 15 цветных шкал, 160x50
 -- Интерфейс автоматически использует максимальное разрешение видеокарты.
+-- BUILD: ORE_EXCHANGER_GUI_6LINE_15ORES_3M
 
 local unicode = require("unicode")
 local computer = require("computer")
@@ -44,9 +45,8 @@ local TOTAL_FILE = "total_ore.txt"
 -- ============================================================
 local C = {
     bg          = 0x0C0C0C,
-    panel       = 0x101820,
-    header      = 0x11262B,
-    border      = 0x27BDEC,
+    logo        = 0x00E5C9,
+    border      = 0x55FFFF,
     title       = 0x55FFFF,
     white       = 0xFFFFFF,
     gray        = 0x8A9499,
@@ -55,12 +55,10 @@ local C = {
     yellow      = 0xFFFF55,
     red         = 0xFF5555,
     cyan        = 0x55FFFF,
-    barFill     = 0x00D084,
-    barEmpty    = 0x354047,
+    barEmpty    = 0x30383D,
     ratio       = 0xFFD75F,
     stock       = 0xFFFFFF
 }
-
 -- ============================================================
 -- СПИСОК РУД
 -- ============================================================
@@ -82,42 +80,52 @@ local ore_list = {
     { take = { label = "Дракониевая руда", name = "DraconicEvolution:draconiumOre", amount = 1 }, give = { label = "Дракониевая пыль", name = "DraconicEvolution:draconiumDust", amount = 2 } }
 }
 
--- Целевой запас для полосы заполнения.
--- Для новой руды можно указать поле limit прямо в exchanger_ores.txt.
-local STOCK_LIMITS = {
-    ["minecraft:diamond"] = 10000,
-    ["minecraft:iron_ingot"] = 500,
-    ["minecraft:gold_ingot"] = 500,
-    ["minecraft:dye:4"] = 5000,
-    ["minecraft:redstone_block"] = 2000,
-    ["minecraft:coal"] = 5000,
-    ["appliedenergistics2:item.ItemMultiMaterial:0"] = 5000,
-    ["appliedenergistics2:item.ItemMultiMaterial:1"] = 2500,
-    ["minecraft:quartz"] = 5000,
-    ["IC2:itemIngot:0"] = 500,
-    ["IC2:itemIngot:1"] = 500,
-    ["IC2:itemIngot:6"] = 500,
-    ["ThermalFoundation:material:37"] = 500,
-    ["ThermalFoundation:material:68"] = 500,
-    ["DraconicEvolution:draconiumDust"] = 5000
-}
+-- Целевой запас для каждой шкалы заполнения.
+-- Поле limit в exchanger_ores.txt может переопределить значение для отдельной позиции.
+local DEFAULT_STOCK_LIMIT = 3000000
 
 local SHORT_NAMES = {
     ["minecraft:diamond_ore"] = "Алмаз",
     ["minecraft:iron_ore"] = "Железо",
     ["minecraft:gold_ore"] = "Золото",
-    ["minecraft:lapis_ore"] = "Лазурит",
-    ["minecraft:redstone_ore"] = "Редстоун",
+    ["minecraft:lapis_ore"] = "Лазур",
+    ["minecraft:redstone_ore"] = "Редст",
     ["minecraft:coal_ore"] = "Уголь",
-    ["appliedenergistics2:tile.OreQuartz"] = "Ист. кварц",
-    ["appliedenergistics2:tile.OreQuartzCharged"] = "Заряж. кварц",
+    ["appliedenergistics2:tile.OreQuartz"] = "Ист.кв.",
+    ["appliedenergistics2:tile.OreQuartzCharged"] = "Зар.кв.",
     ["minecraft:quartz_ore"] = "Кварц",
     ["IC2:blockOreCopper"] = "Медь",
     ["IC2:blockOreTin"] = "Олово",
     ["ThermalFoundation:Ore:2"] = "Серебро",
     ["ThermalFoundation:Ore:5"] = "Платина",
     ["ThermalFoundation:Ore:4"] = "Никель",
-    ["DraconicEvolution:draconiumOre"] = "Драконий"
+    ["DraconicEvolution:draconiumOre"] = "Дракон"
+}
+
+
+-- Индивидуальные цвета полос для стандартных руд.
+local BAR_COLORS = {
+    ["minecraft:diamond_ore"] = 0x55FFFF,
+    ["minecraft:iron_ore"] = 0xD8D8D8,
+    ["minecraft:gold_ore"] = 0xFFFF55,
+    ["minecraft:lapis_ore"] = 0x3366FF,
+    ["minecraft:redstone_ore"] = 0xFF3333,
+    ["minecraft:coal_ore"] = 0x666666,
+    ["appliedenergistics2:tile.OreQuartz"] = 0xE8F8FF,
+    ["appliedenergistics2:tile.OreQuartzCharged"] = 0x00AFFF,
+    ["minecraft:quartz_ore"] = 0xFFF4D6,
+    ["IC2:blockOreCopper"] = 0xFF9A3C,
+    ["IC2:blockOreTin"] = 0xAADDFF,
+    ["ThermalFoundation:Ore:2"] = 0xC0C0C0,
+    ["ThermalFoundation:Ore:5"] = 0x66E0D0,
+    ["ThermalFoundation:Ore:4"] = 0xD4C060,
+    ["DraconicEvolution:draconiumOre"] = 0xAA55FF
+}
+
+-- Запасная палитра для руд, добавленных через админское сканирование.
+local BAR_PALETTE = {
+    0x55FFFF, 0xFFFF55, 0x55FF55, 0xFF5555, 0xAA55FF,
+    0xFF9A3C, 0x3366FF, 0xAADDFF, 0xFF55FF, 0xD8D8D8
 }
 
 -- ============================================================
@@ -202,13 +210,14 @@ local function getOreName(ore)
 end
 
 local function getStockLimit(ore)
-    local customLimit = tonumber(ore.limit or ore.stockLimit or ore.maxStock)
-    if customLimit and customLimit > 0 then
-        return customLimit
-    end
+    return DEFAULT_STOCK_LIMIT
+end
 
-    local key = itemKey(ore.give.name, ore.give.damage)
-    return STOCK_LIMITS[key] or STOCK_LIMITS[ore.give.name] or 1000
+local function getBarColor(ore, index)
+    local key = itemKey(ore.take.name, ore.take.damage)
+    return BAR_COLORS[key]
+        or BAR_COLORS[ore.take.name]
+        or BAR_PALETTE[((index - 1) % #BAR_PALETTE) + 1]
 end
 
 -- ============================================================
@@ -274,41 +283,62 @@ local function saveOres(ores)
 end
 
 -- ============================================================
--- ДИНАМИЧЕСКАЯ РАЗМЕТКА GUI
+-- GUI ORE EXCHANGER
 -- ============================================================
+local LOGO_LINES = {
+    "░█████╗░██████╗░███████╗  ███████╗██╗░░██╗░█████╗░██╗░░██╗░█████╗░███╗░░██╗░██████╗░███████╗██████╗░",
+    "██╔══██╗██╔══██╗██╔════╝  ██╔════╝╚██╗██╔╝██╔══██╗██║░░██║██╔══██╗████╗░██║██╔════╝░██╔════╝██╔══██╗",
+    "██║░░██║██████╔╝█████╗░░  █████╗░░░╚███╔╝░██║░░╚═╝███████║███████║██╔██╗██║██║░░██╗░█████╗░░██████╔╝",
+    "██║░░██║██╔══██╗██╔══╝░░  ██╔══╝░░░██╔██╗░██║░░██╗██╔══██║██╔══██║██║╚████║██║░░╚██╗██╔══╝░░██╔══██╗",
+    "╚█████╔╝██║░░██║███████╗  ███████╗██╔╝╚██╗╚█████╔╝██║░░██║██║░░██║██║░╚███║╚██████╔╝███████╗██║░░██║",
+    "░╚════╝░╚═╝░░╚═╝╚══════╝  ╚══════╝╚═╝░░╚═╝░╚════╝░╚═╝░░╚═╝╚═╝░░╚═╝╚═╝░░╚══╝░╚═════╝░╚══════╝╚═╝░░╚═╝"
+}
+
 local UI = {}
 
 local function calculateLayout()
-    UI.top = 1
-    UI.headerY = 2
-    UI.headerSeparatorY = 3
-    UI.firstRowY = 4
-    UI.statusSeparatorY = h - 2
-    UI.statusY = h - 1
-    UI.bottomY = h
-
-    local innerWidth = w - 2
-    UI.nameW = clamp(math.floor(innerWidth * 0.18), 12, 28)
-    UI.stockW = clamp(math.floor(innerWidth * 0.14), 12, 19)
-    UI.ratioW = clamp(math.floor(innerWidth * 0.12), 11, 16)
-    UI.barW = innerWidth - UI.nameW - UI.stockW - UI.ratioW - 3
-
-    if UI.barW < 12 then
-        local missing = 12 - UI.barW
-        UI.nameW = math.max(8, UI.nameW - missing)
-        UI.barW = innerWidth - UI.nameW - UI.stockW - UI.ratioW - 3
+    UI.logoY = 1
+    UI.logoW = 0
+    for _, line in ipairs(LOGO_LINES) do
+        UI.logoW = math.max(UI.logoW, unicode.len(line))
     end
+    UI.logoX = math.max(1, math.floor((w - UI.logoW) / 2) + 1)
 
-    UI.sep1 = 2 + UI.nameW
-    UI.sep2 = UI.sep1 + UI.barW + 1
+    UI.titleY = UI.logoY + #LOGO_LINES + 1
+    UI.tableTopY = UI.titleY + 2
+
+    UI.nameW = 8
+    UI.stockW = 10
+    UI.ratioW = 12
+
+    -- На экране 160×50 ширина прогресса будет ровно 52 символа, как в макете.
+    local desiredProgressW = 52
+    local fixedWidth = 1 + UI.nameW + 1 + UI.stockW + 1 + UI.ratioW + 1
+    UI.progressW = math.min(desiredProgressW, math.max(18, w - fixedWidth - 2))
+
+    UI.tableW = 1 + UI.nameW + 1 + UI.progressW + 1 + UI.stockW + 1 + UI.ratioW + 1
+    UI.tableX = math.max(1, math.floor((w - UI.tableW) / 2) + 1)
+    UI.tableRight = UI.tableX + UI.tableW - 1
+
+    UI.sep1 = UI.tableX + UI.nameW + 1
+    UI.sep2 = UI.sep1 + UI.progressW + 1
     UI.sep3 = UI.sep2 + UI.stockW + 1
 
-    UI.nameX = 2
-    UI.barX = UI.sep1 + 1
+    UI.nameX = UI.tableX + 1
+    UI.progressX = UI.sep1 + 1
     UI.stockX = UI.sep2 + 1
     UI.ratioX = UI.sep3 + 1
 
-    UI.visibleRows = math.max(0, UI.statusSeparatorY - UI.firstRowY)
+    UI.headerY = UI.tableTopY + 1
+    UI.headerSeparatorY = UI.tableTopY + 2
+    UI.firstRowY = UI.tableTopY + 3
+
+    -- Одна строка руды + одна пустая строка. После таблицы оставляем две строки статуса.
+    local maxVisible = math.floor((h - UI.firstRowY - 2) / 2)
+    UI.visibleRows = math.max(1, math.min(#ore_list, maxVisible))
+    UI.tableBottomY = UI.firstRowY + UI.visibleRows * 2 - 1
+    UI.statusY = UI.tableBottomY + 2
+    UI.hintY = UI.statusY + 1
 end
 
 calculateLayout()
@@ -319,96 +349,160 @@ local currentStatus = {
     marker = C.green
 }
 
-local function drawHeader()
-    gpu.setBackground(C.header)
-    gpu.fill(2, UI.headerY, w - 2, 1, " ")
-
-    local title = "↻ ДИНАМИЧЕСКИЙ ОБМЕННИК"
-    local total = "[Общий счёт: " .. formatNumber(total_ores_global) .. " руды]"
-    local totalX = w - unicode.len(total) - 2
-    local availableTitleWidth = math.max(1, totalX - 4)
-
-    title = fitText(title, availableTitleWidth)
-    setText(3, UI.headerY, title, C.title, C.header)
-    setText(totalX, UI.headerY, total, C.white, C.header)
-end
-
-local function drawTopBorder()
-    gpu.setBackground(C.bg)
-    gpu.setForeground(C.border)
-    gpu.set(1, UI.top, "┌" .. string.rep("─", w - 2) .. "┐")
-end
-
-local function drawHeaderSeparator()
-    gpu.setBackground(C.bg)
-    gpu.setForeground(C.border)
-
-    local line = "├"
+local function makeBorder(left, middle1, middle2, middle3, right)
+    return left
         .. string.rep("─", UI.nameW)
-        .. "┬"
-        .. string.rep("─", UI.barW)
-        .. "┬"
+        .. middle1
+        .. string.rep("─", UI.progressW)
+        .. middle2
         .. string.rep("─", UI.stockW)
-        .. "┬"
+        .. middle3
         .. string.rep("─", UI.ratioW)
-        .. "┤"
-
-    gpu.set(1, UI.headerSeparatorY, line)
+        .. right
 end
 
-local function drawStatusSeparator()
+local function makeRow(name, progress, stock, ratio)
+    return "│"
+        .. padRight(name, UI.nameW)
+        .. "│"
+        .. padRight(progress, UI.progressW)
+        .. "│"
+        .. padRight(stock, UI.stockW)
+        .. "│"
+        .. padRight(ratio, UI.ratioW)
+        .. "│"
+end
+
+local function drawLogo()
     gpu.setBackground(C.bg)
-    gpu.setForeground(C.border)
+    gpu.setForeground(C.logo)
 
-    local line = "├"
-        .. string.rep("─", UI.nameW)
-        .. "┴"
-        .. string.rep("─", UI.barW)
-        .. "┴"
-        .. string.rep("─", UI.stockW)
-        .. "┴"
-        .. string.rep("─", UI.ratioW)
-        .. "┤"
-
-    gpu.set(1, UI.statusSeparatorY, line)
-end
-
-local function drawBottomBorder()
-    gpu.setBackground(C.bg)
-    gpu.setForeground(C.border)
-    gpu.set(1, UI.bottomY, "└" .. string.rep("─", w - 2) .. "┘")
-end
-
-local function drawBodyGrid()
-    gpu.setBackground(C.panel)
-
-    for y = UI.firstRowY, UI.statusSeparatorY - 1 do
-        gpu.fill(2, y, w - 2, 1, " ")
-        gpu.setForeground(C.border)
-        gpu.setBackground(C.bg)
-        gpu.set(1, y, "│")
-        gpu.set(UI.sep1, y, "│")
-        gpu.set(UI.sep2, y, "│")
-        gpu.set(UI.sep3, y, "│")
-        gpu.set(w, y, "│")
+    for index, line in ipairs(LOGO_LINES) do
+        local visible = fitText(line, w)
+        local x = math.max(1, math.floor((w - unicode.len(visible)) / 2) + 1)
+        gpu.fill(1, UI.logoY + index - 1, w, 1, " ")
+        gpu.set(x, UI.logoY + index - 1, visible)
     end
 end
 
-local function drawStatus()
-    gpu.setBackground(C.panel)
-    gpu.fill(2, UI.statusY, w - 2, 1, " ")
+local function drawHeader()
+    calculateLayout()
+    gpu.setBackground(C.bg)
+    gpu.fill(1, UI.titleY, w, 1, " ")
+
+    local title = "↻ ORE EXCHANGER v2.5"
+    local total = "[Общий счёт: " .. formatNumber(total_ores_global) .. " руды]"
+    local combined = title .. "  " .. total
+
+    setText(UI.tableX, UI.titleY, fitText(combined, UI.tableW), C.title, C.bg)
+end
+
+local function drawTableFrame()
+    gpu.setBackground(C.bg)
+    gpu.setForeground(C.border)
+
+    gpu.set(UI.tableX, UI.tableTopY, makeBorder("┌", "┬", "┬", "┬", "┐"))
+    gpu.set(UI.tableX, UI.headerY, makeRow(" РУДА", " ПРОГРЕСС", " В МЭ", " КУРС"))
+    gpu.set(UI.tableX, UI.headerSeparatorY, makeBorder("├", "┼", "┼", "┼", "┤"))
+end
+
+local function drawOreRow(ore, index)
+    local y = UI.firstRowY + (index - 1) * 2
+    if y >= UI.tableBottomY then return end
+
+    local stock = math.max(0, tonumber(ore.size) or 0)
+    local limit = math.max(1, getStockLimit(ore))
+    local fraction = clamp(stock / limit, 0, 1)
+
+    -- Внутри прогресс-колонки: пробел, [, шкала, ], пробел.
+    local barWidth = math.max(1, UI.progressW - 4)
+    local filled = math.floor(barWidth * fraction + 0.5)
+    if stock > 0 and filled == 0 then filled = 1 end
+    filled = clamp(filled, 0, barWidth)
+    local empty = barWidth - filled
+
+    gpu.setBackground(C.bg)
+    gpu.fill(UI.tableX, y, UI.tableW, 1, " ")
+
+    gpu.setForeground(C.border)
+    gpu.set(UI.tableX, y, "│")
+    gpu.set(UI.sep1, y, "│")
+    gpu.set(UI.sep2, y, "│")
+    gpu.set(UI.sep3, y, "│")
+    gpu.set(UI.tableRight, y, "│")
+
+    setText(UI.nameX, y, padRight(" " .. getOreName(ore), UI.nameW), C.white, C.bg)
+
+    local bracketX = UI.progressX + 1
+    setText(bracketX, y, "[", C.gray, C.bg)
+    if filled > 0 then
+        setText(bracketX + 1, y, string.rep("█", filled), getBarColor(ore, index), C.bg)
+    end
+    if empty > 0 then
+        setText(bracketX + 1 + filled, y, string.rep("░", empty), C.barEmpty, C.bg)
+    end
+    setText(bracketX + 1 + barWidth, y, "]", C.gray, C.bg)
+
+    local stockText = formatNumber(stock) .. "/" .. formatNumber(limit)
+    setText(UI.stockX, y, padRight(" " .. stockText, UI.stockW), C.stock, C.bg)
+
+    local ratioText = tostring(ore.take.amount or 0) .. " → " .. tostring(ore.give.amount or 0)
+    setText(UI.ratioX, y, padRight(" " .. ratioText, UI.ratioW), C.ratio, C.bg)
+
+    -- Пустая строка между позициями, как в макете.
+    local blankY = y + 1
+    if blankY < UI.tableBottomY then
+        gpu.fill(UI.tableX, blankY, UI.tableW, 1, " ")
+        gpu.setForeground(C.border)
+        gpu.set(UI.tableX, blankY, "│")
+        gpu.set(UI.sep1, blankY, "│")
+        gpu.set(UI.sep2, blankY, "│")
+        gpu.set(UI.sep3, blankY, "│")
+        gpu.set(UI.tableRight, blankY, "│")
+    end
+end
+
+local function drawRows()
+    calculateLayout()
+    drawTableFrame()
+
+    for index = 1, UI.visibleRows do
+        drawOreRow(ore_list[index], index)
+    end
 
     gpu.setBackground(C.bg)
     gpu.setForeground(C.border)
-    gpu.set(1, UI.statusY, "│")
-    gpu.set(w, UI.statusY, "│")
+    gpu.set(UI.tableX, UI.tableBottomY, makeBorder("└", "┴", "┴", "┴", "┘"))
+end
 
-    setText(3, UI.statusY, "[", C.gray, C.panel)
-    setText(4, UI.statusY, "●", currentStatus.marker, C.panel)
-    setText(5, UI.statusY, "]", C.gray, C.panel)
+local function drawStatus()
+    calculateLayout()
+    gpu.setBackground(C.bg)
 
-    local statusWidth = math.max(0, w - 9)
-    setText(7, UI.statusY, fitText(currentStatus.text, statusWidth), currentStatus.color, C.panel)
+    if UI.statusY <= h then
+        gpu.fill(1, UI.statusY, w, 1, " ")
+        setText(UI.tableX + 2, UI.statusY, "[", C.gray, C.bg)
+        setText(UI.tableX + 3, UI.statusY, "●", currentStatus.marker, C.bg)
+        setText(UI.tableX + 4, UI.statusY, "]", C.gray, C.bg)
+        setText(
+            UI.tableX + 6,
+            UI.statusY,
+            fitText(currentStatus.text, math.max(0, UI.tableW - 8)),
+            currentStatus.color,
+            C.bg
+        )
+    end
+
+    if UI.hintY <= h then
+        gpu.fill(1, UI.hintY, w, 1, " ")
+        setText(
+            UI.tableX + 2,
+            UI.hintY,
+            fitText("[Для обмена встаньте на PIM и не сходите]", UI.tableW - 4),
+            C.gray,
+            C.bg
+        )
+    end
 end
 
 local function setStatus(text, color, marker)
@@ -418,92 +512,19 @@ local function setStatus(text, color, marker)
     drawStatus()
 end
 
-local function drawOreRow(ore, rowIndex)
-    local y = UI.firstRowY + rowIndex - 1
-    if y >= UI.statusSeparatorY then return end
-
-    local stock = math.max(0, tonumber(ore.size) or 0)
-    local limit = math.max(1, getStockLimit(ore))
-    local ratio = clamp(stock / limit, 0, 1)
-    local innerBarW = math.max(1, UI.barW - 2)
-    local filled = math.floor(innerBarW * ratio + 0.5)
-    local empty = innerBarW - filled
-
-    gpu.setBackground(C.panel)
-    gpu.fill(UI.nameX, y, UI.nameW, 1, " ")
-    gpu.fill(UI.barX, y, UI.barW, 1, " ")
-    gpu.fill(UI.stockX, y, UI.stockW, 1, " ")
-    gpu.fill(UI.ratioX, y, UI.ratioW, 1, " ")
-
-    local name = padRight(" " .. getOreName(ore), UI.nameW)
-    setText(UI.nameX, y, name, C.white, C.panel)
-
-    local barStartX = UI.barX + 1
-    if filled > 0 then
-        setText(barStartX, y, string.rep("█", filled), C.barFill, C.panel)
-    end
-    if empty > 0 then
-        setText(barStartX + filled, y, string.rep("░", empty), C.barEmpty, C.panel)
-    end
-
-    local stockText = formatNumber(stock) .. "/" .. formatNumber(limit)
-    stockText = fitText(stockText, UI.stockW)
-    setText(centeredX(UI.stockX, UI.stockW, stockText), y, stockText, C.stock, C.panel)
-
-    local ratioText = tostring(ore.take.amount or 0) .. " → " .. tostring(ore.give.amount or 0)
-    ratioText = fitText(ratioText, UI.ratioW)
-    setText(centeredX(UI.ratioX, UI.ratioW, ratioText), y, ratioText, C.ratio, C.panel)
-
-    gpu.setBackground(C.bg)
-    gpu.setForeground(C.border)
-    gpu.set(1, y, "│")
-    gpu.set(UI.sep1, y, "│")
-    gpu.set(UI.sep2, y, "│")
-    gpu.set(UI.sep3, y, "│")
-    gpu.set(w, y, "│")
-end
-
-local function drawRows()
-    drawBodyGrid()
-
-    local rowsToDraw = math.min(#ore_list, UI.visibleRows)
-    for i = 1, rowsToDraw do
-        drawOreRow(ore_list[i], i)
-    end
-
-    if #ore_list > UI.visibleRows and UI.visibleRows > 0 then
-        local hidden = #ore_list - UI.visibleRows + 1
-        local y = UI.statusSeparatorY - 1
-        gpu.setBackground(C.panel)
-        gpu.fill(2, y, w - 2, 1, " ")
-        local text = "… ещё позиций: " .. tostring(hidden)
-        setText(3, y, fitText(text, w - 6), C.gray, C.panel)
-
-        gpu.setBackground(C.bg)
-        gpu.setForeground(C.border)
-        gpu.set(1, y, "│")
-        gpu.set(UI.sep1, y, "│")
-        gpu.set(UI.sep2, y, "│")
-        gpu.set(UI.sep3, y, "│")
-        gpu.set(w, y, "│")
-    end
-end
-
 local function drawInterface()
+    calculateLayout()
     gpu.setBackground(C.bg)
     gpu.setForeground(C.white)
     gpu.fill(1, 1, w, h, " ")
 
-    drawTopBorder()
+    drawLogo()
     drawHeader()
-    drawHeaderSeparator()
     drawRows()
-    drawStatusSeparator()
     drawStatus()
-    drawBottomBorder()
 end
 
--- Совместимая замена старой функции обновления общего счёта.
+-- Обновляет только строку общего счёта после принятия руды.
 local function drawTotalLine()
     drawHeader()
 end
@@ -548,9 +569,7 @@ local function drawInfo(drawType)
     else
         drawHeader()
         drawRows()
-        drawStatusSeparator()
         drawStatus()
-        drawBottomBorder()
     end
 end
 
@@ -864,10 +883,11 @@ local function handleEvent(eventName, ...)
         return
     end
 
-    -- Скрытая админ-зона осталась в правой части строки состояния.
+    -- Скрытая админ-зона находится справа от двух строк состояния.
     if eventName == "touch"
-        and args[2] >= w - 38
-        and args[3] >= h - 1
+        and args[2] >= UI.tableRight - 38
+        and args[3] >= UI.statusY
+        and args[3] <= UI.hintY
         and isAdmin(args[5]) then
         scanExchangeConfiguration()
     end
