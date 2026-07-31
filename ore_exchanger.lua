@@ -1,6 +1,6 @@
--- v3.0.1 - ORE EXCHANGER: новый 12-строчный логотип, 15 цветных шкал, 160x50
+-- v3.0.2 - VIP-SHOP EXCHANGER: блокировка экрана, защита от прерывания, анти-мерцание
 -- Интерфейс автоматически использует максимальное разрешение видеокарты.
--- BUILD: ORE_EXCHANGER_GUI_CENTERED_15ORES_5M
+-- BUILD: VIP_SHOP_EXCHANGER_LOCKED_SAFE_NO_FLICKER
 
 local unicode = require("unicode")
 local computer = require("computer")
@@ -284,6 +284,90 @@ local function saveOres(ores)
 end
 
 -- ============================================================
+-- БЛОКИРОВКА ЭКРАНА И БЕЗОПАСНЫЙ ЦИКЛ
+-- ============================================================
+local pimSession = {
+    active = false,
+    owner = nil
+}
+
+local function lowerText(value)
+    value = tostring(value or "")
+    if unicode and type(unicode.lower) == "function" then
+        local ok, result = pcall(unicode.lower, value)
+        if ok and result then return result end
+    end
+    return string.lower(value)
+end
+
+local function setPimOwner(playerName)
+    if type(playerName) == "string" and playerName ~= "" and playerName ~= "null" then
+        pimSession.active = true
+        pimSession.owner = playerName
+    else
+        pimSession.active = false
+        pimSession.owner = nil
+    end
+end
+
+local function clearPimOwner()
+    pimSession.active = false
+    pimSession.owner = nil
+end
+
+-- Экран принимает действия только от игрока, который открыл текущую PIM-сессию.
+local function isPimOwner(playerName)
+    if not pimSession.active or not pimSession.owner then return false end
+    if type(playerName) ~= "string" or playerName == "" then return false end
+    return lowerText(playerName) == lowerText(pimSession.owner)
+end
+
+local function writeDebugLog(message)
+    pcall(function()
+        local file = io.open(currDir .. "/exchanger_debug.txt", "ab")
+        if file then
+            file:write(string.format("[%s] %s\n", os.date("%Y-%m-%d %H:%M:%S"), tostring(message)))
+            file:close()
+        end
+    end)
+end
+
+-- Ctrl+Alt+C в OpenComputers вызывает interrupted или ошибку event.pull.
+-- Оба варианта перехватываются и не завершают программу.
+local function safeEventPull(timeout)
+    local result = { pcall(event.pull, timeout) }
+    if not result[1] then
+        writeDebugLog("Попытка прервать скрипт заблокирована: " .. tostring(result[2]))
+        return {}
+    end
+
+    table.remove(result, 1)
+    return result
+end
+
+local function safeCall(label, callback, ...)
+    local arguments = { ... }
+    local function runner()
+        return callback(table.unpack(arguments))
+    end
+
+    local ok, result = xpcall(runner, function(err)
+        local trace = tostring(err)
+        if debug and type(debug.traceback) == "function" then
+            trace = debug.traceback(trace, 2)
+        end
+        return trace
+    end)
+
+    if not ok then
+        writeDebugLog("Критическая ошибка [" .. tostring(label) .. "]: " .. tostring(result))
+        return false, result
+    end
+
+    return true, result
+end
+
+-- ============================================================
 -- GUI ORE EXCHANGER
 -- ============================================================
 -- Шестистрочный логотип VIP-SHOP. Каждая строка
@@ -296,9 +380,8 @@ local LOGO_LINES = {
     " ╚████╔╝ ██║██║           ███████║██║  ██║╚██████╔╝██║     ",
     "  ╚═══╝  ╚═╝╚═╝           ╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═╝     "
 }
-local APP_TITLE = "VIP-SHOP v2.5"
 local FOOTER_OWNER = "ZoziDo"
-local FOOTER_VERSION = "v_3.0.1"
+local FOOTER_VERSION = "v_3.0.2"
 
 local UI = {}
 
@@ -357,6 +440,7 @@ local function calculateLayout()
     UI.statusY = UI.tableBottomY + 2
     UI.hintY = UI.statusY + 1
     UI.footerY = h
+    UI.totalY = UI.footerY - 1
 end
 
 calculateLayout()
@@ -411,17 +495,10 @@ local function drawLogo()
     end
 end
 
-local function drawHeader()
+local function clearFormerHeaderLine()
     calculateLayout()
     gpu.setBackground(C.bg)
     gpu.fill(1, UI.titleY, w, 1, " ")
-
-    local title = "↻ " .. APP_TITLE
-    local total = "[Всего обменено: " .. formatNumber(total_ores_global) .. " руды]"
-    local combined = title .. "  " .. total
-    local x = math.max(1, math.floor((w - unicode.len(combined)) / 2) + 1)
-
-    setText(x, UI.titleY, fitText(combined, w), C.title, C.bg)
 end
 
 local function drawTableFrame()
@@ -450,15 +527,15 @@ local function drawColoredRatio(ore, y)
     setText(x, y, rightAmount, C.magenta, C.bg)
 end
 
-local function drawOreRow(ore, index)
+-- Обновляет только шкалу и число остатка. Названия и вся таблица не стираются,
+-- поэтому во время выдачи предметов экран больше не моргает.
+local function drawOreStock(ore, index)
     local y = UI.firstRowY + (index - 1) * UI.rowHeight
     if y >= UI.tableBottomY then return end
 
     local stock = math.max(0, tonumber(ore.size) or 0)
     local limit = math.max(1, getStockLimit(ore))
     local fraction = clamp(stock / limit, 0, 1)
-
-    -- Внутри прогресс-колонки: пробел, [, цветная шкала, ], пробел.
     local barWidth = math.max(1, UI.progressW - 4)
     local filled = math.floor(barWidth * fraction + 0.5)
     if stock > 0 and filled == 0 then filled = 1 end
@@ -466,19 +543,8 @@ local function drawOreRow(ore, index)
     local empty = barWidth - filled
 
     gpu.setBackground(C.bg)
-    gpu.fill(UI.tableX, y, UI.tableW, 1, " ")
-
-    gpu.setForeground(C.border)
-    gpu.set(UI.tableX, y, "│")
-    gpu.set(UI.sep1, y, "│")
-    gpu.set(UI.sep2, y, "│")
-    gpu.set(UI.sep3, y, "│")
-    gpu.set(UI.sep4, y, "│")
-    gpu.set(UI.tableRight, y, "│")
-
-    -- Полные названия: например «Медная руда» и «Медный слиток».
-    setText(UI.takeX, y, padRight(" " .. tostring(ore.take.label or ore.take.name), UI.takeW), C.green, C.bg)
-    setText(UI.giveX, y, padRight(" " .. tostring(ore.give.label or ore.give.name), UI.giveW), C.green, C.bg)
+    gpu.fill(UI.progressX, y, UI.progressW, 1, " ")
+    gpu.fill(UI.stockX, y, UI.stockW, 1, " ")
 
     local bracketX = UI.progressX + 1
     setText(bracketX, y, "[", C.gray, C.bg)
@@ -492,10 +558,39 @@ local function drawOreRow(ore, index)
 
     local stockText = formatNumber(stock) .. "/" .. formatNumber(limit)
     setText(UI.stockX, y, padRight(" " .. stockText, UI.stockW), C.stock, C.bg)
+end
 
-    -- Курс как на скриншоте: числа розовые, знак > жёлтый.
+local function drawOreRow(ore, index)
+    local y = UI.firstRowY + (index - 1) * UI.rowHeight
+    if y >= UI.tableBottomY then return end
+
+    gpu.setBackground(C.bg)
+    gpu.fill(UI.tableX, y, UI.tableW, 1, " ")
+
+    gpu.setForeground(C.border)
+    gpu.set(UI.tableX, y, "│")
+    gpu.set(UI.sep1, y, "│")
+    gpu.set(UI.sep2, y, "│")
+    gpu.set(UI.sep3, y, "│")
+    gpu.set(UI.sep4, y, "│")
+    gpu.set(UI.tableRight, y, "│")
+
+    setText(UI.takeX, y, padRight(" " .. tostring(ore.take.label or ore.take.name), UI.takeW), C.green, C.bg)
+    setText(UI.giveX, y, padRight(" " .. tostring(ore.give.label or ore.give.name), UI.giveW), C.green, C.bg)
+
+    drawOreStock(ore, index)
+
     gpu.fill(UI.ratioX, y, UI.ratioW, 1, " ")
     drawColoredRatio(ore, y)
+end
+
+local function refreshStockColumns()
+    calculateLayout()
+    for index = 1, UI.visibleRows do
+        if ore_list[index] then
+            drawOreStock(ore_list[index], index)
+        end
+    end
 end
 
 local function drawRows()
@@ -532,27 +627,23 @@ local function drawStatus()
 
     if UI.statusY < UI.footerY then
         gpu.fill(1, UI.statusY, w, 1, " ")
-        setText(UI.tableX + 2, UI.statusY, "[", C.gray, C.bg)
-        setText(UI.tableX + 3, UI.statusY, "●", currentStatus.marker, C.bg)
-        setText(UI.tableX + 4, UI.statusY, "]", C.gray, C.bg)
-        setText(
-            UI.tableX + 6,
-            UI.statusY,
-            fitText(currentStatus.text, math.max(0, UI.tableW - 8)),
-            currentStatus.color,
-            C.bg
-        )
+
+        local maxTextWidth = math.max(0, UI.tableW - 6)
+        local visibleStatus = fitText(currentStatus.text, maxTextWidth)
+        local fullWidth = 4 + unicode.len(visibleStatus)
+        local x = UI.tableX + math.max(0, math.floor((UI.tableW - fullWidth) / 2))
+
+        setText(x, UI.statusY, "[", C.gray, C.bg)
+        setText(x + 1, UI.statusY, "●", currentStatus.marker, C.bg)
+        setText(x + 2, UI.statusY, "] ", C.gray, C.bg)
+        setText(x + 4, UI.statusY, visibleStatus, currentStatus.color, C.bg)
     end
 
     if UI.hintY < UI.footerY then
         gpu.fill(1, UI.hintY, w, 1, " ")
-        setText(
-            UI.tableX + 2,
-            UI.hintY,
-            fitText("[Для обмена встаньте на PIM и не сходите]", UI.tableW - 4),
-            C.gray,
-            C.bg
-        )
+        local hint = fitText("[Для обмена встаньте на PIM и не сходите]", UI.tableW - 4)
+        local hintX = centeredX(UI.tableX, UI.tableW, hint)
+        setText(hintX, UI.hintY, hint, C.gray, C.bg)
     end
 end
 
@@ -574,12 +665,24 @@ local function drawFooter()
     setText(footerX, UI.footerY, footerText, C.gray, C.bg)
 end
 
+local function drawTotalLine()
+    calculateLayout()
+    if UI.totalY <= UI.hintY or UI.totalY >= UI.footerY then return end
+
+    gpu.setBackground(C.bg)
+    gpu.fill(1, UI.totalY, w, 1, " ")
+
+    local total = "[Всего обменено: " .. formatNumber(total_ores_global) .. " руды]"
+    local visible = fitText(total, UI.tableW)
+    local x = math.max(UI.tableX, UI.tableRight - unicode.len(visible) + 1)
+    setText(x, UI.totalY, visible, C.cyan, C.bg)
+end
+
 local function setStatus(text, color, marker)
     currentStatus.text = tostring(text or "")
     currentStatus.color = color or C.white
     currentStatus.marker = marker or C.green
     drawStatus()
-    drawFooter()
 end
 
 local function drawInterface()
@@ -589,15 +692,10 @@ local function drawInterface()
     gpu.fill(1, 1, w, h, " ")
 
     drawLogo()
-    drawHeader()
+    clearFormerHeaderLine()
     drawRows()
     drawStatus()
-    drawFooter()
-end
-
--- Обновляет строку «Всего обменено» после принятия руды.
-local function drawTotalLine()
-    drawHeader()
+    drawTotalLine()
     drawFooter()
 end
 
@@ -639,10 +737,9 @@ local function drawInfo(drawType)
     if drawType == "full" then
         drawInterface()
     else
-        drawHeader()
-        drawRows()
+        refreshStockColumns()
         drawStatus()
-        drawFooter()
+        drawTotalLine()
     end
 end
 
@@ -696,7 +793,7 @@ local function giveIngot(toGive, ore, index)
             totalGive = totalGive + res.size
             ore_list[index].size = math.max(0, (ore_list[index].size or 0) - res.size)
             stats.ingots = stats.ingots + res.size
-            drawInfo("ingots")
+            drawOreStock(ore_list[index], index)
         else
             setStatus(
                 string.format(
@@ -816,7 +913,8 @@ local function checkInventory()
         end
     end
 
-    drawInfo("ingots")
+    updIngotsSize()
+    refreshStockColumns()
     setStatus(
         string.format(
             "Обмен завершён. Принято: %d руды, выдано: %d предметов.",
@@ -927,22 +1025,23 @@ end
 local function handleEvent(eventName, ...)
     local args = { ... }
 
+    -- Ctrl+Alt+C / interrupted намеренно игнорируется.
     if eventName == "interrupted" then
-        gpu.setBackground(defBG)
-        gpu.setForeground(defFG)
-        gpu.fill(1, 1, w, h, " ")
-        os.exit()
-        return true
+        writeDebugLog("Попытка завершить обменник через Ctrl+Alt+C заблокирована")
+        return
     end
 
     if eventName == "player_on" then
+        local playerName = tostring(args[1] or "")
+        setPimOwner(playerName)
+
         if not updInfo("ingots") then return end
 
         stats.ores = 0
         stats.ingots = 0
 
         setStatus(
-            string.format("Игрок %s на PIM. Начинаю проверку руды.", tostring(args[1] or "")),
+            string.format("Игрок %s на PIM. Начинаю проверку руды.", playerName ~= "" and playerName or "Неизвестный"),
             C.green,
             C.green
         )
@@ -951,23 +1050,53 @@ local function handleEvent(eventName, ...)
     end
 
     if eventName == "player_off" then
+        clearPimOwner()
         if not updInfo("ingots") then return end
         setStatus("Система активна. Ожидаю игрока на PIM.", C.white, C.green)
         return
     end
 
-    -- Скрытая админ-зона находится справа от двух строк состояния.
-    if eventName == "touch"
-        and args[2] >= UI.tableRight - 38
-        and args[3] >= UI.statusY
-        and args[3] <= UI.hintY
-        and isAdmin(args[5]) then
-        scanExchangeConfiguration()
+    if eventName == "touch" then
+        local touchPlayer = args[5] or "Неизвестный"
+
+        -- === Блокировка экрана ===
+        if not isPimOwner(touchPlayer) then
+            writeDebugLog("Коснулся не владелец: " .. tostring(touchPlayer) .. ", игнорируем")
+            return
+        end
+
+        -- Скрытая админ-зона доступна только владельцу текущей PIM-сессии,
+        -- который одновременно является администратором компьютера.
+        if args[2] >= UI.tableRight - 38
+            and args[3] >= UI.statusY
+            and args[3] <= UI.hintY
+            and isAdmin(touchPlayer) then
+            scanExchangeConfiguration()
+        end
+        return
+    end
+
+    -- В интерфейсе нет управления прокруткой и клавиатурой, поэтому эти
+    -- события полностью блокируются. Попытки посторонних сохраняются в лог.
+    if eventName == "scroll" then
+        local scrollPlayer = args[5] or "Неизвестный"
+        if not isPimOwner(scrollPlayer) then
+            writeDebugLog("Прокрутил не владелец: " .. tostring(scrollPlayer) .. ", игнорируем")
+        end
+        return
+    end
+
+    if eventName == "key_down" then
+        local keyPlayer = args[4] or "Неизвестный"
+        if not isPimOwner(keyPlayer) then
+            writeDebugLog("Нажал клавишу не владелец: " .. tostring(keyPlayer) .. ", игнорируем")
+        end
+        return
     end
 end
 
 -- ============================================================
--- ЗАПУСК
+-- ЗАПУСК С АВТОМАТИЧЕСКИМ ВОССТАНОВЛЕНИЕМ
 -- ============================================================
 local function main()
     drawInterface()
@@ -977,23 +1106,29 @@ local function main()
     end
 
     while true do
-        handleEvent(event.pull(1))
+        local ev = safeEventPull(1)
+        if ev[1] then
+            local ok, err = safeCall("handleEvent", handleEvent, table.unpack(ev))
+            if not ok then
+                setStatus("Ошибка обработана. Обменник продолжает работу.", C.red, C.red)
+            end
+        end
     end
 end
 
+-- Даже критическая ошибка внутри main не закрывает скрипт: ошибка пишется
+-- в лог, экран восстанавливается, после чего основной цикл запускается снова.
 while true do
-    local success, err = pcall(main)
-
-    if not success then
-        local errorText = tostring(err or "Неизвестная ошибка")
-        local errorFile = io.open(currDir .. "/exchanger_errors.txt", "ab")
-        if errorFile then
-            errorFile:write(errorText .. "\n")
-            errorFile:close()
-        end
-
-        computer.beep(2000, 3)
+    local ok, err = safeCall("main", main)
+    if not ok then
+        pcall(function()
+            computer.beep(2000, 0.25)
+            os.sleep(0.5)
+        end)
     else
-        break
+        -- main в нормальной работе не завершается. Если это всё же произошло,
+        -- запускаем его снова вместо выхода в оболочку.
+        writeDebugLog("Основной цикл завершился без ошибки и был перезапущен")
+        os.sleep(0.2)
     end
 end
