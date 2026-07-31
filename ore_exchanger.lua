@@ -1,11 +1,25 @@
--- v3.0.2 - VIP-SHOP EXCHANGER: блокировка экрана, защита от прерывания, анти-мерцание
+-- v3.0.3 - VIP-SHOP EXCHANGER: 16 руд, постоянный счётчик, защита Ctrl+Alt+C
 -- Интерфейс автоматически использует максимальное разрешение видеокарты.
--- BUILD: VIP_SHOP_EXCHANGER_LOCKED_SAFE_NO_FLICKER
+-- BUILD: VIP_SHOP_EXCHANGER_16_ORES_PERSISTENT_TOTAL_SAFE_INTERRUPT
 
 local unicode = require("unicode")
 local computer = require("computer")
 local com = require("component")
 local event = require("event")
+
+-- Блокируем Ctrl+Alt+C на уровне библиотеки event.
+-- В некоторых версиях OpenComputers shouldInterrupt уже существует,
+-- поэтому переопределяем его и в этом случае.
+if not event.shouldInterrupt then
+    function event.shouldInterrupt()
+        return false
+    end
+else
+    event.shouldInterrupt = function()
+        return false
+    end
+end
+
 local fs = require("filesystem")
 local shell = require("shell")
 local inspect = {}
@@ -37,8 +51,10 @@ local defBG, defFG = gpu.getBackground(), gpu.getForeground()
 -- ============================================================
 local EXPORT_DIR = "UP"
 local PUSH_DIR = "DOWN"
-local STATS_FILE = "exchanger_stats.txt"
-local TOTAL_FILE = "total_ore.txt"
+local currDir = shell.getWorkingDirectory()
+local STATS_FILE = currDir .. "/exchanger_stats.txt"
+-- Постоянный файл общего счётчика. Значение не сбрасывается после перезапуска.
+local TOTAL_FILE = currDir .. "/total_ore.txt"
 
 -- ============================================================
 -- ЦВЕТА GUI
@@ -52,7 +68,7 @@ local C = {
     gray        = 0x8A9499,
     darkGray    = 0x30383D,
     green       = 0x55FF55,
-    yellow      = 0xFFFF55,
+    yellow      = 0xFF4F00,
     red         = 0xFF5555,
     cyan        = 0x55FFFF,
     magenta     = 0xFF55FF,
@@ -75,6 +91,7 @@ local ore_list = {
     { take = { label = "Кварцевая руда", name = "minecraft:quartz_ore", amount = 1 }, give = { label = "Кварц", name = "minecraft:quartz", amount = 4 } },
     { take = { label = "Медная руда", name = "IC2:blockOreCopper", amount = 3 }, give = { label = "Медный слиток", name = "IC2:itemIngot", amount = 7 } },
     { take = { label = "Оловянная руда", name = "IC2:blockOreTin", amount = 3 }, give = { label = "Оловянный слиток", name = "IC2:itemIngot", damage = 1.0, amount = 7 } },
+    { take = { label = "Свинцовая руда", name = "IC2:blockOreLead", amount = 1 }, give = { label = "Свинцовый слиток", name = "IC2:itemIngot", damage = 5.0, amount = 2 } },
     { take = { label = "Серебряная руда", name = "ThermalFoundation:Ore", damage = 2.0, amount = 1 }, give = { label = "Серебряный слиток", name = "IC2:itemIngot", damage = 6.0, amount = 2 } },
     { take = { label = "Платиновая руда", name = "ThermalFoundation:Ore", damage = 5.0, amount = 1 }, give = { label = "Измельчённая платина", name = "ThermalFoundation:material", damage = 37.0, amount = 2 } },
     { take = { label = "Никелевая руда", name = "ThermalFoundation:Ore", damage = 4.0, amount = 1 }, give = { label = "Никелевый слиток", name = "ThermalFoundation:material", damage = 68.0, amount = 2 } },
@@ -97,6 +114,7 @@ local SHORT_NAMES = {
     ["minecraft:quartz_ore"] = "Кварц",
     ["IC2:blockOreCopper"] = "Медь",
     ["IC2:blockOreTin"] = "Олово",
+    ["IC2:blockOreLead"] = "Свинец",
     ["ThermalFoundation:Ore:2"] = "Серебро",
     ["ThermalFoundation:Ore:5"] = "Платина",
     ["ThermalFoundation:Ore:4"] = "Никель",
@@ -117,6 +135,7 @@ local BAR_COLORS = {
     ["minecraft:quartz_ore"] = 0xFFF4D6,
     ["IC2:blockOreCopper"] = 0xFF9A3C,
     ["IC2:blockOreTin"] = 0xAADDFF,
+    ["IC2:blockOreLead"] = 0x708090,
     ["ThermalFoundation:Ore:2"] = 0xC0C0C0,
     ["ThermalFoundation:Ore:5"] = 0x66E0D0,
     ["ThermalFoundation:Ore:4"] = 0xD4C060,
@@ -233,9 +252,16 @@ local function loadTotalOres()
             local content = f:read("*all")
             f:close()
             total_ores_global = tonumber(content) or 0
+            return
         end
-    else
-        total_ores_global = 0
+    end
+
+    -- Файл отсутствует или не читается: создаём его сразу со значением 0.
+    total_ores_global = 0
+    local f = io.open(TOTAL_FILE, "w")
+    if f then
+        f:write("0")
+        f:close()
     end
 end
 
@@ -249,7 +275,6 @@ end
 
 loadTotalOres()
 
-local currDir = shell.getWorkingDirectory()
 local oresPath = currDir .. "/exchanger_ores.txt"
 
 if fs.exists(oresPath) then
@@ -272,6 +297,34 @@ if fs.exists(oresPath) then
     end
 end
 
+-- Даже если exchanger_ores.txt был создан старой версией с 15 позициями,
+-- обязательная свинцовая руда автоматически добавляется один раз.
+local function ensureLeadOre()
+    for _, ore in ipairs(ore_list) do
+        if ore.take and ore.take.name == "IC2:blockOreLead"
+            and (tonumber(ore.take.damage) or 0) == 0 then
+            return false
+        end
+    end
+
+    table.insert(ore_list, {
+        take = {
+            label = "Свинцовая руда",
+            name = "IC2:blockOreLead",
+            amount = 1
+        },
+        give = {
+            label = "Свинцовый слиток",
+            name = "IC2:itemIngot",
+            damage = 5.0,
+            amount = 2
+        }
+    })
+    return true
+end
+
+local leadWasAdded = ensureLeadOre()
+
 local function saveOres(ores)
     local file = io.open(oresPath, "w")
     if not file then
@@ -281,6 +334,11 @@ local function saveOres(ores)
     file:write(inspect(ores))
     file:close()
     return true
+end
+
+if leadWasAdded and fs.exists(oresPath) then
+    -- Обновляем старую конфигурацию, чтобы свинец сохранился и после перезапуска.
+    saveOres(ore_list)
 end
 
 -- ============================================================
@@ -381,7 +439,7 @@ local LOGO_LINES = {
     "  ╚═══╝  ╚═╝╚═╝           ╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═╝     "
 }
 local FOOTER_OWNER = "ZoziDo"
-local FOOTER_VERSION = "v_3.0.2"
+local FOOTER_VERSION = "v_3.0.1"
 
 local UI = {}
 
@@ -394,8 +452,10 @@ local function calculateLayout()
         UI.logoW = math.max(UI.logoW, unicode.len(line))
     end
 
-    UI.titleY = UI.logoY + #LOGO_LINES + 1
-    UI.tableTopY = UI.titleY + 2
+    -- Информационная строка идёт сразу под логотипом.
+    UI.subtitleY = UI.logoY + #LOGO_LINES
+    UI.titleY = UI.subtitleY
+    UI.tableTopY = UI.subtitleY + 2
 
     -- Пять колонок: исходная руда, шкала, запас, курс, результат.
     UI.takeW = 28
@@ -428,10 +488,11 @@ local function calculateLayout()
     UI.headerSeparatorY = UI.tableTopY + 2
     UI.firstRowY = UI.tableTopY + 3
 
-    -- Каждая позиция занимает две строки: строка предмета и один
-    -- пустой отступ после неё. На экране 160×50 помещаются все 15 руд.
+    -- Каждая позиция занимает две строки: строка предмета и пустой отступ.
+    -- После переноса заголовка вверх на 160×50 помещаются все 16 руд.
     UI.rowHeight = 2
-    local reservedBottom = 5 -- нижняя рамка, две строки статуса и футер
+    UI.footerY = h
+    local reservedBottom = 4 -- нижняя рамка таблицы, две строки статуса и футер
     local availableHeight = h - UI.firstRowY - reservedBottom
     local maxVisible = math.floor(availableHeight / UI.rowHeight)
     UI.visibleRows = math.max(1, math.min(#ore_list, maxVisible))
@@ -439,8 +500,8 @@ local function calculateLayout()
 
     UI.statusY = UI.tableBottomY + 2
     UI.hintY = UI.statusY + 1
-    UI.footerY = h
-    UI.totalY = UI.footerY - 1
+    -- Счётчик рисуется прямо на нижней рамке таблицы справа.
+    UI.totalY = UI.tableBottomY
 end
 
 calculateLayout()
@@ -495,10 +556,15 @@ local function drawLogo()
     end
 end
 
-local function clearFormerHeaderLine()
+local function drawSubtitle()
     calculateLayout()
     gpu.setBackground(C.bg)
-    gpu.fill(1, UI.titleY, w, 1, " ")
+    gpu.fill(1, UI.subtitleY, w, 1, " ")
+
+    local subtitle = "МГНОВЕННЫЙ ОБМЕН РУДЫ НА СЛИТКИ | ОБЩИЙ ЛИМИТ: 5M | ВЕРСИЯ 3.0.1"
+    local visible = fitText(subtitle, w)
+    local x = math.max(1, math.floor((w - unicode.len(visible)) / 2) + 1)
+    setText(x, UI.subtitleY, visible, C.yellow, C.bg)
 end
 
 local function drawTableFrame()
@@ -667,14 +733,17 @@ end
 
 local function drawTotalLine()
     calculateLayout()
-    if UI.totalY <= UI.hintY or UI.totalY >= UI.footerY then return end
-
-    gpu.setBackground(C.bg)
-    gpu.fill(1, UI.totalY, w, 1, " ")
+    if UI.totalY < 1 or UI.totalY > h then return end
 
     local total = "[Всего обменено: " .. formatNumber(total_ores_global) .. " руды]"
-    local visible = fitText(total, UI.tableW)
-    local x = math.max(UI.tableX, UI.tableRight - unicode.len(visible) + 1)
+    local maxWidth = math.max(1, UI.giveW + UI.ratioW + UI.stockW)
+    local visible = fitText(total, maxWidth)
+    -- Поднимаем счётчик на нижнюю рамку таблицы и прижимаем вправо.
+    local x = math.max(UI.tableX + 1, UI.tableRight - unicode.len(visible) - 1)
+
+    -- Под текстом очищается только нужный участок рамки, остальная рамка не мигает.
+    gpu.setBackground(C.bg)
+    gpu.fill(x, UI.totalY, unicode.len(visible), 1, " ")
     setText(x, UI.totalY, visible, C.cyan, C.bg)
 end
 
@@ -692,7 +761,7 @@ local function drawInterface()
     gpu.fill(1, 1, w, h, " ")
 
     drawLogo()
-    clearFormerHeaderLine()
+    drawSubtitle()
     drawRows()
     drawStatus()
     drawTotalLine()
@@ -1098,6 +1167,26 @@ end
 -- ============================================================
 -- ЗАПУСК С АВТОМАТИЧЕСКИМ ВОССТАНОВЛЕНИЕМ
 -- ============================================================
+local function isInterruptError(err)
+    local message = lowerText(err)
+    return message:find("interrupted", 1, true) ~= nil
+        or message:find("interrupt", 1, true) ~= nil
+        or message:find("прерван", 1, true) ~= nil
+end
+
+local function resumeExchangeAfterProtectedError(err)
+    if not playerIsOnPim() then
+        return false
+    end
+
+    writeDebugLog("Игрок остаётся на PIM, обмен автоматически продолжен после ошибки: " .. tostring(err))
+    local ok, resumeError = safeCall("resumeExchange", checkInventory)
+    if not ok then
+        writeDebugLog("Не удалось автоматически продолжить обмен: " .. tostring(resumeError))
+    end
+    return ok
+end
+
 local function main()
     drawInterface()
 
@@ -1110,7 +1199,15 @@ local function main()
         if ev[1] then
             local ok, err = safeCall("handleEvent", handleEvent, table.unpack(ev))
             if not ok then
-                setStatus("Ошибка обработана. Обменник продолжает работу.", C.red, C.red)
+                -- Ctrl+Alt+C больше не оставляет обменник ждать нового player_on.
+                -- Если игрок всё ещё на PIM, проверка инвентаря запускается снова сразу.
+                if not resumeExchangeAfterProtectedError(err) then
+                    if isInterruptError(err) then
+                        setStatus("Система активна. Ожидаю игрока на PIM.", C.white, C.green)
+                    else
+                        setStatus("Ошибка обработана. Обменник продолжает работу.", C.red, C.red)
+                    end
+                end
             end
         end
     end
