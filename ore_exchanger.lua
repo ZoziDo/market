@@ -286,26 +286,17 @@ end
 -- ============================================================
 -- GUI ORE EXCHANGER
 -- ============================================================
--- Логотип специально разбит на две части: ORE-EXCHAN и GER.
--- Каждая строка центрируется отдельно, поэтому обе части стоят
--- строго по центру экрана даже при разной ширине.
+-- Шестистрочный логотип VIP-SHOP. Каждая строка
+-- автоматически выравнивается по центру экрана.
 local LOGO_LINES = {
-    "██████╗ ██████╗ ███████╗    ███████╗██╗  ██╗ ██████╗██╗  ██╗ █████╗ ███╗   ██╗",
-    "██╔═══██╗██╔══██╗██╔════╝    ██╔════╝╚██╗██╔╝██╔════╝██║  ██║██╔══██╗████╗  ██║",
-    "██║   ██║██████╔╝█████╗█████╗█████╗   ╚███╔╝ ██║     ███████║███████║██╔██╗ ██║",
-    "██║   ██║██╔══██╗██╔══╝╚════╝██╔══╝   ██╔██╗ ██║     ██╔══██║██╔══██║██║╚██╗██║",
-    "╚██████╔╝██║  ██║███████╗    ███████╗██╔╝ ██╗╚██████╗██║  ██║██║  ██║██║ ╚████║",
-    " ╚═════╝ ╚═╝  ╚═╝╚══════╝    ╚══════╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝",
-    "",
-    " ██████╗ ███████╗██████╗ ",
-    "██╔════╝ ██╔════╝██╔══██╗",
-    "██║  ███╗█████╗  ██████╔╝",
-    "██║   ██║██╔══╝  ██╔══██╗",
-    "╚██████╔╝███████╗██║  ██║",
-    " ╚═════╝ ╚══════╝╚═╝  ╚═╝"
+    "██╗   ██╗██╗██████╗       ███████╗██╗  ██╗ ██████╗ ██████╗ ",
+    "██║   ██║██║██╔══██╗      ██╔════╝██║  ██║██╔═══██╗██╔══██╗",
+    "██║   ██║██║██████╔╝█████╗███████╗███████║██║   ██║██████╔╝",
+    "╚██╗ ██╔╝██║██╔═══╝ ╚════╝╚════██║██╔══██║██║   ██║██╔═══╝ ",
+    " ╚████╔╝ ██║██║           ███████║██║  ██║╚██████╔╝██║     ",
+    "  ╚═══╝  ╚═╝╚═╝           ╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═╝     "
 }
-
-local APP_TITLE = "ORE EXCHANGER v2.5"
+local APP_TITLE = "VIP-SHOP v2.5"
 local FOOTER_OWNER = "ZoziDo"
 local FOOTER_VERSION = "v_3.0.1"
 
@@ -354,12 +345,14 @@ local function calculateLayout()
     UI.headerSeparatorY = UI.tableTopY + 2
     UI.firstRowY = UI.tableTopY + 3
 
-    -- Теперь одна позиция занимает одну строку. Благодаря этому
-    -- все 15 видов руды помещаются вместе с новым 12-строчным логотипом.
+    -- Каждая позиция занимает две строки: строка предмета и один
+    -- пустой отступ после неё. На экране 160×50 помещаются все 15 руд.
+    UI.rowHeight = 2
     local reservedBottom = 5 -- нижняя рамка, две строки статуса и футер
-    local maxVisible = h - UI.firstRowY - reservedBottom
+    local availableHeight = h - UI.firstRowY - reservedBottom
+    local maxVisible = math.floor(availableHeight / UI.rowHeight)
     UI.visibleRows = math.max(1, math.min(#ore_list, maxVisible))
-    UI.tableBottomY = UI.firstRowY + UI.visibleRows
+    UI.tableBottomY = UI.firstRowY + UI.visibleRows * UI.rowHeight
 
     UI.statusY = UI.tableBottomY + 2
     UI.hintY = UI.statusY + 1
@@ -424,7 +417,7 @@ local function drawHeader()
     gpu.fill(1, UI.titleY, w, 1, " ")
 
     local title = "↻ " .. APP_TITLE
-    local total = "[Общий счёт: " .. formatNumber(total_ores_global) .. " руды]"
+    local total = "[Всего обменено: " .. formatNumber(total_ores_global) .. " руды]"
     local combined = title .. "  " .. total
     local x = math.max(1, math.floor((w - unicode.len(combined)) / 2) + 1)
 
@@ -458,7 +451,7 @@ local function drawColoredRatio(ore, y)
 end
 
 local function drawOreRow(ore, index)
-    local y = UI.firstRowY + index - 1
+    local y = UI.firstRowY + (index - 1) * UI.rowHeight
     if y >= UI.tableBottomY then return end
 
     local stock = math.max(0, tonumber(ore.size) or 0)
@@ -511,6 +504,21 @@ local function drawRows()
 
     for index = 1, UI.visibleRows do
         drawOreRow(ore_list[index], index)
+
+        -- Пустая строка после каждого предмета, но вертикальные
+        -- границы таблицы продолжаются без разрывов.
+        local blankY = UI.firstRowY + (index - 1) * UI.rowHeight + 1
+        if blankY < UI.tableBottomY then
+            gpu.setBackground(C.bg)
+            gpu.fill(UI.tableX, blankY, UI.tableW, 1, " ")
+            gpu.setForeground(C.border)
+            gpu.set(UI.tableX, blankY, "│")
+            gpu.set(UI.sep1, blankY, "│")
+            gpu.set(UI.sep2, blankY, "│")
+            gpu.set(UI.sep3, blankY, "│")
+            gpu.set(UI.sep4, blankY, "│")
+            gpu.set(UI.tableRight, blankY, "│")
+        end
     end
 
     gpu.setBackground(C.bg)
@@ -587,7 +595,7 @@ local function drawInterface()
     drawFooter()
 end
 
--- Обновляет только строку общего счёта после принятия руды.
+-- Обновляет строку «Всего обменено» после принятия руды.
 local function drawTotalLine()
     drawHeader()
     drawFooter()
