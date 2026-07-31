@@ -1,4 +1,4 @@
--- v3.0.3 - VIP-SHOP EXCHANGER: 16 руд, постоянный счётчик, защита Ctrl+Alt+C
+-- v3.0.4 - VIP-SHOP EXCHANGER: ASCII-рамки + | =
 -- Интерфейс автоматически использует максимальное разрешение видеокарты.
 -- BUILD: VIP_SHOP_EXCHANGER_16_ORES_PERSISTENT_TOTAL_SAFE_INTERRUPT
 
@@ -83,17 +83,17 @@ local ore_list = {
     { take = { label = "Алмазная руда", name = "minecraft:diamond_ore", amount = 1 }, give = { label = "Алмаз", name = "minecraft:diamond", amount = 2 } },
     { take = { label = "Железная руда", name = "minecraft:iron_ore", amount = 3 }, give = { label = "Железный слиток", name = "minecraft:iron_ingot", amount = 7 } },
     { take = { label = "Золотая руда", name = "minecraft:gold_ore", amount = 3 }, give = { label = "Золотой слиток", name = "minecraft:gold_ingot", amount = 7 } },
-    { take = { label = "Лазуритовая руда", name = "minecraft:lapis_ore", amount = 1 }, give = { label = "Лазурит", name = "minecraft:dye", damage = 4.0, amount = 9 } },
+    { take = { label = "Лазуритовая руда", name = "minecraft:lapis_ore", amount = 1 }, give = { label = "Лазурит", name = "minecraft:dye", damage = 4.0, amount = 7 } },
     { take = { label = "Красная руда", name = "minecraft:redstone_ore", amount = 1 }, give = { label = "Блок красного камня", name = "minecraft:redstone_block", amount = 1 } },
     { take = { label = "Угольная руда", name = "minecraft:coal_ore", amount = 1 }, give = { label = "Уголь", name = "minecraft:coal", amount = 3 } },
-    { take = { label = "Руда истинного кварца", name = "appliedenergistics2:tile.OreQuartz", amount = 1 }, give = { label = "Кристалл ист. кварца", name = "appliedenergistics2:item.ItemMultiMaterial", amount = 2 } },
-    { take = { label = "Заряж. руда ист. квар", name = "appliedenergistics2:tile.OreQuartzCharged", amount = 1 }, give = { label = "Заряж. крист. кварца", name = "appliedenergistics2:item.ItemMultiMaterial", damage = 1.0, amount = 2 } },
-    { take = { label = "Кварцевая руда", name = "minecraft:quartz_ore", amount = 1 }, give = { label = "Кварц", name = "minecraft:quartz", amount = 3 } },
+    { take = { label = "Руда истинного кварца", name = "appliedenergistics2:tile.OreQuartz", amount = 1 }, give = { label = "Кристалл ист. кварца", name = "appliedenergistics2:item.ItemMultiMaterial", amount = 3 } },
+    { take = { label = "Заряж. руда ист. квар", name = "appliedenergistics2:tile.OreQuartzCharged", amount = 1 }, give = { label = "Заряж. крист. кварца", name = "appliedenergistics2:item.ItemMultiMaterial", damage = 1.0, amount = 3 } },
+    { take = { label = "Кварцевая руда", name = "minecraft:quartz_ore", amount = 1 }, give = { label = "Кварц", name = "minecraft:quartz", amount = 4 } },
     { take = { label = "Медная руда", name = "IC2:blockOreCopper", amount = 3 }, give = { label = "Медный слиток", name = "IC2:itemIngot", amount = 7 } },
     { take = { label = "Оловянная руда", name = "IC2:blockOreTin", amount = 3 }, give = { label = "Оловянный слиток", name = "IC2:itemIngot", damage = 1.0, amount = 7 } },
     { take = { label = "Свинцовая руда", name = "IC2:blockOreLead", amount = 1 }, give = { label = "Свинцовый слиток", name = "IC2:itemIngot", damage = 5.0, amount = 2 } },
-    { take = { label = "Серебряная руда", name = "ThermalFoundation:Ore", damage = 2.0, amount = 1 }, give = { label = "Серебряный слиток", name = "IC2:itemIngot", damage = 6.0, amount = 7 } },
-    { take = { label = "Платиновая руда", name = "ThermalFoundation:Ore", damage = 5.0, amount = 1 }, give = { label = "Измельчённая платина", name = "ThermalFoundation:material", damage = 37.0, amount = 1 } },
+    { take = { label = "Серебряная руда", name = "ThermalFoundation:Ore", damage = 2.0, amount = 1 }, give = { label = "Серебряный слиток", name = "IC2:itemIngot", damage = 6.0, amount = 2 } },
+    { take = { label = "Платиновая руда", name = "ThermalFoundation:Ore", damage = 5.0, amount = 1 }, give = { label = "Измельчённая платина", name = "ThermalFoundation:material", damage = 37.0, amount = 2 } },
     { take = { label = "Никелевая руда", name = "ThermalFoundation:Ore", damage = 4.0, amount = 1 }, give = { label = "Никелевый слиток", name = "ThermalFoundation:material", damage = 68.0, amount = 2 } },
     { take = { label = "Дракониевая руда", name = "DraconicEvolution:draconiumOre", amount = 1 }, give = { label = "Дракониевая пыль", name = "DraconicEvolution:draconiumDust", amount = 2 } }
 }
@@ -512,32 +512,32 @@ local currentStatus = {
     marker = C.green
 }
 
-local function makeBorder(left, middle1, middle2, middle3, middle4, right)
-    return left
-        .. string.rep("─", UI.takeW)
-        .. middle1
-        .. string.rep("─", UI.progressW)
-        .. middle2
-        .. string.rep("─", UI.stockW)
-        .. middle3
-        .. string.rep("─", UI.ratioW)
-        .. middle4
-        .. string.rep("─", UI.giveW)
-        .. right
+local function makeBorder()
+    return "+"
+        .. string.rep("=", UI.takeW)
+        .. "+"
+        .. string.rep("=", UI.progressW)
+        .. "+"
+        .. string.rep("=", UI.stockW)
+        .. "+"
+        .. string.rep("=", UI.ratioW)
+        .. "+"
+        .. string.rep("=", UI.giveW)
+        .. "+"
 end
 
 local function makeRow(takeName, progress, stock, ratio, giveName)
-    return "│"
+    return "|"
         .. padRight(takeName, UI.takeW)
-        .. "│"
+        .. "|"
         .. padRight(progress, UI.progressW)
-        .. "│"
+        .. "|"
         .. padRight(stock, UI.stockW)
-        .. "│"
+        .. "|"
         .. padRight(ratio, UI.ratioW)
-        .. "│"
+        .. "|"
         .. padRight(giveName, UI.giveW)
-        .. "│"
+        .. "|"
 end
 
 local function drawLogo()
@@ -571,13 +571,13 @@ local function drawTableFrame()
     gpu.setBackground(C.bg)
     gpu.setForeground(C.border)
 
-    gpu.set(UI.tableX, UI.tableTopY, makeBorder("┌", "┬", "┬", "┬", "┬", "┐"))
+    gpu.set(UI.tableX, UI.tableTopY, makeBorder())
     gpu.set(
         UI.tableX,
         UI.headerY,
         makeRow(" ИСХОДНЫЙ ПРЕДМЕТ", " ПРОГРЕСС", " В МЭ", " КУРС", " РЕЗУЛЬТАТ")
     )
-    gpu.set(UI.tableX, UI.headerSeparatorY, makeBorder("├", "┼", "┼", "┼", "┼", "┤"))
+    gpu.set(UI.tableX, UI.headerSeparatorY, makeBorder())
 end
 
 local function drawColoredRatio(ore, y)
@@ -634,12 +634,12 @@ local function drawOreRow(ore, index)
     gpu.fill(UI.tableX, y, UI.tableW, 1, " ")
 
     gpu.setForeground(C.border)
-    gpu.set(UI.tableX, y, "│")
-    gpu.set(UI.sep1, y, "│")
-    gpu.set(UI.sep2, y, "│")
-    gpu.set(UI.sep3, y, "│")
-    gpu.set(UI.sep4, y, "│")
-    gpu.set(UI.tableRight, y, "│")
+    gpu.set(UI.tableX, y, "|")
+    gpu.set(UI.sep1, y, "|")
+    gpu.set(UI.sep2, y, "|")
+    gpu.set(UI.sep3, y, "|")
+    gpu.set(UI.sep4, y, "|")
+    gpu.set(UI.tableRight, y, "|")
 
     setText(UI.takeX, y, padRight(" " .. tostring(ore.take.label or ore.take.name), UI.takeW), C.green, C.bg)
     setText(UI.giveX, y, padRight(" " .. tostring(ore.give.label or ore.give.name), UI.giveW), C.green, C.bg)
@@ -673,18 +673,18 @@ local function drawRows()
             gpu.setBackground(C.bg)
             gpu.fill(UI.tableX, blankY, UI.tableW, 1, " ")
             gpu.setForeground(C.border)
-            gpu.set(UI.tableX, blankY, "│")
-            gpu.set(UI.sep1, blankY, "│")
-            gpu.set(UI.sep2, blankY, "│")
-            gpu.set(UI.sep3, blankY, "│")
-            gpu.set(UI.sep4, blankY, "│")
-            gpu.set(UI.tableRight, blankY, "│")
+            gpu.set(UI.tableX, blankY, "|")
+            gpu.set(UI.sep1, blankY, "|")
+            gpu.set(UI.sep2, blankY, "|")
+            gpu.set(UI.sep3, blankY, "|")
+            gpu.set(UI.sep4, blankY, "|")
+            gpu.set(UI.tableRight, blankY, "|")
         end
     end
 
     gpu.setBackground(C.bg)
     gpu.setForeground(C.border)
-    gpu.set(UI.tableX, UI.tableBottomY, makeBorder("└", "┴", "┴", "┴", "┴", "┘"))
+    gpu.set(UI.tableX, UI.tableBottomY, makeBorder())
 end
 
 local function drawStatus()
