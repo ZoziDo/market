@@ -3,9 +3,6 @@ local computer = require("computer")
 local com = require("component")
 local event = require("event")
 
--- Блокируем Ctrl+Alt+C на уровне библиотеки event.
--- В некоторых версиях OpenComputers shouldInterrupt уже существует,
--- поэтому переопределяем его и в этом случае.
 if not event.shouldInterrupt then
     function event.shouldInterrupt()
         return false
