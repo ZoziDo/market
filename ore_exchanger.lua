@@ -1,8 +1,15 @@
+-- v3.0.5 - VIP-SHOP EXCHANGER: исправлена ложная ошибка выдачи
+-- Интерфейс автоматически использует максимальное разрешение видеокарты.
+-- BUILD: VIP_SHOP_EXCHANGER_16_ORES_PERSISTENT_TOTAL_SAFE_INTERRUPT
+
 local unicode = require("unicode")
 local computer = require("computer")
 local com = require("component")
 local event = require("event")
 
+-- Блокируем Ctrl+Alt+C на уровне библиотеки event.
+-- В некоторых версиях OpenComputers shouldInterrupt уже существует,
+-- поэтому переопределяем его и в этом случае.
 if not event.shouldInterrupt then
     function event.shouldInterrupt()
         return false
@@ -838,37 +845,87 @@ end
 -- ============================================================
 -- ЛОГИКА ОБМЕНА
 -- ============================================================
+-- ME-интерфейс в разных сборках возвращает результат exportItem по-разному:
+-- число, таблицу {size=...}/{qty=...} либо дополнительным вторым значением.
+-- Раньше код принимал только res.size, поэтому успешная выдача числа 48
+-- ошибочно считалась неудачной и на экране появлялось сообщение об ошибке.
+local function getExportedAmount(primaryResult, secondaryResult)
+    local function readAmount(value)
+        if type(value) == "number" then
+            return math.max(0, math.floor(value))
+        end
+
+        if type(value) == "table" then
+            local amount = tonumber(
+                value.size or value.qty or value.amount or value.count or value.exported
+            )
+            if amount then
+                return math.max(0, math.floor(amount))
+            end
+        end
+
+        return 0
+    end
+
+    local amount = readAmount(primaryResult)
+    if amount > 0 then return amount end
+    return readAmount(secondaryResult)
+end
+
 local function giveIngot(toGive, ore, index)
     local totalGive = 0
     local giveDamage = ore.give.damage or 0
+    local failedAttempts = 0
 
     while totalGive < toGive do
-        local giveSize = math.min(toGive - totalGive, ore.maxSize or 64)
-        local success, res = pcall(
+        local remaining = toGive - totalGive
+        local giveSize = math.min(remaining, ore.maxSize or 64)
+        local success, result, extraResult = pcall(
             me.exportItem,
             { id = ore.give.name, dmg = giveDamage },
             EXPORT_DIR,
             giveSize
         )
 
-        if success and res and res.size and res.size > 0 then
-            totalGive = totalGive + res.size
-            ore_list[index].size = math.max(0, (ore_list[index].size or 0) - res.size)
-            stats.ingots = stats.ingots + res.size
+        local exported = 0
+        if success then
+            exported = getExportedAmount(result, extraResult)
+            exported = math.min(exported, remaining)
+        end
+
+        if exported > 0 then
+            failedAttempts = 0
+            totalGive = totalGive + exported
+            ore_list[index].size = math.max(0, (ore_list[index].size or 0) - exported)
+            stats.ingots = stats.ingots + exported
             drawOreStock(ore_list[index], index)
         else
-            setStatus(
-                string.format(
-                    "Ошибка выдачи: осталось выдать %d × %s. Проверьте инвентарь и направление.",
-                    toGive - totalGive,
-                    ore.give.label
-                ),
-                C.red,
-                C.red
-            )
-            os.sleep(1)
+            failedAttempts = failedAttempts + 1
+            writeDebugLog(string.format(
+                "Выдача временно не выполнена: item=%s, damage=%s, amount=%d, result=%s, extra=%s",
+                tostring(ore.give.name),
+                tostring(giveDamage),
+                giveSize,
+                tostring(result),
+                tostring(extraResult)
+            ))
+
+            -- Техническое красное сообщение больше не показываем.
+            -- При реальной нехватке места обменник спокойно ждёт и повторяет выдачу.
+            if failedAttempts >= 4 then
+                setStatus(
+                    "Освободите место в инвентаре — выдача продолжится автоматически.",
+                    C.yellow,
+                    C.yellow
+                )
+                failedAttempts = 0
+            end
+
+            os.sleep(0.5)
         end
     end
+
+    return true
 end
 
 local function exchangeOre(slot, ore, index)
