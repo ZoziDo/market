@@ -1,7 +1,3 @@
--- v3.0.4 - VIP-SHOP EXCHANGER: ASCII-рамки + | =
--- Интерфейс автоматически использует максимальное разрешение видеокарты.
--- BUILD: VIP_SHOP_EXCHANGER_16_ORES_PERSISTENT_TOTAL_SAFE_INTERRUPT
-
 local unicode = require("unicode")
 local computer = require("computer")
 local com = require("component")
