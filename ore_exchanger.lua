@@ -31,16 +31,16 @@ inspect = require("inspect")
 -- ============================================================
 -- ПРОВЕРЕННЫЕ АДРЕСА И НАПРАВЛЕНИЯ
 -- ============================================================
-local CELL_ME_ADDRESS = "b2f2b6b2-1543-4659-b4e5-e8236fc27871"
-local MAIN_ME_ADDRESS = "7867903d-0c1c-43cf-85fb-6437973e1e99"
-local TRANSPOSER_ADDRESS = "1e889179-3120-45ae-b698-5c760ef1f744"
+local CELL_ME_ADDRESS = "0a866bae-ced4-45b6-ab2c-9276a41ced4a"
+local MAIN_ME_ADDRESS = "1e56cfd9-d7f5-4818-a13a-dc862cb9ce3a"
+local TRANSPOSER_ADDRESS = "2ba7d903-eb78-47a4-854d-c72c2e18ee70"
 
-local CELL_CHEST_DIRECTION = "NORTH"
-local MAIN_CHEST_DIRECTION = "SOUTH"
+local CELL_CHEST_DIRECTION = "EAST"
+local MAIN_CHEST_DIRECTION = "WEST"
 
 -- Стороны сундуков относительно Transposer.
-local FIRST_CHEST_SIDE = 3  -- FRONT: сундук сети ячейки
-local SECOND_CHEST_SIDE = 2 -- BACK: сундук основной МЭ
+local FIRST_CHEST_SIDE = 4  -- RIGHT: сундук сети ячейки
+local SECOND_CHEST_SIDE = 5 -- LEFT: сундук основной МЭ
 
 -- Используем все слоты сервисных сундуков. Код рассчитывает размер
 -- безопасной партии автоматически по реальному объёму обоих сундуков.
