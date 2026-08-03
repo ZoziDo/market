@@ -1,4 +1,4 @@
--- v4.2 CELL TURBO - VIP-SHOP EXCHANGER
+-- v4.3 CELL TURBO - VIP-SHOP EXCHANGER: остатки только из основной МЭ
 -- Визуальный интерфейс сохранён из v3.0.5 без изменений.
 -- Обмен выполняется внутри ячейки, установленной в ME Chest.
 -- BUILD: VIP_SHOP_CELL_EXCHANGER_16_ORES_TURBO_EXACT_GUI
@@ -814,65 +814,119 @@ end
 -- ============================================================
 -- ОБНОВЛЕНИЕ ОСТАТКОВ В ОСНОВНОЙ МЭ
 -- ============================================================
--- Для GUI читаем только 16 нужных предметов через getItemDetail.
--- Полный список из нескольких тысяч предметов основной сети здесь не сканируется.
-local function readMainItemDetail(name, damage)
-    local ok, detail = pcall(
+-- ВАЖНО: прогресс и колонка "В МЭ" читаются ТОЛЬКО через
+-- MAIN_ME_ADDRESS. Буферная сеть ME Chest здесь не используется.
+--
+-- На этой сборке getItemDetail может возвращать несовместимый объект,
+-- из-за чего интерфейс показывал 0. Поэтому основная сеть читается
+-- одним вызовом getItemsInNetwork, а затем строится индекс только
+-- для 16 наградных предметов.
+local function readMainStockIndex()
+    local ok, items = pcall(
         invoke,
         MAIN_ME_ADDRESS,
-        "getItemDetail",
-        { id = name, dmg = tonumber(damage) or 0 }
+        "getItemsInNetwork"
     )
 
-    if not ok or not detail then
+    if not ok or type(items) ~= "table" then
         return nil
     end
 
-    if type(detail.basic) == "function" then
-        local okBasic, basic = pcall(detail.basic)
-        if okBasic and type(basic) == "table" then
-            return basic
+    local wanted = {}
+
+    for _, ore in ipairs(ore_list) do
+        local name = tostring(ore.give.name)
+        local damage = math.floor(
+            tonumber(ore.give.damage) or 0
+        )
+        wanted[name .. ":" .. tostring(damage)] = true
+    end
+
+    local stockIndex = {}
+
+    for _, item in pairs(items) do
+        if type(item) == "table" then
+            local name = item.name or item.id
+            local damage = math.floor(
+                tonumber(item.damage or item.dmg) or 0
+            )
+
+            if name then
+                local key = tostring(name)
+                    .. ":"
+                    .. tostring(damage)
+
+                if wanted[key] then
+                    local amount = math.max(
+                        0,
+                        math.floor(
+                            tonumber(
+                                item.size
+                                or item.qty
+                                or item.amount
+                                or item.count
+                            ) or 0
+                        )
+                    )
+
+                    local entry = stockIndex[key]
+
+                    if not entry then
+                        entry = {
+                            amount = 0,
+                            maxSize = tonumber(
+                                item.max_size
+                                or item.maxSize
+                                or item.maxStackSize
+                            ) or 64,
+                            item = item
+                        }
+                        stockIndex[key] = entry
+                    end
+
+                    entry.amount = entry.amount + amount
+                end
+            end
         end
     end
 
-    if type(detail) == "table" then
-        return detail
-    end
-
-    return nil
+    return stockIndex
 end
 
 local function updIngotsSize()
     if #ore_list < 1 then return false end
 
-    local meResponded = false
+    local stockIndex = readMainStockIndex()
+
+    if not stockIndex then
+        for _, ore in ipairs(ore_list) do
+            ore.size = 0
+            ore.maxSize = 64
+        end
+        return false
+    end
 
     for _, ore in ipairs(ore_list) do
-        local item = readMainItemDetail(
-            ore.give.name,
-            ore.give.damage or 0
-        )
+        local key = tostring(ore.give.name)
+            .. ":"
+            .. tostring(
+                math.floor(
+                    tonumber(ore.give.damage) or 0
+                )
+            )
 
-        if item then
-            meResponded = true
-            ore.size = tonumber(
-                item.qty
-                or item.size
-                or item.amount
-                or item.count
-            ) or 0
-            ore.maxSize = tonumber(
-                item.max_size
-                or item.maxSize
-                or item.maxStackSize
-            ) or 64
+        local entry = stockIndex[key]
+
+        if entry then
+            ore.size = entry.amount
+            ore.maxSize = entry.maxSize or 64
         else
             ore.size = 0
             ore.maxSize = 64
         end
     end
 
-    return meResponded
+    return true
 end
 
 local function drawInfo(drawType)
@@ -1288,28 +1342,10 @@ end
 -- ============================================================
 -- ПЛАН ОБМЕНА
 -- ============================================================
-local function getMainRewardEntry(cache, name, damage)
-    local key = exactItemKey(name, damage)
-    if cache[key] ~= nil then
-        return cache[key] or nil
-    end
-
-    local basic = readMainItemDetail(name, damage)
-    if not basic then
-        cache[key] = false
-        return nil
-    end
-
-    local entry = {
-        item = basic,
-        name = stackName(basic) or name,
-        damage = stackDamage(basic),
-        amount = stackAmount(basic),
-        maxSize = stackMaxSize(basic)
-    }
-
-    cache[key] = entry
-    return entry
+local function getMainRewardEntry(mainIndex, name, damage)
+    -- Награда берётся только из индекса основной МЭ-сети,
+    -- построенного через MAIN_ME_ADDRESS.
+    return getNetworkEntry(mainIndex, name, damage)
 end
 
 local function createExchangePlan()
@@ -1321,7 +1357,15 @@ local function createExchangePlan()
     end
 
     local cellIndex = buildNetworkIndex(cellItems)
-    local rewardCache = {}
+
+    -- Основную МЭ читаем отдельно и строго через MAIN_ME_ADDRESS.
+    -- Это тот же источник, из которого заполняются шкалы и колонка "В МЭ".
+    local mainItems, mainError = getNetworkItems(MAIN_ME_ADDRESS)
+    if not mainItems then
+        return nil, "Не удалось прочитать основную МЭ: " .. tostring(mainError)
+    end
+
+    local mainIndex = buildNetworkIndex(mainItems)
     local plan = {}
     local totalRewardNeeds = {}
     local rewardDefinitions = {}
@@ -1338,7 +1382,7 @@ local function createExchangePlan()
 
         if groups > 0 then
             local rewardEntry = getMainRewardEntry(
-                rewardCache,
+                mainIndex,
                 ore.give.name,
                 giveDamage
             )
