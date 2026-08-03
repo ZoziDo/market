@@ -489,12 +489,7 @@ Performance.sellCatalogLoadedAt = 0
 Performance.idleFor = 0
 Performance.pendingScroll = 0
 Performance.nextScrollAt = 0
-
--- Колесо может присылать несколько событий подряд. Они выполняются
--- небольшими порциями, чтобы список двигался плавно, без полного кадра.
-Performance.scrollInterval = 0.025
-Performance.scrollRowsPerFrame = 2
-Performance.scrollMaxQueue = 16
+Performance.scrollInterval = 0
 
 SelectorCache = SelectorCache or {}
 SelectorCache.key = nil
@@ -3731,12 +3726,10 @@ end
 
 local scrollbarState = {
   initialized = false,
-  signature = nil,
 }
 
 local function resetScrollbarState()
   scrollbarState.initialized = false
-  scrollbarState.signature = nil
 end
 
 -- Нижние доли ячейки: позволяют перемещать ползунок не только целыми
@@ -3755,96 +3748,46 @@ local function drawScrollbar(force)
   local total = #items
   local trackColor = C.inputBg
 
+  -- Перерисовывается только один столбец полосы, поэтому моргания нет.
+  fill(SCROLL_X, LIST_Y, 1, LIST_H, trackColor)
+  scrollbarState.initialized = true
+
   if total <= LIST_H then
-    local signature = "empty:" .. tostring(total)
-
-    if not force
-      and scrollbarState.initialized
-      and scrollbarState.signature == signature
-    then
-      return
-    end
-
     fill(SCROLL_X, LIST_Y, 1, LIST_H, C.bg)
-    scrollbarState.initialized = true
-    scrollbarState.signature = signature
     setBG(C.bg)
     return
   end
 
-  local thumbH = math.max(
-    3,
-    math.floor(LIST_H * LIST_H / total)
-  )
+  local thumbH = math.max(3, math.floor(LIST_H * LIST_H / total))
   thumbH = math.min(thumbH, LIST_H)
 
   local maxScroll = math.max(1, total - LIST_H)
   local maxThumbMove = math.max(0, LIST_H - thumbH)
-  local rawPosition =
-    (scrollOffset * maxThumbMove) / maxScroll
+  local rawPosition = (scrollOffset * maxThumbMove) / maxScroll
   local base = math.floor(rawPosition)
   local fraction = rawPosition - base
-  local eighths = math.max(
-    0,
-    math.min(7, math.floor(fraction * 8 + 0.5))
-  )
-
-  -- Пока видимая форма ползунка не изменилась, столбец не трогаем.
-  -- Это убирает его дрожание на каждом маленьком шаге каталога.
-  local signature = table.concat({
-    tostring(total),
-    tostring(thumbH),
-    tostring(base),
-    tostring(eighths),
-  }, ":")
-
-  if not force
-    and scrollbarState.initialized
-    and scrollbarState.signature == signature
-  then
-    return
-  end
-
-  fill(SCROLL_X, LIST_Y, 1, LIST_H, trackColor)
-  scrollbarState.initialized = true
-  scrollbarState.signature = signature
+  local eighths = math.max(0, math.min(7, math.floor(fraction * 8 + 0.5)))
 
   if eighths == 0 then
-    fill(
-      SCROLL_X,
-      LIST_Y + base,
-      1,
-      thumbH,
-      C.accent
-    )
+    fill(SCROLL_X, LIST_Y + base, 1, thumbH, C.accent)
   else
+    -- Верхняя неполная ячейка: цвет ползунка занимает нижнюю часть.
     setBG(trackColor)
     setFG(C.accent)
-    gpu.set(
-      SCROLL_X,
-      LIST_Y + base,
-      scrollBlock(8 - eighths)
-    )
+    gpu.set(SCROLL_X, LIST_Y + base, scrollBlock(8 - eighths))
 
+    -- Полностью заполненная середина ползунка.
     if thumbH > 1 then
-      fill(
-        SCROLL_X,
-        LIST_Y + base + 1,
-        1,
-        thumbH - 1,
-        C.accent
-      )
+      fill(SCROLL_X, LIST_Y + base + 1, 1, thumbH - 1, C.accent)
     end
 
+    -- Нижняя неполная ячейка: фон ползунка остаётся сверху, а нижняя
+    -- часть закрашивается цветом дорожки.
     local bottomY = LIST_Y + base + thumbH
     if bottomY <= LIST_Y + LIST_H - 1 then
       setBG(C.accent)
       setFG(trackColor)
-      gpu.set(
-        SCROLL_X,
-        bottomY,
-        scrollBlock(8 - eighths)
-      )
+      gpu.set(SCROLL_X, bottomY, scrollBlock(8 - eighths))
     end
   end
 
@@ -3924,6 +3867,54 @@ local function drawProductList()
   local endIdx = math.min(#items, startIdx + LIST_H - 1)
   for i = startIdx, endIdx do
     drawItemRow(i, LIST_Y + (i - startIdx))
+  end
+end
+
+function drawProductListInPlace()
+  if #items == 0 then
+    for row = 1, LIST_H do
+      fill(
+        LIST_X,
+        LIST_Y + row - 1,
+        LIST_W,
+        1,
+        C.bg
+      )
+    end
+
+    local msg
+    local msgColor = C.notFound
+
+    if searchQuery ~= "" then
+      msg = "ПО ТВОЕМУ ЗАПРОСУ, НИЧЕГО НЕ НАЙДЕНО!"
+    elseif catalogLoadError then
+      msg = catalogStatus
+      msgColor = C.red
+    else
+      msg = "В КАТАЛОГЕ НЕТ ТОВАРОВ"
+    end
+
+    msg = truncate(msg, math.max(10, LIST_W - 4))
+    local mx = LIST_X
+      + math.max(
+        0,
+        math.floor((LIST_W - unicode.len(msg)) / 2)
+      )
+    local my = LIST_Y + math.floor(LIST_H / 2)
+    text(mx, my, msg, msgColor, C.bg)
+    return
+  end
+
+  for row = 1, LIST_H do
+    local itemIndex = scrollOffset + row
+    local y = LIST_Y + row - 1
+
+    if itemIndex <= #items then
+      -- drawItemRow сама полностью перезаписывает строку.
+      drawItemRow(itemIndex, y)
+    else
+      fill(LIST_X, y, LIST_W, 1, C.bg)
+    end
   end
 end
 
@@ -4326,8 +4317,16 @@ end
 -- Используется при клике по дорожке, когда смещение может быть большим.
 -- Остальная часть магазина вообще не затрагивается.
 function renderCatalogViewportAtomically()
-  local function drawViewport()
+  local function drawViewportToBuffer()
     drawProductList()
+    resetScrollbarState()
+    drawScrollbar(true)
+  end
+
+  local function drawViewportDirect()
+    -- На реальном экране не очищаем прямоугольник целиком:
+    -- каждая строка заменяется сразу готовой новой строкой.
+    drawProductListInPlace()
     resetScrollbarState()
     drawScrollbar(true)
   end
@@ -4337,23 +4336,24 @@ function renderCatalogViewportAtomically()
     or type(gpu.setActiveBuffer) ~= "function"
     or type(gpu.bitblt) ~= "function"
   then
-    drawViewport()
+    activateFrontBuffer()
+    drawViewportDirect()
     return false
   end
 
   local activated = pcall(gpu.setActiveBuffer, buffer)
   if not activated then
     activateFrontBuffer()
-    drawViewport()
+    drawViewportDirect()
     return false
   end
 
-  local ok = pcall(drawViewport)
+  local ok = pcall(drawViewportToBuffer)
   pcall(gpu.setActiveBuffer, 0)
 
   if not ok then
     activateFrontBuffer()
-    drawViewport()
+    drawViewportDirect()
     return false
   end
 
@@ -4374,7 +4374,7 @@ function renderCatalogViewportAtomically()
 
   if not copied or result == false then
     activateFrontBuffer()
-    drawViewport()
+    drawViewportDirect()
     return false
   end
 
@@ -4666,99 +4666,16 @@ local function setScrollOffset(newOffset)
     math.min(maxScroll, math.floor(newOffset or 0))
   )
 
-  local oldOffset = scrollOffset
-  if newOffset == oldOffset then
+  if newOffset == scrollOffset then
     return false
   end
 
-  local delta = newOffset - oldOffset
-  local shift = math.abs(delta)
-  local copied = false
+  scrollOffset = newOffset
 
-  -- Быстрый путь работает теперь не только для одной строки.
-  -- Уже нарисованный участок сдвигается видеокартой, после чего
-  -- дорисовываются исключительно появившиеся строки.
-  if shift > 0
-    and shift < LIST_H
-    and LIST_H > 1
-    and #items > LIST_H
-    and type(gpu.copy) == "function"
-  then
-    local ok
-    local result
-
-    if delta > 0 then
-      ok, result = pcall(
-        gpu.copy,
-        LIST_X,
-        LIST_Y + shift,
-        LIST_W,
-        LIST_H - shift,
-        0,
-        -shift
-      )
-
-      copied = ok and result ~= false
-
-      if copied then
-        scrollOffset = newOffset
-
-        local firstNewRow = LIST_H - shift + 1
-        for row = firstNewRow, LIST_H do
-          local y = LIST_Y + row - 1
-          fill(LIST_X, y, LIST_W, 1, C.bg)
-
-          local itemIndex = scrollOffset + row
-          if itemIndex <= #items then
-            drawItemRow(itemIndex, y)
-          end
-        end
-      end
-    else
-      ok, result = pcall(
-        gpu.copy,
-        LIST_X,
-        LIST_Y,
-        LIST_W,
-        LIST_H - shift,
-        0,
-        shift
-      )
-
-      copied = ok and result ~= false
-
-      if copied then
-        scrollOffset = newOffset
-
-        for row = 1, shift do
-          local y = LIST_Y + row - 1
-          fill(LIST_X, y, LIST_W, 1, C.bg)
-
-          local itemIndex = scrollOffset + row
-          if itemIndex <= #items then
-            drawItemRow(itemIndex, y)
-          end
-        end
-      end
-    end
-  end
-
-  if not copied then
-    scrollOffset = newOffset
-
-    -- Полный атомарный кадр остаётся только для настоящего большого
-    -- скачка: клик по дорожке или переход дальше высоты списка.
-    if type(renderCatalogViewportAtomically) == "function" then
-      renderCatalogViewportAtomically()
-    else
-      drawProductList()
-      resetScrollbarState()
-      drawScrollbar(true)
-    end
-  else
-    drawScrollbar(false)
-  end
-
+  -- Никаких gpu.copy и промежуточных кадров.
+  -- Новый viewport сначала формируется в невидимом буфере,
+  -- затем заменяет список одной операцией bitblt.
+  renderCatalogViewportAtomically()
   return true
 end
 
@@ -4803,62 +4720,20 @@ end
 
 function Performance.queueScroll(delta)
   delta = tonumber(delta) or 0
-  if delta == 0 then return end
+  if delta == 0 then return false end
 
-  delta = delta > 0 and math.ceil(delta)
-    or math.floor(delta)
-
-  local pending =
-    tonumber(Performance.pendingScroll) or 0
-
-  -- При развороте колеса старая очередь сразу отменяется.
-  -- Каталог не продолжает ехать в предыдущую сторону.
-  if pending ~= 0 and pending * delta < 0 then
-    pending = 0
-  end
-
-  pending = pending + delta
-  pending = math.max(
-    -Performance.scrollMaxQueue,
-    math.min(Performance.scrollMaxQueue, pending)
-  )
-
-  Performance.pendingScroll = pending
-
-  local now = computer.uptime()
-  if Performance.nextScrollAt <= now then
-    Performance.nextScrollAt = now
-  end
+  -- OpenComputers обычно передаёт +1/-1.
+  -- Обрабатываем событие сразу, без накопления и анимации.
+  Performance.pendingScroll = 0
+  Performance.nextScrollAt = 0
+  scroll(delta)
+  return true
 end
 
 function Performance.applyPendingScroll(now)
-  now = tonumber(now) or computer.uptime()
-
-  local pending =
-    tonumber(Performance.pendingScroll) or 0
-
-  if pending == 0 or now < Performance.nextScrollAt then
-    return false
-  end
-
-  local amount = math.min(
-    Performance.scrollRowsPerFrame,
-    math.abs(pending)
-  )
-
-  local step = pending > 0 and amount or -amount
-
-  Performance.pendingScroll = pending - step
-  scroll(step)
-
-  if Performance.pendingScroll ~= 0 then
-    Performance.nextScrollAt =
-      computer.uptime() + Performance.scrollInterval
-  else
-    Performance.nextScrollAt = 0
-  end
-
-  return true
+  -- Очередь отключена: промежуточные анимационные кадры
+  -- были причиной мигания на многомониторной сборке.
+  return false
 end
 
 -- Переход к месту нажатия на дорожке скроллбара.
