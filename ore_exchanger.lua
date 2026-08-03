@@ -1,4 +1,4 @@
--- v4.3 CELL TURBO - VIP-SHOP EXCHANGER: остатки только из основной МЭ
+-- v4.4 CELL TURBO - VIP-SHOP EXCHANGER: пропуск руды при нехватке награды
 -- Визуальный интерфейс сохранён из v3.0.5 без изменений.
 -- Обмен выполняется внутри ячейки, установленной в ME Chest.
 -- BUILD: VIP_SHOP_CELL_EXCHANGER_16_ORES_TURBO_EXACT_GUI
@@ -1349,8 +1349,7 @@ local function getMainRewardEntry(mainIndex, name, damage)
 end
 
 local function createExchangePlan()
-    -- Ячейка обычно содержит мало типов предметов, поэтому её сеть
-    -- читается один раз. Основная сеть на 2400+ типов целиком не сканируется.
+    -- Содержимое ячейки считывается один раз.
     local cellItems, cellError = getNetworkItems(CELL_ME_ADDRESS)
     if not cellItems then
         return nil, "Не удалось прочитать ячейку: " .. tostring(cellError)
@@ -1358,8 +1357,7 @@ local function createExchangePlan()
 
     local cellIndex = buildNetworkIndex(cellItems)
 
-    -- Основную МЭ читаем отдельно и строго через MAIN_ME_ADDRESS.
-    -- Это тот же источник, из которого заполняются шкалы и колонка "В МЭ".
+    -- Остатки наград считываются только из основной МЭ.
     local mainItems, mainError = getNetworkItems(MAIN_ME_ADDRESS)
     if not mainItems then
         return nil, "Не удалось прочитать основную МЭ: " .. tostring(mainError)
@@ -1367,18 +1365,38 @@ local function createExchangePlan()
 
     local mainIndex = buildNetworkIndex(mainItems)
     local plan = {}
-    local totalRewardNeeds = {}
-    local rewardDefinitions = {}
+    local skipped = {}
+
+    -- Если несколько видов руды выдают один и тот же предмет,
+    -- заранее учитываем уже зарезервированное количество.
+    local reservedRewards = {}
 
     for index, ore in ipairs(ore_list) do
-        local takeAmount = math.max(1, math.floor(tonumber(ore.take.amount) or 1))
-        local giveAmount = math.max(1, math.floor(tonumber(ore.give.amount) or 1))
+        local takeAmount = math.max(
+            1,
+            math.floor(tonumber(ore.take.amount) or 1)
+        )
+
+        local giveAmount = math.max(
+            1,
+            math.floor(tonumber(ore.give.amount) or 1)
+        )
+
         local takeDamage = tonumber(ore.take.damage) or 0
         local giveDamage = tonumber(ore.give.damage) or 0
 
-        local takeEntry = getNetworkEntry(cellIndex, ore.take.name, takeDamage)
-        local available = takeEntry and takeEntry.amount or 0
-        local groups = math.floor(available / takeAmount)
+        local takeEntry = getNetworkEntry(
+            cellIndex,
+            ore.take.name,
+            takeDamage
+        )
+
+        local availableOre =
+            takeEntry and takeEntry.amount or 0
+
+        local groups = math.floor(
+            availableOre / takeAmount
+        )
 
         if groups > 0 then
             local rewardEntry = getMainRewardEntry(
@@ -1387,67 +1405,101 @@ local function createExchangePlan()
                 giveDamage
             )
 
-            local rewardKey = exactItemKey(ore.give.name, giveDamage)
-            local oreKey = exactItemKey(ore.take.name, takeDamage)
+            local rewardKey = exactItemKey(
+                ore.give.name,
+                giveDamage
+            )
+
+            local oreKey = exactItemKey(
+                ore.take.name,
+                takeDamage
+            )
 
             if oreKey == rewardKey then
-                return nil, "Небезопасная настройка: руда и награда совпадают у "
-                    .. tostring(ore.take.label or ore.take.name)
+                return nil,
+                    "Небезопасная настройка: руда и награда совпадают у "
+                    .. tostring(
+                        ore.take.label or ore.take.name
+                    )
             end
 
-            totalRewardNeeds[rewardKey] = (totalRewardNeeds[rewardKey] or 0)
-                + groups * giveAmount
+            local rewardNeeded =
+                groups * giveAmount
 
-            rewardDefinitions[rewardKey] = {
-                name = ore.give.name,
-                damage = giveDamage,
-                label = ore.give.label,
-                entry = rewardEntry
-            }
+            local rewardInMain =
+                rewardEntry and rewardEntry.amount or 0
 
-            plan[#plan + 1] = {
-                index = index,
-                ore = ore,
-                groups = groups,
-                takeAmount = takeAmount,
-                giveAmount = giveAmount,
-                takeDamage = takeDamage,
-                giveDamage = giveDamage,
-                takeFingerprint = makeFingerprint(
-                    takeEntry.item,
-                    ore.take.name,
-                    takeDamage
-                ),
-                giveFingerprint = rewardEntry and makeFingerprint(
-                    rewardEntry.item,
-                    ore.give.name,
-                    giveDamage
-                ) or nil,
-                takeMaxSize = takeEntry.maxSize or 64,
-                giveMaxSize = rewardEntry and rewardEntry.maxSize or 64
-            }
+            local alreadyReserved =
+                reservedRewards[rewardKey] or 0
+
+            local rewardAvailable =
+                math.max(
+                    0,
+                    rewardInMain - alreadyReserved
+                )
+
+            -- ВАЖНО:
+            -- если награды не хватает на ПОЛНЫЙ обмен данного
+            -- вида руды, этот вид полностью пропускается.
+            -- Его руда остаётся в ячейке, а остальные виды
+            -- продолжают обрабатываться.
+            if rewardEntry
+                and rewardAvailable >= rewardNeeded then
+
+                reservedRewards[rewardKey] =
+                    alreadyReserved + rewardNeeded
+
+                plan[#plan + 1] = {
+                    index = index,
+                    ore = ore,
+                    groups = groups,
+                    takeAmount = takeAmount,
+                    giveAmount = giveAmount,
+                    takeDamage = takeDamage,
+                    giveDamage = giveDamage,
+                    takeFingerprint = makeFingerprint(
+                        takeEntry.item,
+                        ore.take.name,
+                        takeDamage
+                    ),
+                    giveFingerprint = makeFingerprint(
+                        rewardEntry.item,
+                        ore.give.name,
+                        giveDamage
+                    ),
+                    takeMaxSize =
+                        takeEntry.maxSize or 64,
+                    giveMaxSize =
+                        rewardEntry.maxSize or 64
+                }
+            else
+                skipped[#skipped + 1] = {
+                    index = index,
+                    ore = ore,
+                    oreAmount = groups * takeAmount,
+                    rewardNeeded = rewardNeeded,
+                    rewardAvailable = rewardAvailable
+                }
+
+                writeDebugLog(string.format(
+                    "Пропущен обмен: %s. Руды=%d, награда=%s, в основной МЭ=%d, требуется=%d",
+                    tostring(
+                        ore.take.label
+                        or ore.take.name
+                    ),
+                    groups * takeAmount,
+                    tostring(
+                        ore.give.label
+                        or ore.give.name
+                    ),
+                    rewardAvailable,
+                    rewardNeeded
+                ))
+            end
         end
     end
 
-    if #plan == 0 then
-        return {}, nil
-    end
-
-    for rewardKey, needed in pairs(totalRewardNeeds) do
-        local definition = rewardDefinitions[rewardKey]
-        local available = definition.entry and definition.entry.amount or 0
-
-        if available < needed then
-            return nil, string.format(
-                "Недостаточно: %s — в МЭ %d, требуется %d.",
-                tostring(definition.label or definition.name),
-                available,
-                needed
-            )
-        end
-    end
-
-    return plan, nil
+    return plan, nil, skipped
 end
 
 local function returnChestItemToNetwork(
@@ -1550,7 +1602,16 @@ local function processBatch(entry, batchGroups)
 
     if not ok then
         rollbackUnpaidBatch(entry, oreAmount, rewardAmount)
-        return false, "Не удалось зарезервировать награду: " .. tostring(actionError)
+
+        -- Остаток основной МЭ мог измениться уже после построения плана.
+        -- В этом случае данный вид руды нужно пропустить, а не останавливать
+        -- обработку всех остальных видов.
+        return false,
+            "Не удалось зарезервировать награду: "
+            .. tostring(actionError),
+            0,
+            0,
+            "reward_unavailable"
     end
 
     -- 2. Выгружаем рассчитанную руду из ячейки в первый сундук.
@@ -1648,19 +1709,37 @@ local function processCellExchange()
 
     setStatus("Считываю содержимое ячейки...", C.white, C.cyan)
 
-    local plan, planError = createExchangePlan()
+    local plan, planError, skipped = createExchangePlan()
     if not plan then
         setStatus(planError, C.red, C.red)
         return false
     end
 
+    skipped = skipped or {}
+
     if #plan == 0 then
-        setStatus("В ячейке нет руды в количестве для обмена.", C.yellow, C.yellow)
+        if #skipped > 0 then
+            setStatus(
+                string.format(
+                    "Обменов нет: пропущено %d видов руды — не хватает награды в основной МЭ.",
+                    #skipped
+                ),
+                C.yellow,
+                C.yellow
+            )
+        else
+            setStatus(
+                "В ячейке нет руды в количестве для обмена.",
+                C.yellow,
+                C.yellow
+            )
+        end
         return true
     end
 
     local sessionOres = 0
     local sessionRewards = 0
+    local skippedCount = #skipped
 
     for _, entry in ipairs(plan) do
         local remainingGroups = entry.groups
@@ -1696,19 +1775,61 @@ local function processCellExchange()
                 return false
             end
 
-            local batchGroups = math.min(remainingGroups, maxGroups)
-            local ok, batchError, accepted, rewarded = processBatch(
-                entry,
-                batchGroups
+            local batchGroups = math.min(
+                remainingGroups,
+                maxGroups
             )
 
+            local ok,
+                batchError,
+                accepted,
+                rewarded,
+                errorCode = processBatch(
+                    entry,
+                    batchGroups
+                )
+
             if not ok then
-                setStatus("ОШИБКА: " .. tostring(batchError), C.red, C.red)
+                if errorCode == "reward_unavailable" then
+                    skippedCount = skippedCount + 1
+
+                    writeDebugLog(string.format(
+                        "Вид руды пропущен во время обмена: %s. Причина: %s",
+                        tostring(
+                            entry.ore.take.label
+                            or entry.ore.take.name
+                        ),
+                        tostring(batchError)
+                    ))
+
+                    setStatus(
+                        string.format(
+                            "Пропускаю %s: награды в основной МЭ уже не хватает.",
+                            getOreName(entry.ore)
+                        ),
+                        C.yellow,
+                        C.yellow
+                    )
+
+                    -- Руда этого вида остаётся в ячейке.
+                    -- Переходим к следующему виду руды.
+                    remainingGroups = 0
+                    break
+                end
+
+                setStatus(
+                    "ОШИБКА: " .. tostring(batchError),
+                    C.red,
+                    C.red
+                )
                 return false
             end
 
-            accepted = tonumber(accepted) or (batchGroups * entry.takeAmount)
-            rewarded = tonumber(rewarded) or (batchGroups * entry.giveAmount)
+            accepted = tonumber(accepted)
+                or (batchGroups * entry.takeAmount)
+
+            rewarded = tonumber(rewarded)
+                or (batchGroups * entry.giveAmount)
 
             remainingGroups = remainingGroups - batchGroups
             sessionOres = sessionOres + accepted
@@ -1726,15 +1847,28 @@ local function processCellExchange()
     refreshStockColumns()
     drawTotalLine()
 
-    setStatus(
-        string.format(
-            "Обмен завершён. Принято: %d руды, выдано: %d предметов.",
-            sessionOres,
-            sessionRewards
-        ),
-        C.green,
-        C.green
-    )
+    if skippedCount > 0 then
+        setStatus(
+            string.format(
+                "Готово. Принято: %d, выдано: %d, пропущено видов: %d.",
+                sessionOres,
+                sessionRewards,
+                skippedCount
+            ),
+            C.green,
+            C.yellow
+        )
+    else
+        setStatus(
+            string.format(
+                "Обмен завершён. Принято: %d руды, выдано: %d предметов.",
+                sessionOres,
+                sessionRewards
+            ),
+            C.green,
+            C.green
+        )
+    end
 
     return true
 end
