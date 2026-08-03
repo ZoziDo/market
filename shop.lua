@@ -5,14 +5,7 @@ local event = require("event")
 local keyboard = require("keyboard")
 local unicode = require("unicode")
 local computer = require("computer")
-Serialization = require("serialization")
-Filesystem = require("filesystem")
-
-if not component.isAvailable("modem") then
-  error("Не найден модем. Установите сетевую карту/модем.", 0)
-end
-
-modem = component.modem
+local internet = require("internet")
 
 -- В некоторых сборках OpenComputers модуль json.lua регистрирует глобальную
 -- таблицу json/JSON, но ничего не возвращает из require(). Из-за этого
@@ -466,115 +459,58 @@ local function encodeJson(value)
   return nil, tostring(result)
 end
 
--- ============================================================
--- ЛОКАЛЬНАЯ MODEM-СЕТЬ VIP-SHOP
--- Интернет-карта, TimeWeb и VPS больше не используются.
--- ============================================================
-
-MODEM_PROTOCOL = "VIPSHOP-MODEM-1"
-MODEM_NETWORK_KEY = "VIPSHOP_ZOZIDO_REALM9_SECRET_2026"
-MODEM_SERVER_PORT = 3410
-MODEM_CLIENT_PORT = 3411
-MODEM_SERVER_ADDRESS = "f98e9e2e-1ebe-4bcf-82eb-74f0710a965b"
-TERMINAL_ID = "AUTO"
-if TERMINAL_ID == "AUTO" or TERMINAL_ID == "" then
-  TERMINAL_ID = "VIP-TERM-" .. tostring(modem.address):sub(1, 8)
-end
-
-MODEM_CACHE_DIR = "/home/vipshop_cache"
-MODEM_CACHE_BUY = MODEM_CACHE_DIR .. "/catalog_buy.db"
-MODEM_CACHE_SELL = MODEM_CACHE_DIR .. "/catalog_sell.db"
-MODEM_CACHE_META = MODEM_CACHE_DIR .. "/versions.db"
-modem.open(MODEM_CLIENT_PORT)
-
-local WEB_BASE_URL = "modem://vipshop"
-local CATALOG_URL = WEB_BASE_URL .. "/catalog_buy"
-local SELL_ITEMS_URL = WEB_BASE_URL .. "/catalog_sell"
-local USERS_URL = WEB_BASE_URL .. "/users"
-local BALANCE_UPDATE_URL = WEB_BASE_URL .. "/update_balance"
-REGISTER_PLAYER_URL = WEB_BASE_URL .. "/register_player"
-local TRANSACTION_URL = WEB_BASE_URL .. "/transaction"
+-- Адреса файлов на хостинге из старого рабочего магазина.
+local WEB_BASE_URL = "http://201.24.112.170:8080"
+local CATALOG_URL = WEB_BASE_URL .. "/data/catalog.json"
+local SELL_ITEMS_URL = WEB_BASE_URL .. "/data/sell_items.json"
+local USERS_URL = WEB_BASE_URL .. "/data/users.json"
+local BALANCE_UPDATE_URL = "http://co925228.tw1.ru/api/command/set_balance.php"
+REGISTER_PLAYER_URL = "http://co925228.tw1.ru/api/command/register_player.php"
+local TRANSACTION_URL = "http://co925228.tw1.ru/api/add_transaction.php"
 local VPS_SYNC_URL = WEB_BASE_URL .. "/sync"
-
 SecurePurchase = SecurePurchase or {}
 SecurePurchase.url = WEB_BASE_URL .. "/api"
 SecurePurchase.timeout = 4
+
+-- Таблица должна существовать до объявления SecureSale.* функций.
 SecureSale = SecureSale or {}
 
-ModemRPC = ModemRPC or {}
-ModemRPC.serverAddress = MODEM_SERVER_ADDRESS
-ModemRPC.requestCounter = 0
-ModemRPC.pushQueue = {}
-ModemRPC.sessionData = nil
-ModemRPC.cacheMeta = nil
-ModemRPC.nextHeartbeat = 0
-ModemRPC.heartbeatInterval = 30
-ModemRPC.timeout = 4
-ModemRPC.lastError = nil
-ModemRPC.globalMaintenance = false
-ModemRPC.terminalPaused = false
-
-function ModemRPC.copy(value)
-  if type(value) ~= "table" then return value end
-  local result = {}
-  for key, nested in pairs(value) do
-    result[key] = ModemRPC.copy(nested)
-  end
-  return result
-end
-
-Performance = Performance or {}
-Performance.searchDelay = 0.12
-Performance.searchDirty = false
-Performance.nextSearchAt = 0
-Performance.lastInputAt = 0
-Performance.networkIdleDelay = 0.75
-Performance.catalogMaxAge = 3600
-Performance.buyCatalogLoadedAt = 0
-Performance.sellCatalogLoadedAt = 0
-Performance.idleFor = 0
-Performance.pendingScroll = 0
-Performance.nextScrollAt = 0
-Performance.scrollInterval = 0.04
-
-SelectorCache = SelectorCache or {}
-SelectorCache.key = nil
-
+-- Режим технических работ. Источник истины — config.json на хостинге,
+-- быстрый сигнал о переключении приходит через signal.json на VPS.
 Maintenance = Maintenance or {}
-Maintenance.configUrl = WEB_BASE_URL .. "/state"
-Maintenance.signalUrl = WEB_BASE_URL .. "/push"
+Maintenance.configUrl = "http://co925228.tw1.ru/data/config.json"
+Maintenance.signalUrl = WEB_BASE_URL .. "/data/signal.json"
 Maintenance.active = false
 Maintenance.screenDrawn = false
 Maintenance.lastSignalTime = -1
-Maintenance.nextSignalCheck = math.huge
-Maintenance.nextConfigCheck = math.huge
-Maintenance.signalInterval = 3600
-Maintenance.configInterval = 3600
-Maintenance.requestTimeout = 4
+Maintenance.nextSignalCheck = 0
+Maintenance.nextConfigCheck = 0
+Maintenance.signalInterval = 2.0
+Maintenance.configInterval = 20.0
+Maintenance.requestTimeout = 2.5
 
+-- Система ограничения доступа для игроков, заблокированных через сайт.
+-- Сайт уже записывает бан в users.json и создаёт signal.json с section="ban".
 BanSystem = BanSystem or {}
-BanSystem.checkUrl = WEB_BASE_URL .. "/check_ban"
-BanSystem.signalUrl = WEB_BASE_URL .. "/push"
-BanSystem.requestTimeout = 4
-BanSystem.checkInterval = 3600
-BanSystem.nextCheck = math.huge
+BanSystem.checkUrl = "http://co925228.tw1.ru/check_ban.php"
+BanSystem.signalUrl = WEB_BASE_URL .. "/data/signal.json"
+BanSystem.requestTimeout = 2.5
+BanSystem.checkInterval = 4.0
+BanSystem.nextCheck = 0
 BanSystem.lastSignalTime = -1
 BanSystem.blockedPlayer = nil
 BanSystem.info = nil
 BanSystem.screenDrawn = false
 BanSystem.lastError = nil
 
-local HTTP_TIMEOUT = 8
+local HTTP_TIMEOUT = 30
 local PURCHASE_HTTP_TIMEOUT = 4
-local PIM_CHECK_INTERVAL = 0.65
+local PIM_CHECK_INTERVAL = 0.30
 local AUTH_DELAY = 2
 local ME_EXPORT_DIRECTION = "up"
 SellFlow = SellFlow or {}
 SellFlow.pushDirection = "down"
-SellFlow.endpoint = WEB_BASE_URL .. "/api"
-SellFlow.inventorySnapshot = nil
-SellFlow.inventorySnapshotAt = 0
-SellFlow.inventorySnapshotMaxAge = 0.75
+SellFlow.endpoint = WEB_BASE_URL .. "/api/sell_item.php"
 
 local WIDTH, HEIGHT = gpu.getResolution()
 local maxW, maxH = gpu.maxResolution()
@@ -735,178 +671,6 @@ local blacklist = {
 }
 
 -- Разбор обычного HTTP-адреса: http://host:port/path
-
-function ModemRPC.ensureDirectory(path)
-  if not Filesystem.exists(path) then Filesystem.makeDirectory(path) end
-end
-
-function ModemRPC.readTable(path)
-  if not Filesystem.exists(path) then return nil end
-  local file = io.open(path, "r")
-  if not file then return nil end
-  local raw = file:read("*a")
-  file:close()
-  if not raw or raw == "" then return nil end
-  local ok, value = pcall(Serialization.unserialize, raw)
-  if ok and type(value) == "table" then return value end
-  return nil
-end
-
-function ModemRPC.writeTable(path, value)
-  ModemRPC.ensureDirectory(MODEM_CACHE_DIR)
-  local raw = Serialization.serialize(value)
-  local tempPath = path .. ".tmp"
-  local file = io.open(tempPath, "w")
-  if not file then return false end
-  file:write(raw)
-  file:close()
-  if Filesystem.exists(path) then Filesystem.remove(path) end
-  local ok = pcall(Filesystem.rename, tempPath, path)
-  if ok and Filesystem.exists(path) then return true end
-  local fallback = io.open(path, "w")
-  if not fallback then return false end
-  fallback:write(raw)
-  fallback:close()
-  pcall(Filesystem.remove, tempPath)
-  return true
-end
-
-function ModemRPC.loadMeta()
-  if type(ModemRPC.cacheMeta) == "table" then return ModemRPC.cacheMeta end
-  ModemRPC.cacheMeta = ModemRPC.readTable(MODEM_CACHE_META) or {buyVersion=0,sellVersion=0}
-  return ModemRPC.cacheMeta
-end
-
-function ModemRPC.saveMeta()
-  return ModemRPC.writeTable(MODEM_CACHE_META, ModemRPC.cacheMeta or {})
-end
-
-function ModemRPC.newRequestId()
-  ModemRPC.requestCounter = ModemRPC.requestCounter + 1
-  return table.concat({TERMINAL_ID,tostring(math.floor(computer.uptime()*1000)),tostring(ModemRPC.requestCounter),tostring(math.random(100000,999999))}, "-")
-end
-
-function ModemRPC.queuePush(action, data)
-  ModemRPC.pushQueue[#ModemRPC.pushQueue+1] = {action=tostring(action or ""),data=type(data)=="table" and data or {}}
-end
-
-function ModemRPC.popPush()
-  if #ModemRPC.pushQueue == 0 then return nil end
-  return table.remove(ModemRPC.pushQueue,1)
-end
-
-function ModemRPC.acceptPushEvent(ev)
-  if type(ev)~="table" or ev[1]~="modem_message" then return false end
-  if ev[4]~=MODEM_CLIENT_PORT or ev[6]~=MODEM_PROTOCOL or ev[7]~="push" or ev[8]~=MODEM_NETWORK_KEY then return false end
-  local ok,data=pcall(Serialization.unserialize,tostring(ev[10] or ""))
-  if not ok or type(data)~="table" then data={} end
-  ModemRPC.queuePush(ev[9],data)
-  return true
-end
-
-function ModemRPC.discover(timeout)
-  if ModemRPC.serverAddress and ModemRPC.serverAddress~="" then return ModemRPC.serverAddress end
-  local requestId=ModemRPC.newRequestId()
-  modem.broadcast(MODEM_SERVER_PORT,MODEM_PROTOCOL,"discover",MODEM_NETWORK_KEY,requestId,MODEM_CLIENT_PORT)
-  local deadline=computer.uptime()+(tonumber(timeout) or 3)
-  while computer.uptime()<deadline do
-    local ev={event.pull(math.max(0.05,deadline-computer.uptime()),"modem_message")}
-    if ev[1]=="modem_message" and ev[4]==MODEM_CLIENT_PORT and ev[6]==MODEM_PROTOCOL and ev[7]=="discover_reply" and ev[8]==MODEM_NETWORK_KEY and tostring(ev[9] or "")==requestId then
-      ModemRPC.serverAddress=tostring(ev[3] or ev[10] or "")
-      ModemRPC.lastError=nil
-      return ModemRPC.serverAddress
-    end
-    ModemRPC.acceptPushEvent(ev)
-  end
-  ModemRPC.lastError="Центральный server.lua не найден"
-  return nil
-end
-
-function ModemRPC.sendRequest(requestId,payload)
-  local address=ModemRPC.discover(2)
-  if not address then return false end
-  payload=type(payload)=="table" and payload or {}
-  payload.terminalId=TERMINAL_ID
-  return modem.send(address,MODEM_SERVER_PORT,MODEM_PROTOCOL,"request",MODEM_NETWORK_KEY,requestId,MODEM_CLIENT_PORT,Serialization.serialize(payload))
-end
-
-function ModemRPC.request(payload,timeout)
-  timeout=tonumber(timeout) or ModemRPC.timeout
-  local requestId=ModemRPC.newRequestId()
-  local chunks={}
-  local expectedTotal=nil
-  for attempt=1,2 do
-    if ModemRPC.sendRequest(requestId,payload) then
-      local deadline=computer.uptime()+timeout
-      while computer.uptime()<deadline do
-        local ev={event.pull(math.max(0.05,deadline-computer.uptime()),"modem_message")}
-        if ev[1]=="modem_message" then
-          if not ModemRPC.acceptPushEvent(ev) and ev[4]==MODEM_CLIENT_PORT and ev[6]==MODEM_PROTOCOL and ev[7]=="chunk" and ev[8]==MODEM_NETWORK_KEY and tostring(ev[9] or "")==requestId then
-            local index,total,chunk=tonumber(ev[10]),tonumber(ev[11]),ev[12]
-            if index and total and type(chunk)=="string" then
-              chunks[index]=chunk
-              expectedTotal=total
-              local ready=true
-              for part=1,expectedTotal do if type(chunks[part])~="string" then ready=false break end end
-              if ready then
-                local ok,response=pcall(Serialization.unserialize,table.concat(chunks))
-                if ok and type(response)=="table" then ModemRPC.lastError=nil return response,nil end
-                return nil,"Повреждённый ответ центрального сервера"
-              end
-            end
-          end
-        end
-      end
-    end
-    ModemRPC.serverAddress=""
-  end
-  ModemRPC.lastError="Центральный сервер не отвечает"
-  return nil,ModemRPC.lastError
-end
-
-function ModemRPC.catalogFromCache(kind)
-  return ModemRPC.readTable(kind=="sell" and MODEM_CACHE_SELL or MODEM_CACHE_BUY)
-end
-
-function ModemRPC.saveCatalogCache(kind,data,version)
-  ModemRPC.writeTable(kind=="sell" and MODEM_CACHE_SELL or MODEM_CACHE_BUY,data)
-  local meta=ModemRPC.loadMeta()
-  if kind=="sell" then meta.sellVersion=tonumber(version) or 0 else meta.buyVersion=tonumber(version) or 0 end
-  ModemRPC.saveMeta()
-end
-
-function ModemRPC.getCatalog(kind,timeout)
-  local meta=ModemRPC.loadMeta()
-  local sessionData=ModemRPC.sessionData or {}
-  local serverVersion=kind=="sell" and tonumber(sessionData.sellVersion) or tonumber(sessionData.buyVersion)
-  local localVersion=kind=="sell" and tonumber(meta.sellVersion) or tonumber(meta.buyVersion)
-  if serverVersion and localVersion==serverVersion then
-    local cached=ModemRPC.catalogFromCache(kind)
-    if type(cached)=="table" then return cached,nil end
-  end
-  local response,err=ModemRPC.request({action="get_catalog",catalog=kind},timeout or 8)
-  if response and response.status=="ok" and type(response.data)=="table" then
-    local data=response.data
-    local version=tonumber(data.version) or serverVersion or 0
-    ModemRPC.saveCatalogCache(kind,data,version)
-    if ModemRPC.sessionData then if kind=="sell" then ModemRPC.sessionData.sellVersion=version else ModemRPC.sessionData.buyVersion=version end end
-    return data,nil
-  end
-  local cached=ModemRPC.catalogFromCache(kind)
-  if type(cached)=="table" then return cached,err or (response and response.message) end
-  return nil,err or (response and response.message) or "Каталог отсутствует"
-end
-
-function ModemRPC.sessionOpen(playerName)
-  local response,err=ModemRPC.request({action="session_open",name=playerName},5)
-  if response and response.status=="ok" and type(response.data)=="table" then
-    ModemRPC.sessionData=response.data
-    ModemRPC.globalMaintenance=response.data.maintenance==true
-    ModemRPC.terminalPaused=response.data.terminalPaused==true
-  end
-  return response,err
-end
-
 local function parseUrl(url)
   local schemaEnd = url:find("://", 1, true)
   if not schemaEnd then
@@ -942,41 +706,150 @@ end
 
 -- Рабочая HTTP-функция перенесена из старого магазина.
 local function httpRequest(url, timeout)
-  url=tostring(url or "")
-  if url==CATALOG_URL or url:find("catalog_buy",1,true) then return ModemRPC.getCatalog("buy",timeout) end
-  if url==SELL_ITEMS_URL or url:find("catalog_sell",1,true) then return ModemRPC.getCatalog("sell",timeout) end
-  if url==Maintenance.configUrl or url:find("/state",1,true) then
-    local response,err=ModemRPC.request({action="get_state"},timeout)
-    if response and response.status=="ok" then
-      local data=response.data or {}
-      ModemRPC.globalMaintenance=data.maintenance==true
-      ModemRPC.terminalPaused=data.terminalPaused==true
-      return {paused=ModemRPC.globalMaintenance or ModemRPC.terminalPaused,maintenance=ModemRPC.globalMaintenance,terminalPaused=ModemRPC.terminalPaused},nil
-    end
-    return nil,err or (response and response.message)
+  if not component.isAvailable("internet") then
+    return nil, "Интернет-карта не найдена"
   end
-  if url==Maintenance.signalUrl then return {},nil end
-  if url:find("check_ban",1,true) then
-    local playerName=url:match("[?&]name=([^&]+)")
-    local response,err=ModemRPC.sessionOpen(playerName or "")
-    if response and response.status=="ok" then
-      local user=(response.data and response.data.user) or {}
-      return {banned=user.banned==true,reason=user.banReason,duration=user.banDuration,admin=user.bannedBy,date=user.bannedAt},nil
-    end
-    return nil,err or (response and response.message)
+
+  local host, port, path = parseUrl(url)
+  if not host then
+    return nil, "Неверный URL: " .. tostring(url)
   end
-  return nil,"Неизвестный modem-ресурс: "..url
+
+  local socket, socketError
+  local socketOk, socketResult = pcall(internet.socket, host, port)
+  if socketOk then
+    socket = socketResult
+  else
+    socketError = socketResult
+  end
+
+  if not socket then
+    return nil, "Не удалось подключиться к " .. host .. ":" .. tostring(port) ..
+      (socketError and (" (" .. tostring(socketError) .. ")") or "")
+  end
+
+  local request = "GET " .. path .. " HTTP/1.1\r\n" ..
+                  "Host: " .. host .. "\r\n" ..
+                  "Connection: close\r\n" ..
+                  "Accept: application/json\r\n\r\n"
+
+  local writeOk, writeError = pcall(socket.write, socket, request)
+  if not writeOk then
+    pcall(socket.close, socket)
+    return nil, "Ошибка отправки запроса: " .. tostring(writeError)
+  end
+
+  local response = ""
+  local startedAt = computer.uptime()
+  local maxSize = 5 * 1024 * 1024
+  timeout = timeout or HTTP_TIMEOUT
+
+  while true do
+    if computer.uptime() - startedAt > timeout then
+      pcall(socket.close, socket)
+      return nil, "Истекло время ожидания"
+    end
+
+    if #response > maxSize then
+      pcall(socket.close, socket)
+      return nil, "Ответ сервера слишком большой"
+    end
+
+    local readOk, chunk = pcall(socket.read, socket)
+    if not readOk then
+      pcall(socket.close, socket)
+      return nil, "Ошибка чтения: " .. tostring(chunk)
+    end
+
+    if not chunk then
+      break
+    end
+
+    response = response .. chunk
+  end
+
+  pcall(socket.close, socket)
+
+  local statusCode = tonumber(response:match("^HTTP/%d%.%d%s+(%d+)") or "0")
+  if statusCode < 200 or statusCode >= 300 then
+    return nil, "HTTP ошибка " .. tostring(statusCode)
+  end
+
+  local body = response:match("\r\n\r\n(.*)")
+  if not body or body == "" then
+    return nil, "Сервер вернул пустой ответ"
+  end
+
+  local decoded, decodeError = decodeJson(body)
+  if type(decoded) ~= "table" then
+    return nil, "Не удалось прочитать JSON: " .. tostring(decodeError)
+  end
+
+  return decoded, nil
 end
 
-local function httpPostJson(url,payload,timeout)
-  payload=type(payload)=="table" and ModemRPC.copy(payload) or {}
-  if url==REGISTER_PLAYER_URL and not payload.action then
-    payload.action="update_balance" payload.coin=tonumber(payload.coin) or 0 payload.ema=tonumber(payload.ema) or 0 payload.transactions=tonumber(payload.transactions) or 0 payload.agreed=true
+local function httpPostJson(url, payload, timeout)
+  if not component.isAvailable("internet") then
+    return nil, "Интернет-карта не найдена"
   end
-  if payload.action=="get_balance" and ModemRPC.sessionData and type(ModemRPC.sessionData.user)=="table" and tostring(ModemRPC.sessionData.user.name or ""):lower()==tostring(payload.name or ""):lower() then
-    return {status="ok",data=ModemRPC.copy(ModemRPC.sessionData.user)},nil
+
+  local host, port, path = parseUrl(url)
+  if not host then return nil, "Неверный URL" end
+
+  local body, encodeError = encodeJson(payload or {})
+  if not body then return nil, encodeError end
+
+  local okSocket, socket = pcall(internet.socket, host, port)
+  if not okSocket or not socket then
+    return nil, "Не удалось подключиться к серверу"
   end
-  return ModemRPC.request(payload,timeout)
+
+  local request = "POST " .. path .. " HTTP/1.1\r\n" ..
+                  "Host: " .. host .. "\r\n" ..
+                  "Connection: close\r\n" ..
+                  "Content-Type: application/json\r\n" ..
+                  "Content-Length: " .. tostring(#body) .. "\r\n\r\n" .. body
+
+  local writeOk, writeError = pcall(socket.write, socket, request)
+  if not writeOk then
+    pcall(socket.close, socket)
+    return nil, tostring(writeError)
+  end
+
+  local response = ""
+  local startedAt = computer.uptime()
+  timeout = timeout or PURCHASE_HTTP_TIMEOUT
+
+  while true do
+    if computer.uptime() - startedAt > timeout then
+      pcall(socket.close, socket)
+      return nil, "Истекло время ожидания"
+    end
+
+    local readOk, chunk = pcall(socket.read, socket)
+    if not readOk then
+      pcall(socket.close, socket)
+      return nil, tostring(chunk)
+    end
+    if not chunk then break end
+    response = response .. chunk
+    if #response > 1024 * 1024 then break end
+  end
+
+  pcall(socket.close, socket)
+
+  local statusCode = tonumber(response:match("^HTTP/%d%.%d%s+(%d+)") or "0")
+  if statusCode ~= 0 and (statusCode < 200 or statusCode >= 300) then
+    return nil, "HTTP ошибка " .. tostring(statusCode)
+  end
+
+  local responseBody = response:match("\r\n\r\n(.*)")
+  if responseBody and responseBody ~= "" then
+    local decoded = decodeJson(responseBody)
+    if type(decoded) == "table" then return decoded, nil end
+  end
+
+  return {status = "ok"}, nil
 end
 
 local function getMEQuantities()
@@ -1074,7 +947,6 @@ local function addCatalogItem(target, mapKey, mapping, meQuantities, meCraftable
     -- магазин сам выберет доступные варианты предмета из МЭ.
     nbt_hash = mapping.nbt_hash or mapping.nbtHash,
     article = mapping.article or mapping.sku or mapping.code,
-    _searchName = lowerText(tostring(displayName)),
   }
 end
 
@@ -1135,7 +1007,6 @@ local function loadCatalogItems()
   buyItemsCache = loadedItems
   allItems = buyItemsCache
   catalogStatus = "Каталог покупок загружен: " .. tostring(#allItems) .. " товаров"
-  Performance.buyCatalogLoadedAt = computer.uptime()
   return true, nil
 end
 
@@ -1172,7 +1043,6 @@ local function addSellItem(target, mapping, fallbackKey)
     qty = configuredQty,
     canSell = true,
     article = mapping.article or mapping.sku or mapping.code,
-    _searchName = lowerText(tostring(displayName)),
   }
 end
 
@@ -1222,45 +1092,26 @@ local function loadSellItems()
   sellItemsCache = loadedItems
   allItems = sellItemsCache
   catalogStatus = "Каталог продаж загружен: " .. tostring(#allItems) .. " товаров"
-  Performance.sellCatalogLoadedAt = computer.uptime()
   return true, nil
 end
 
 local function loadItemsForCurrentMode(forceReload)
-  local now = computer.uptime()
-
   if currentShopMode == "sell" then
-    local cacheFresh = sellItemsCache
-      and Performance.sellCatalogLoadedAt > 0
-      and now - Performance.sellCatalogLoadedAt
-        < Performance.catalogMaxAge
-
-    if cacheFresh and not forceReload then
+    if sellItemsCache and not forceReload then
       allItems = sellItemsCache
       catalogLoadError = nil
-      catalogStatus =
-        "Каталог продаж загружен: "
-        .. tostring(#allItems) .. " товаров"
+      catalogStatus = "Каталог продаж загружен: " .. tostring(#allItems) .. " товаров"
       return true, nil
     end
-
     return loadSellItems()
   end
 
-  local cacheFresh = buyItemsCache
-    and Performance.buyCatalogLoadedAt > 0
-    and now - Performance.buyCatalogLoadedAt
-      < Performance.catalogMaxAge
-
-  if cacheFresh and not forceReload then
+  if buyItemsCache and not forceReload then
     allItems = buyItemsCache
     catalogLoadError = nil
-    catalogStatus =
-      "Каталог покупок загружен: "
-      .. tostring(#allItems) .. " товаров"
+    catalogStatus = "Каталог покупок загружен: " .. tostring(#allItems) .. " товаров"
     return true, nil
   end
-
   return loadCatalogItems()
 end
 
@@ -1477,11 +1328,8 @@ function setSelectorSlot(slot, stack)
 end
 
 function clearSelector()
-  if SelectorCache.key == "__clear__" then return end
-
   setSelectorSlot(0, nil)
   setSelectorSlot(1, nil)
-  SelectorCache.key = "__clear__"
 end
 
 function updateSelectorDisplay(item)
@@ -1496,26 +1344,15 @@ function updateSelectorDisplay(item)
     return
   end
 
-  local damage = tonumber(item.damage) or 0
-  local selectorKey = tostring(id) .. ":" .. tostring(damage)
-
-  -- При поиске и частичной перерисовке один и тот же предмет больше не
-  -- отправляется в Item Selector повторно.
-  if SelectorCache.key == selectorKey then return end
-
   local stack = {
     id = tostring(id),
-    dmg = damage,
+    dmg = tonumber(item.damage) or 0,
   }
 
-  local firstOk = setSelectorSlot(0, stack)
-  local secondOk = setSelectorSlot(1, stack)
-
-  if firstOk or secondOk then
-    SelectorCache.key = selectorKey
-  else
-    SelectorCache.key = nil
-  end
+  -- Если компонент появился позже запуска программы, ensureSelector найдёт его
+  -- непосредственно в момент выбора товара.
+  setSelectorSlot(0, stack)
+  setSelectorSlot(1, stack)
 end
 
 selector, selectorAddress = findSelector()
@@ -1570,12 +1407,42 @@ end
 -- Используется отдельный register_player.php: он создаёт только отсутствующего
 -- игрока и никогда не обнуляет баланс уже существующей записи.
 function createPlayerOnHosting(playerName)
-  if type(playerName)~="string" or playerName=="" or playerName=="null" then return false,"Имя игрока не определено",nil end
-  local response,requestError=ModemRPC.request({action="update_balance",name=playerName,coin=0,ema=0,transactions=0,agreed=true,regDate="Новый аккаунт"},5)
-  if not response or response.status~="ok" then return false,requestError or (response and response.message) or "Центральный сервер не ответил",nil end
-  local player=type(response.data)=="table" and response.data or {}
-  player.name=tostring(player.name or playerName)
-  return true,nil,player
+  if type(playerName) ~= "string" or playerName == "" or playerName == "null" then
+    return false, "Имя игрока не определено", nil
+  end
+
+  -- ВАЖНО: здесь только ОДИН запрос к TimeWeb.
+  -- register_player.php сам сохраняет users.json и сам посылает короткий
+  -- неблокирующий сигнал VPS через notifyVPS(). Прямые POST-запросы Lua
+  -- к /sync и /sync?full больше не выполняются, поэтому авторизация не зависает.
+  local response, requestError = httpPostJson(
+    REGISTER_PLAYER_URL,
+    {name = playerName},
+    8
+  )
+
+  if not response then
+    return false, "Не удалось зарегистрировать игрока: " .. tostring(requestError), nil
+  end
+
+  if response.success == false or response.status == "error" then
+    return false, tostring(response.message or response.error or "Ошибка регистрации"), nil
+  end
+
+  local player = response.player or response.user or response.data
+  if type(player) ~= "table" then
+    player = {
+      balanceCoin = tonumber(response.balanceCoin or response.coin) or 0,
+      balanceEma = tonumber(response.balanceEma or response.ema) or 0,
+      transactions = tonumber(response.transactions) or 0,
+      regDate = response.regDate or "Новый аккаунт",
+      agreed = response.agreed == true,
+      banned = response.banned == true,
+    }
+  end
+
+  player.name = tostring(response.name or player.name or playerName)
+  return true, nil, player
 end
 
 local function loadAccountForPlayer(playerName)
@@ -1613,7 +1480,7 @@ local function loadAccountForPlayer(playerName)
     account.regDate = "Ошибка загрузки"
     account.trans = "0"
     return false, err or response and response.message
-      or "Центральный сервер не ответил"
+      or "VPS не ответил"
   end
 
   local player = type(response.data) == "table"
@@ -1667,7 +1534,7 @@ local function loadAccountForPlayer(playerName)
       return false,
         updateError
         or updateResponse and updateResponse.message
-        or "Не удалось создать аккаунт на центральном сервере"
+        or "Не удалось создать аккаунт на VPS"
     end
 
     player = type(updateResponse.data) == "table"
@@ -1901,81 +1768,31 @@ function SellFlow.getInventoryStack(pimAddress, pim, slot)
   return nil
 end
 
-function SellFlow.invalidateInventorySnapshot()
-  SellFlow.inventorySnapshot = nil
-  SellFlow.inventorySnapshotAt = 0
-end
-
-function SellFlow.getInventorySnapshot(force)
-  local now = computer.uptime()
-
-  if not force
-    and type(SellFlow.inventorySnapshot) == "table"
-    and now - (SellFlow.inventorySnapshotAt or 0)
-      <= SellFlow.inventorySnapshotMaxAge
-  then
-    return SellFlow.inventorySnapshot
-  end
-
-  local snapshot = {}
+function SellFlow.scanPlayerInventoryItem(item)
+  if not item then return 0 end
   local pimAddress = getPimAddr()
-
-  if not pimAddress then
-    SellFlow.inventorySnapshot = snapshot
-    SellFlow.inventorySnapshotAt = now
-    return snapshot
-  end
+  if not pimAddress then return 0 end
 
   local pim = getPimProxy()
   local inventorySize = SellFlow.getInventorySizeForScan(pim)
 
-  for slot = 0, inventorySize do
-    local stack = SellFlow.getInventoryStack(
-      pimAddress,
-      pim,
-      slot
-    )
-
-    if type(stack) == "table" then
-      snapshot[#snapshot + 1] = stack
-    end
-  end
-
-  SellFlow.inventorySnapshot = snapshot
-  SellFlow.inventorySnapshotAt = computer.uptime()
-  return snapshot
-end
-
-function SellFlow.scanPlayerInventoryItem(item, force)
-  if not item then return 0 end
-
   local total = 0
-  local snapshot = SellFlow.getInventorySnapshot(force == true)
-
-  for _, stack in ipairs(snapshot) do
+  -- Проверяем 0..size: так поддерживаются и нулевые, и единичные индексы.
+  -- Для реального компонента один из крайних индексов просто вернёт nil.
+  for slot = 0, inventorySize do
+    local stack = SellFlow.getInventoryStack(pimAddress, pim, slot)
     if SellFlow.inventoryStackMatches(stack, item) then
-      total = total + math.max(
-        0,
-        tonumber(
-          stack.size
-          or stack.qty
-          or stack.count
-          or stack.amount
-        ) or 0
-      )
+      total = total + math.max(0, tonumber(
+        stack.size or stack.qty or stack.count or stack.amount
+      ) or 0)
     end
   end
-
   return math.floor(total)
 end
 
-function SellFlow.refreshSellInventory(item, force)
+function SellFlow.refreshSellInventory(item)
   if currentShopMode ~= "sell" or not item then return 0 end
-
-  local amount = SellFlow.scanPlayerInventoryItem(
-    item,
-    force == true
-  )
+  local amount = SellFlow.scanPlayerInventoryItem(item)
   item.inventoryQty = amount
   return amount
 end
@@ -2025,7 +1842,6 @@ function SellFlow.movePlayerItemToME(item, amount)
     end
   end
 
-  SellFlow.invalidateInventorySnapshot()
   return movedTotal
 end
 
@@ -2076,7 +1892,6 @@ local function createSession(playerName)
   end
 
   clearSelector()
-  SellFlow.invalidateInventorySnapshot()
   session.active = true
   session.playerName = playerName
   pimOwner = playerName
@@ -2094,9 +1909,7 @@ local function createSession(playerName)
 end
 
 local function destroySession()
-  if session and session.active and session.playerName then pcall(ModemRPC.request,{action="session_close",name=session.playerName},1) end
   clearSelector()
-  SellFlow.invalidateInventorySnapshot()
 
   session.active = false
   session.playerName = nil
@@ -2113,8 +1926,6 @@ local function destroySession()
   searchFocused = false
   selectedIndex = 0
   scrollOffset = 0
-  Performance.pendingScroll = 0
-  Performance.nextScrollAt = 0
   items = {}
   allItems = {}
 
@@ -2149,25 +1960,11 @@ local function finishAuthorization()
   authDeadline = nil
 
   -- Перед загрузкой каталога проверяем бан напрямую на основном хостинге.
-  -- Это не зависит от задержки синхронизации users.json на центральном сервере.
+  -- Это не зависит от задержки синхронизации users.json на VPS.
   if BanSystem and type(BanSystem.checkPlayer) == "function" then
     local banned, banInfo = BanSystem.checkPlayer(playerName, false)
-
-    if Maintenance.active or not session.active then
-      return
-    end
-
     if banned == true then
       BanSystem.blockPlayer(playerName, banInfo, true)
-      return
-    end
-
-    if banned == nil then
-      drawAuthScreen(
-        playerName,
-        "Центральный сервер недоступен. Повтор через 5 секунд..."
-      )
-      authDeadline = computer.uptime() + 5
       return
     end
   end
@@ -2179,8 +1976,6 @@ local function finishAuthorization()
   currentShopMode = "buy"
   searchQuery = ""
   searchFocused = false
-  Performance.searchDirty = false
-  Performance.nextSearchAt = 0
   quantity = ""
   qtyFocused = false
   selectedIndex = 1
@@ -2188,8 +1983,16 @@ local function finishAuthorization()
 
   loadItemsForCurrentMode(true)
 
-  -- Каталог продаж не загружаем заранее. Он понадобится только при
-  -- первом открытии раздела «Продажи», поэтому обычный вход стал быстрее.
+  -- Каталог продаж загружаем один раз во время авторизации. После этого
+  -- переключение Покупки/Продажи происходит из памяти без сетевой паузы.
+  local buyStatus = catalogStatus
+  local buyError = catalogLoadError
+  local savedBuyItems = buyItemsCache
+  loadSellItems()
+  currentShopMode = "buy"
+  allItems = savedBuyItems or buyItemsCache or {}
+  catalogStatus = buyStatus
+  catalogLoadError = buyError
 
   -- Сетевой запрос блокирующий, поэтому после него повторно проверяем PIM.
   if not session.active
@@ -2241,15 +2044,9 @@ filterItems = function()
 
   for _, value in ipairs(sourceItems) do
     if type(value) == "table" then
-      local searchableName = value._searchName
-        or lowerText(tostring(
-          value.name
-          or value.displayName
-          or value.internalName
-          or ""
-        ))
+      local itemName = tostring(value.name or value.displayName or value.internalName or "")
       local matchesSearch = searchQuery == ""
-        or searchableName:find(query, 1, true) ~= nil
+        or lowerText(itemName):find(query, 1, true) ~= nil
 
       local matchesAvailability = true
       if currentShopMode == "buy" then
@@ -3061,26 +2858,6 @@ function Maintenance.checkSignal(silent)
     if handled then return true end
   end
 
-  local signalSection = lowerText(tostring(data.section or ""))
-  if signalSection == "shop" or signalSection == "catalog" then
-    local catalogType = lowerText(tostring(data.catalog or ""))
-
-    if catalogType == "sell" then
-      sellItemsCache = nil
-      Performance.sellCatalogLoadedAt = 0
-    elseif catalogType == "buy" then
-      buyItemsCache = nil
-      Performance.buyCatalogLoadedAt = 0
-    else
-      buyItemsCache = nil
-      sellItemsCache = nil
-      Performance.buyCatalogLoadedAt = 0
-      Performance.sellCatalogLoadedAt = 0
-    end
-
-    return true
-  end
-
   if tostring(data.section or "") ~= "config"
     or tostring(data.action or "") ~= "pause"
     or data.paused == nil
@@ -3097,16 +2874,29 @@ function Maintenance.checkSignal(silent)
 end
 
 function Maintenance.bootstrap()
-  local response=ModemRPC.request({action="get_state"},4)
-  if response and response.status=="ok" and type(response.data)=="table" then
-    ModemRPC.globalMaintenance=response.data.maintenance==true
-    ModemRPC.terminalPaused=response.data.terminalPaused==true
-    Maintenance.setActive(ModemRPC.globalMaintenance or ModemRPC.terminalPaused,true)
-  end
+  -- config.json важнее signal.json: сигнал может быть перезаписан изменением
+  -- каталога, а config.json всегда содержит текущее состояние кнопки сайта.
+  local loaded = Maintenance.checkConfig(true)
+  if not loaded then Maintenance.checkSignal(true) end
+
+  local now = computer.uptime()
+  Maintenance.nextSignalCheck = now + Maintenance.signalInterval
+  Maintenance.nextConfigCheck = now + Maintenance.configInterval
 end
 
 function Maintenance.poll(now)
-  return
+  now = tonumber(now) or computer.uptime()
+
+  if now >= Maintenance.nextSignalCheck then
+    Maintenance.nextSignalCheck = now + Maintenance.signalInterval
+    pcall(Maintenance.checkSignal, false)
+    now = computer.uptime()
+  end
+
+  if now >= Maintenance.nextConfigCheck then
+    Maintenance.nextConfigCheck = now + Maintenance.configInterval
+    pcall(Maintenance.checkConfig, false)
+  end
 end
 
 -- ============================================================
@@ -3294,23 +3084,94 @@ function BanSystem.clear(restartAuthorization, silent)
   end
 end
 
-function BanSystem.checkPlayer(playerName,applyState)
-  playerName=normalizePlayerName(playerName)
-  if not playerName then return nil,"Имя игрока не определено" end
-  local response,err=ModemRPC.sessionOpen(playerName)
-  if not response or response.status~="ok" then BanSystem.lastError=err or (response and response.message) or "Центральный сервер не отвечает" return nil,BanSystem.lastError end
-  local data=response.data or {}
-  local user=type(data.user)=="table" and data.user or {}
-  ModemRPC.globalMaintenance=data.maintenance==true
-  ModemRPC.terminalPaused=data.terminalPaused==true
-  if ModemRPC.globalMaintenance or ModemRPC.terminalPaused then Maintenance.setActive(true,false) return nil,"Терминал временно недоступен" end
-  if user.banned==true then
-    local info={banned=true,reason=user.banReason or "Нарушение правил магазина",admin=user.bannedBy or "Система",date=user.bannedAt or "Неизвестно",duration=tonumber(user.banDuration) or 0}
-    if applyState==true then BanSystem.blockPlayer(playerName,info,true) end
-    return true,info
+function BanSystem.checkPlayer(playerName, applyState)
+  playerName = normalizePlayerName(playerName)
+  if not playerName then return nil, "Имя игрока не определено" end
+
+  -- ГЛАВНЫЙ ИСТОЧНИК БАНА — основной хостинг.
+  -- Именно сайт изменяет users.json, поэтому нельзя снимать бан по устаревшей
+  -- копии users.json на VPS.
+  local directUrl =
+    BanSystem.checkUrl .. "?name=" .. BanSystem.urlEncode(playerName)
+  local data, directError =
+    httpRequest(directUrl, BanSystem.requestTimeout)
+  local directConfirmed = type(data) == "table"
+
+  -- VPS используется только как резервный источник ПОЛОЖИТЕЛЬНОГО бана.
+  -- Ответ banned=false от VPS не считается подтверждением разбана, потому что
+  -- его users.json может отставать от сайта.
+  if not directConfirmed then
+    local vpsData, vpsError = httpPostJson(
+      SecurePurchase.url,
+      {
+        action = "check_ban",
+        name = playerName,
+      },
+      BanSystem.requestTimeout
+    )
+
+    if type(vpsData) == "table" then
+      if type(vpsData.data) == "table" then
+        vpsData = vpsData.data
+      end
+
+      local vpsBanned = vpsData.banned == true
+        or vpsData.banned == 1
+        or lowerText(tostring(vpsData.banned or "")) == "true"
+
+      if vpsBanned then
+        data = vpsData
+      else
+        -- Не снимаем существующий бан по неподтверждённому отрицательному
+        -- ответу резервного VPS.
+        BanSystem.lastError =
+          directError or vpsError or "Основной сервер банов недоступен"
+        return nil, BanSystem.lastError
+      end
+    else
+      BanSystem.lastError =
+        directError or vpsError or "Не удалось проверить блокировку"
+      return nil, BanSystem.lastError
+    end
   end
-  if applyState==true and BanSystem.blockedPlayer and BanSystem.samePlayer(BanSystem.blockedPlayer,playerName) then BanSystem.clear(true,false) end
-  return false,user
+
+  if type(data.data) == "table" then
+    data = data.data
+  end
+
+  BanSystem.lastError = nil
+  local banned = data.banned == true
+    or data.banned == 1
+    or lowerText(tostring(data.banned or "")) == "true"
+
+  if banned then
+    local info = {
+      banned = true,
+      reason = data.reason or data.banReason
+        or "Нарушение правил магазина",
+      admin = data.admin or data.bannedBy or data.banAdmin or "Система",
+      date = data.date or data.bannedAt or data.banDate or "Неизвестно",
+      duration =
+        tonumber(data.duration or data.expires or data.banDuration) or 0,
+    }
+
+    if applyState == true then
+      BanSystem.blockPlayer(playerName, info, true)
+    end
+    return true, info
+  end
+
+  -- Снимать блокировку разрешено только после прямого подтверждения
+  -- с основного хостинга.
+  if directConfirmed
+    and applyState == true
+    and BanSystem.blockedPlayer
+    and BanSystem.samePlayer(BanSystem.blockedPlayer, playerName)
+  then
+    BanSystem.clear(true, false)
+  end
+
+  return false, data
 end
 
 function BanSystem.handleSignal(data)
@@ -3350,11 +3211,25 @@ function BanSystem.handleSignal(data)
 end
 
 function BanSystem.bootstrap()
-  BanSystem.nextCheck=math.huge
+  BanSystem.nextCheck = computer.uptime()
 end
 
 function BanSystem.poll(now)
-  return
+  if Maintenance and Maintenance.active then return end
+  now = tonumber(now) or computer.uptime()
+  if now < BanSystem.nextCheck then return end
+  BanSystem.nextCheck = now + BanSystem.checkInterval
+
+  local targetPlayer = nil
+  if session.active and session.playerName then
+    targetPlayer = session.playerName
+  elseif BanSystem.blockedPlayer then
+    targetPlayer = BanSystem.blockedPlayer
+  end
+
+  if targetPlayer then
+    pcall(BanSystem.checkPlayer, targetPlayer, true)
+  end
 end
 
 local function drawBackground()
@@ -4264,26 +4139,6 @@ local function redrawCatalogContent()
   updateSelectorDisplay(items[selectedIndex])
 end
 
-function Performance.markInput()
-  Performance.lastInputAt = computer.uptime()
-end
-
-function Performance.scheduleSearch()
-  Performance.searchDirty = true
-  Performance.nextSearchAt =
-    computer.uptime() + Performance.searchDelay
-end
-
-function Performance.applySearchNow()
-  if not Performance.searchDirty then return false end
-
-  Performance.searchDirty = false
-  Performance.nextSearchAt = 0
-  filterItems()
-  redrawCatalogContent()
-  return true
-end
-
 local function drawVisibleItem(index)
   if not index or index < 1 then return end
 
@@ -4412,48 +4267,6 @@ local function scroll(delta)
   setScrollOffset(scrollOffset + delta)
 end
 
-function Performance.queueScroll(delta)
-  delta = tonumber(delta) or 0
-  if delta == 0 then return end
-
-  Performance.pendingScroll =
-    (tonumber(Performance.pendingScroll) or 0) + delta
-
-  if Performance.nextScrollAt <= computer.uptime() then
-    Performance.nextScrollAt =
-      computer.uptime() + Performance.scrollInterval
-  end
-end
-
-function Performance.applyPendingScroll(now)
-  now = tonumber(now) or computer.uptime()
-
-  if Performance.pendingScroll == 0
-    or now < Performance.nextScrollAt
-  then
-    return false
-  end
-
-  Performance.scrollStep = math.max(
-    -6,
-    math.min(6, Performance.pendingScroll)
-  )
-
-  Performance.pendingScroll =
-    Performance.pendingScroll - Performance.scrollStep
-
-  scroll(Performance.scrollStep)
-
-  if Performance.pendingScroll ~= 0 then
-    Performance.nextScrollAt =
-      computer.uptime() + Performance.scrollInterval
-  else
-    Performance.nextScrollAt = 0
-  end
-
-  return true
-end
-
 -- Переход к месту нажатия на дорожке скроллбара.
 -- Ползунок центрируется относительно строки, по которой нажал игрок.
 local function jumpToScrollbarPosition(y)
@@ -4493,19 +4306,17 @@ local function switchShopMode(mode)
   qtyFocused = false
   selectedIndex = 1
   scrollOffset = 0
-  Performance.pendingScroll = 0
-  Performance.nextScrollAt = 0
 
-  -- Используем свежий кэш. Сигнал сайта инвалидирует нужный каталог,
-  -- а максимальный возраст кэша не даёт ценам устареть надолго.
-  loadItemsForCurrentMode(false)
+  -- Важно: каталог нужно перечитывать с хостинга при каждом
+  -- переключении режима, иначе цены товаров остаются из кэша
+  -- и не обновляются после изменений на сайте.
+  loadItemsForCurrentMode(true)
   filterItems()
   presentShopFrame()
 end
 
 local function blurSearch()
   if searchFocused then
-    Performance.applySearchNow()
     searchFocused = false
     redrawSearchField()
   end
@@ -6507,7 +6318,7 @@ local function finalizePurchase(item, qty, craftInfo)
   local serverAfterCoin = tonumber(chargedData.balanceCoin) or 0
   local serverAfterEma = tonumber(chargedData.balanceEma) or 0
 
-  -- Деньги уже подтверждённо списаны на центральном сервере.
+  -- Деньги уже подтверждённо списаны на VPS.
   -- Перед физической выдачей фиксируем состояние на HDD.
   purchaseOperation.status = "delivery_started"
   if not SecurePurchase.upsertPending(purchaseOperation) then
@@ -6887,7 +6698,7 @@ function SellFlow.openSaleConfirmPopup()
   local item = items[selectedIndex]
   if not item then return end
 
-  local inventoryQty = SellFlow.refreshSellInventory(item, true)
+  local inventoryQty = SellFlow.refreshSellInventory(item)
   if inventoryQty <= 0 then
     drawVisibleItem(selectedIndex)
     drawInfoBlock()
@@ -6943,7 +6754,7 @@ function SellFlow.confirm()
 
   local data = popupState
   local item = data.item
-  local availableNow = SellFlow.scanPlayerInventoryItem(item, true)
+  local availableNow = SellFlow.scanPlayerInventoryItem(item)
   local sellQty = math.min(
     math.floor(data.sellQty or 0),
     availableNow
@@ -7151,8 +6962,6 @@ local function handleClick(x, y)
 
     searchQuery = ""
     searchFocused = false
-    Performance.searchDirty = false
-    Performance.nextSearchAt = 0
     filterItems()
     redrawSearchField()
     redrawCatalogContent()
@@ -7250,7 +7059,7 @@ local function handleClick(x, y)
   if y == BTN_Y and x >= actionX and x < actionX + actionW then
     local selectedItem = items[selectedIndex]
     if currentShopMode == "sell" and selectedItem then
-      SellFlow.refreshSellInventory(selectedItem, false)
+      SellFlow.refreshSellInventory(selectedItem)
     end
 
     local selectedStock = selectedItem
@@ -7278,7 +7087,13 @@ local function handleClick(x, y)
     if currentShopMode == "buy" then
       performBuy()
     else
-      -- openSaleConfirmPopup выполняет одну обязательную свежую проверку.
+      local inventoryQty = SellFlow.refreshSellInventory(selectedItem)
+      if inventoryQty <= 0 then
+        drawVisibleItem(selectedIndex)
+        drawInfoBlock()
+        drawQuantitySection()
+        return
+      end
       SellFlow.openSaleConfirmPopup()
     end
     return
@@ -7291,118 +7106,8 @@ local function handleClick(x, y)
   end
 end
 
-function ModemRPC.processPushes()
-  local message=ModemRPC.popPush()
-  while message do
-    local action=tostring(message.action or "")
-    local data=type(message.data)=="table" and message.data or {}
-    if action=="maintenance_changed" then
-      ModemRPC.globalMaintenance=data.maintenance==true
-      Maintenance.setActive(ModemRPC.globalMaintenance or ModemRPC.terminalPaused,false)
-    elseif action=="terminal_paused" then
-      ModemRPC.terminalPaused=true Maintenance.setActive(true,false)
-    elseif action=="terminal_resumed" then
-      ModemRPC.terminalPaused=false Maintenance.setActive(ModemRPC.globalMaintenance,false)
-    elseif action=="user_banned" then
-      local target=data.player
-      local current=session.active and session.playerName or BanSystem.blockedPlayer
-      if current and BanSystem.samePlayer(current,target) then
-        local user=type(data.user)=="table" and data.user or data
-        BanSystem.blockPlayer(target,{banned=true,reason=user.banReason or data.reason,duration=user.banDuration or data.duration,admin=user.bannedBy or data.admin,date=user.bannedAt or data.date},true)
-      end
-    elseif action=="user_unbanned" then
-      if BanSystem.blockedPlayer and BanSystem.samePlayer(BanSystem.blockedPlayer,data.player) then BanSystem.clear(true,false) end
-    elseif action=="user_updated" then
-      local user=type(data.user)=="table" and data.user or {}
-      if session.active and BanSystem.samePlayer(session.playerName,data.player) then
-        account.balanceCoin=tonumber(user.balanceCoin) or account.balanceCoin or 0
-        account.balanceEma=tonumber(user.balanceEma) or account.balanceEma or 0
-        account.transactions=tonumber(user.transactions) or account.transactions or 0
-        account.coina=trimNumber(account.balanceCoin,4)
-        account.ema=trimNumber(account.balanceEma,4)
-        account.trans=tostring(math.floor(account.transactions))
-        if uiState=="shop" then drawAccountInfo() end
-      end
-    elseif action=="catalog_updated" then
-      local kind=tostring(data.catalog or "buy")
-      local meta=ModemRPC.loadMeta()
-      if kind=="sell" then
-        sellItemsCache=nil meta.sellVersion=-1 Performance.sellCatalogLoadedAt=0
-        if ModemRPC.sessionData then ModemRPC.sessionData.sellVersion=tonumber(data.version) or 0 end
-      else
-        buyItemsCache=nil meta.buyVersion=-1 Performance.buyCatalogLoadedAt=0
-        if ModemRPC.sessionData then ModemRPC.sessionData.buyVersion=tonumber(data.version) or 0 end
-      end
-      ModemRPC.saveMeta()
-      if session.active and uiState=="shop" and not transactionLock and ((kind=="sell" and currentShopMode=="sell") or (kind~="sell" and currentShopMode=="buy")) then
-        loadItemsForCurrentMode(true) filterItems() selectedIndex=#items>0 and 1 or 0 scrollOffset=0 presentShopFrame(true)
-      end
-    end
-    message=ModemRPC.popPush()
-  end
-end
-
-function ModemRPC.heartbeat(now)
-  now = tonumber(now) or computer.uptime()
-  if now < ModemRPC.nextHeartbeat then return end
-  ModemRPC.nextHeartbeat = now + ModemRPC.heartbeatInterval
-
-  local ok, response = pcall(
-    ModemRPC.request,
-    {action = "heartbeat"},
-    1.25
-  )
-
-  if not ok or type(response) ~= "table"
-    or response.status ~= "ok"
-    or type(response.data) ~= "table"
-  then
-    return
-  end
-
-  local data = response.data
-  local newMaintenance = data.maintenance == true
-  local newPaused = data.terminalPaused == true
-
-  if newMaintenance ~= ModemRPC.globalMaintenance then
-    ModemRPC.queuePush("maintenance_changed", {
-      maintenance = newMaintenance,
-    })
-  end
-
-  if newPaused ~= ModemRPC.terminalPaused then
-    ModemRPC.queuePush(
-      newPaused and "terminal_paused" or "terminal_resumed",
-      {paused = newPaused}
-    )
-  end
-
-  local sessionData = ModemRPC.sessionData
-  if type(sessionData) == "table" then
-    if tonumber(data.buyVersion)
-      and tonumber(data.buyVersion) ~= tonumber(sessionData.buyVersion)
-    then
-      ModemRPC.queuePush("catalog_updated", {
-        catalog = "buy",
-        version = tonumber(data.buyVersion),
-      })
-    end
-
-    if tonumber(data.sellVersion)
-      and tonumber(data.sellVersion) ~= tonumber(sessionData.sellVersion)
-    then
-      ModemRPC.queuePush("catalog_updated", {
-        catalog = "sell",
-        version = tonumber(data.sellVersion),
-      })
-    end
-  end
-end
-
 term.clear()
 resetAccount()
-ModemRPC.discoveredServer=ModemRPC.discover(4)
-if ModemRPC.discoveredServer then pcall(ModemRPC.request,{action="hello"},3) end
 Maintenance.bootstrap()
 BanSystem.bootstrap()
 
@@ -7451,11 +7156,7 @@ while true do
       destroySession()
     end
 
-  elseif name == "modem_message" then
-    ModemRPC.acceptPushEvent(ev)
-
   elseif name == "touch" then
-    Performance.markInput()
     if uiState == "shop" and session.active then
       if not isPimOwner(ev[6] or "Неизвестный") then
         writeDebugLog("⚠️ Коснулся не владелец: " .. tostring(ev[6] or "Неизвестный") .. ", игнорируем")
@@ -7465,20 +7166,18 @@ while true do
     end
 
   elseif name == "scroll" then
-    Performance.markInput()
     if uiState == "shop" and session.active and not popupState then
       if not isPimOwner(ev[6] or "Неизвестный") then
         writeDebugLog("⚠️ Прокрутил не владелец: " .. tostring(ev[6] or "Неизвестный") .. ", игнорируем")
       else
         local x, direction = ev[3], ev[5]
         if x >= LIST_X and x < SCROLL_X then
-          Performance.queueScroll(-direction)
+          scroll(-direction)
         end
       end
     end
 
   elseif name == "key_down" then
-    Performance.markInput()
     if not session.active then
       -- Пока PIM-сессии нет, клавиатура полностью заблокирована.
     elseif not isPimOwner(ev[5] or "Неизвестный") then
@@ -7499,11 +7198,9 @@ while true do
       elseif uiState == "shop" then
         if searchFocused then
           if code == keyboard.keys.escape then
-            Performance.applySearchNow()
             searchFocused = false
             redrawSearchField()
           elseif code == keyboard.keys.enter or code == keyboard.keys.tab then
-            Performance.applySearchNow()
             searchFocused = false
             redrawSearchField()
           elseif code == keyboard.keys.back then
@@ -7511,14 +7208,16 @@ while true do
             -- не перерисовывается и не моргает без причины.
             if searchQuery ~= "" then
               searchQuery = unicode.sub(searchQuery, 1, -2)
+              filterItems()
               redrawSearchField()
-              Performance.scheduleSearch()
+              redrawCatalogContent()
             end
           elseif char and char >= 32 then
             if unicode.len(searchQuery) < SEARCH_W - 4 then
               searchQuery = searchQuery .. unicode.char(char)
+              filterItems()
               redrawSearchField()
-              Performance.scheduleSearch()
+              redrawCatalogContent()
             end
           end
 
@@ -7551,43 +7250,17 @@ while true do
     end
   end
 
-  ModemRPC.processPushes()
-  ModemRPC.heartbeat(computer.uptime())
-
   -- Через две секунды запускается загрузка каталога и аккаунта.
   -- Сам магазин откроется только после завершения загрузки, поэтому
   -- товары будут видны сразу при первом кадре интерфейса.
   local now = computer.uptime()
 
-  -- Несколько быстрых событий колеса объединяются в один GPU-сдвиг.
-  if Performance.applyPendingScroll(now) then
-    now = computer.uptime()
-  end
-
-  -- Фильтрация выполняется один раз после короткой паузы ввода.
-  if Performance.searchDirty
-    and now >= Performance.nextSearchAt
-    and uiState == "shop"
-    and session.active
-  then
-    Performance.applySearchNow()
-    now = computer.uptime()
-  end
-
-  -- HTTP-проверки больше не останавливают скролл или набор текста.
-  Performance.idleFor =
-    now - (Performance.lastInputAt or 0)
-
-  if Performance.idleFor >= Performance.networkIdleDelay
-    and not transactionLock
-    and not searchFocused
-    and not qtyFocused
-  then
-    Maintenance.poll(now)
-    now = computer.uptime()
-    BanSystem.poll(now)
-    now = computer.uptime()
-  end
+  -- Быстрый signal.json проверяется раз в две секунды, а config.json
+  -- периодически подтверждает настоящее состояние режима обслуживания.
+  Maintenance.poll(now)
+  now = computer.uptime()
+  BanSystem.poll(now)
+  now = computer.uptime()
 
   if Maintenance.active then
     Maintenance.draw(false)
