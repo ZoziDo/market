@@ -522,260 +522,6 @@ BanSystem.info = nil
 BanSystem.screenDrawn = false
 BanSystem.lastError = nil
 
--- ============================================================
--- LOW TRAFFIC: один общий запрос состояния вместо трёх опросов
--- ============================================================
-
-CatalogCache = CatalogCache or {}
-CatalogCache.metaFile = "/home/vip_shop_catalog_versions.json"
-CatalogCache.buyFile = "/home/vip_shop_catalog_buy.json"
-CatalogCache.sellFile = "/home/vip_shop_catalog_sell.json"
-CatalogCache.meta = CatalogCache.meta or nil
-
-function CatalogCache.loadMeta()
-  if type(CatalogCache.meta) == "table" then
-    return CatalogCache.meta
-  end
-
-  CatalogCache.meta = {}
-  local file = io.open(CatalogCache.metaFile, "r")
-  if not file then return CatalogCache.meta end
-
-  local raw = file:read("*a")
-  file:close()
-
-  local decoded = decodeJson(raw or "")
-  if type(decoded) == "table" then
-    CatalogCache.meta = decoded
-  end
-
-  return CatalogCache.meta
-end
-
-function CatalogCache.saveMeta()
-  local encoded = encodeJson(CatalogCache.meta or {})
-  if not encoded then return false end
-
-  local tempPath = CatalogCache.metaFile .. ".tmp"
-  local file = io.open(tempPath, "w")
-  if not file then return false end
-
-  file:write(encoded)
-  file:close()
-
-  os.remove(CatalogCache.metaFile)
-  if os.rename(tempPath, CatalogCache.metaFile) then
-    return true
-  end
-
-  local fallback = io.open(CatalogCache.metaFile, "w")
-  if not fallback then return false end
-  fallback:write(encoded)
-  fallback:close()
-  os.remove(tempPath)
-  return true
-end
-
-function CatalogCache.pathFor(kind)
-  return kind == "sell"
-    and CatalogCache.sellFile
-    or CatalogCache.buyFile
-end
-
-function CatalogCache.read(kind)
-  local file = io.open(CatalogCache.pathFor(kind), "r")
-  if not file then return nil end
-
-  local raw = file:read("*a")
-  file:close()
-
-  local decoded = decodeJson(raw or "")
-  if type(decoded) == "table" then
-    return decoded
-  end
-
-  return nil
-end
-
-function CatalogCache.write(kind, data, version)
-  if type(data) ~= "table" then return false end
-
-  local encoded = encodeJson(data)
-  if not encoded then return false end
-
-  local path = CatalogCache.pathFor(kind)
-  local tempPath = path .. ".tmp"
-  local file = io.open(tempPath, "w")
-  if not file then return false end
-
-  file:write(encoded)
-  file:close()
-
-  os.remove(path)
-  if not os.rename(tempPath, path) then
-    local fallback = io.open(path, "w")
-    if not fallback then return false end
-    fallback:write(encoded)
-    fallback:close()
-    os.remove(tempPath)
-  end
-
-  local meta = CatalogCache.loadMeta()
-  meta[kind] = tostring(version or "")
-  CatalogCache.saveMeta()
-  return true
-end
-
-function CatalogCache.fetch(kind, url, desiredVersion)
-  local meta = CatalogCache.loadMeta()
-  local desired = tostring(desiredVersion or "")
-  local cachedVersion = tostring(meta[kind] or "")
-
-  -- После перезапуска OC каталог берётся с HDD без HTTP, если VPS сообщил
-  -- ту же версию файла.
-  if desired ~= ""
-    and desired ~= "missing"
-    and cachedVersion == desired
-  then
-    local cached = CatalogCache.read(kind)
-    if type(cached) == "table" then
-      return cached, nil, true
-    end
-  end
-
-  local result, err = httpRequest(url, 8)
-  if type(result) == "table" then
-    CatalogCache.write(kind, result, desired)
-    return result, nil, false
-  end
-
-  -- При временной сетевой ошибке разрешаем открыть старый каталог с HDD.
-  local cached = CatalogCache.read(kind)
-  if type(cached) == "table" then
-    return cached, err, true
-  end
-
-  return nil, err or "Каталог недоступен", false
-end
-
-SessionStatus = SessionStatus or {}
-SessionStatus.playerName = nil
-SessionStatus.nextCheck = math.huge
-SessionStatus.baseInterval = 120
-SessionStatus.failureCount = 0
-SessionStatus.lastError = nil
-SessionStatus.buyCatalogVersion = nil
-SessionStatus.sellCatalogVersion = nil
-SessionStatus.lastSuccess = 0
-
-function SessionStatus.start(playerName)
-  playerName = normalizePlayerName(playerName)
-  if not playerName then return false end
-
-  SessionStatus.playerName = playerName
-  SessionStatus.nextCheck = 0
-  SessionStatus.failureCount = 0
-  SessionStatus.lastError = nil
-  return true
-end
-
-function SessionStatus.stop()
-  SessionStatus.playerName = nil
-  SessionStatus.nextCheck = math.huge
-  SessionStatus.failureCount = 0
-  SessionStatus.lastError = nil
-end
-
-function SessionStatus.backoffDelay()
-  local steps = {15, 30, 60, 120, 300}
-  local index = math.min(
-    #steps,
-    math.max(1, tonumber(SessionStatus.failureCount) or 1)
-  )
-  return steps[index]
-end
-
-function SessionStatus.fetch(playerName, force)
-  playerName = normalizePlayerName(
-    playerName or SessionStatus.playerName
-  )
-  if not playerName then
-    return nil, "Имя игрока не определено"
-  end
-
-  local now = computer.uptime()
-  if force ~= true and now < SessionStatus.nextCheck then
-    return nil, "Ожидание следующей проверки"
-  end
-
-  local response, err = httpPostJson(
-    SecurePurchase.url,
-    {
-      action = "session_status",
-      name = playerName,
-    },
-    3
-  )
-
-  if not response or response.status ~= "ok" then
-    SessionStatus.failureCount =
-      (tonumber(SessionStatus.failureCount) or 0) + 1
-    SessionStatus.lastError =
-      err
-      or response and response.message
-      or "VPS не ответил"
-    SessionStatus.nextCheck =
-      computer.uptime() + SessionStatus.backoffDelay()
-    return nil, SessionStatus.lastError
-  end
-
-  local data = type(response.data) == "table"
-    and response.data
-    or response
-
-  SessionStatus.playerName = playerName
-  SessionStatus.failureCount = 0
-  SessionStatus.lastError = nil
-  SessionStatus.lastSuccess = computer.uptime()
-
-  local pollAfter = tonumber(data.pollAfter)
-    or SessionStatus.baseInterval
-  pollAfter = math.max(60, math.min(300, pollAfter))
-  SessionStatus.nextCheck = computer.uptime() + pollAfter
-
-  return data, nil
-end
-
-function SessionStatus.updateCatalogVersions(data)
-  local meta = CatalogCache.loadMeta()
-  local buyVersion = tostring(data.buyCatalogVersion or "")
-  local sellVersion = tostring(data.sellCatalogVersion or "")
-  local buyChanged = false
-  local sellChanged = false
-
-  if buyVersion ~= "" then
-    buyChanged =
-      tostring(meta.buy or "") ~= buyVersion
-    SessionStatus.buyCatalogVersion = buyVersion
-    if buyChanged then
-      buyItemsCache = nil
-      Performance.buyCatalogLoadedAt = 0
-    end
-  end
-
-  if sellVersion ~= "" then
-    sellChanged =
-      tostring(meta.sell or "") ~= sellVersion
-    SessionStatus.sellCatalogVersion = sellVersion
-    if sellChanged then
-      sellItemsCache = nil
-      Performance.sellCatalogLoadedAt = 0
-    end
-  end
-
-  return buyChanged, sellChanged
-end
-
 local HTTP_TIMEOUT = 30
 local PURCHASE_HTTP_TIMEOUT = 4
 local PIM_CHECK_INTERVAL = 0.65
@@ -1126,6 +872,271 @@ local function httpPostJson(url, payload, timeout)
   end
 
   return {status = "ok"}, nil
+end
+
+-- Нормализация имени должна быть объявлена до SessionStatus.start/fetch.
+local function normalizePlayerName(value)
+  if type(value) == "table" then
+    value = value.name or value.playerName or value.username or value.nick
+  end
+
+  if type(value) ~= "string" then return nil end
+  if value == "" or value == "null" then return nil end
+  return value
+end
+
+-- ============================================================
+-- LOW TRAFFIC: один общий запрос состояния вместо трёх опросов
+-- ============================================================
+
+CatalogCache = CatalogCache or {}
+CatalogCache.metaFile = "/home/vip_shop_catalog_versions.json"
+CatalogCache.buyFile = "/home/vip_shop_catalog_buy.json"
+CatalogCache.sellFile = "/home/vip_shop_catalog_sell.json"
+CatalogCache.meta = CatalogCache.meta or nil
+
+function CatalogCache.loadMeta()
+  if type(CatalogCache.meta) == "table" then
+    return CatalogCache.meta
+  end
+
+  CatalogCache.meta = {}
+  local file = io.open(CatalogCache.metaFile, "r")
+  if not file then return CatalogCache.meta end
+
+  local raw = file:read("*a")
+  file:close()
+
+  local decoded = decodeJson(raw or "")
+  if type(decoded) == "table" then
+    CatalogCache.meta = decoded
+  end
+
+  return CatalogCache.meta
+end
+
+function CatalogCache.saveMeta()
+  local encoded = encodeJson(CatalogCache.meta or {})
+  if not encoded then return false end
+
+  local tempPath = CatalogCache.metaFile .. ".tmp"
+  local file = io.open(tempPath, "w")
+  if not file then return false end
+
+  file:write(encoded)
+  file:close()
+
+  os.remove(CatalogCache.metaFile)
+  if os.rename(tempPath, CatalogCache.metaFile) then
+    return true
+  end
+
+  local fallback = io.open(CatalogCache.metaFile, "w")
+  if not fallback then return false end
+  fallback:write(encoded)
+  fallback:close()
+  os.remove(tempPath)
+  return true
+end
+
+function CatalogCache.pathFor(kind)
+  return kind == "sell"
+    and CatalogCache.sellFile
+    or CatalogCache.buyFile
+end
+
+function CatalogCache.read(kind)
+  local file = io.open(CatalogCache.pathFor(kind), "r")
+  if not file then return nil end
+
+  local raw = file:read("*a")
+  file:close()
+
+  local decoded = decodeJson(raw or "")
+  if type(decoded) == "table" then
+    return decoded
+  end
+
+  return nil
+end
+
+function CatalogCache.write(kind, data, version)
+  if type(data) ~= "table" then return false end
+
+  local encoded = encodeJson(data)
+  if not encoded then return false end
+
+  local path = CatalogCache.pathFor(kind)
+  local tempPath = path .. ".tmp"
+  local file = io.open(tempPath, "w")
+  if not file then return false end
+
+  file:write(encoded)
+  file:close()
+
+  os.remove(path)
+  if not os.rename(tempPath, path) then
+    local fallback = io.open(path, "w")
+    if not fallback then return false end
+    fallback:write(encoded)
+    fallback:close()
+    os.remove(tempPath)
+  end
+
+  local meta = CatalogCache.loadMeta()
+  meta[kind] = tostring(version or "")
+  CatalogCache.saveMeta()
+  return true
+end
+
+function CatalogCache.fetch(kind, url, desiredVersion)
+  local meta = CatalogCache.loadMeta()
+  local desired = tostring(desiredVersion or "")
+  local cachedVersion = tostring(meta[kind] or "")
+
+  -- После перезапуска OC каталог берётся с HDD без HTTP, если VPS сообщил
+  -- ту же версию файла.
+  if desired ~= ""
+    and desired ~= "missing"
+    and cachedVersion == desired
+  then
+    local cached = CatalogCache.read(kind)
+    if type(cached) == "table" then
+      return cached, nil, true
+    end
+  end
+
+  local result, err = httpRequest(url, 8)
+  if type(result) == "table" then
+    CatalogCache.write(kind, result, desired)
+    return result, nil, false
+  end
+
+  -- При временной сетевой ошибке разрешаем открыть старый каталог с HDD.
+  local cached = CatalogCache.read(kind)
+  if type(cached) == "table" then
+    return cached, err, true
+  end
+
+  return nil, err or "Каталог недоступен", false
+end
+
+SessionStatus = SessionStatus or {}
+SessionStatus.playerName = nil
+SessionStatus.nextCheck = math.huge
+SessionStatus.baseInterval = 120
+SessionStatus.failureCount = 0
+SessionStatus.lastError = nil
+SessionStatus.buyCatalogVersion = nil
+SessionStatus.sellCatalogVersion = nil
+SessionStatus.lastSuccess = 0
+
+function SessionStatus.start(playerName)
+  playerName = normalizePlayerName(playerName)
+  if not playerName then return false end
+
+  SessionStatus.playerName = playerName
+  SessionStatus.nextCheck = 0
+  SessionStatus.failureCount = 0
+  SessionStatus.lastError = nil
+  return true
+end
+
+function SessionStatus.stop()
+  SessionStatus.playerName = nil
+  SessionStatus.nextCheck = math.huge
+  SessionStatus.failureCount = 0
+  SessionStatus.lastError = nil
+end
+
+function SessionStatus.backoffDelay()
+  local steps = {15, 30, 60, 120, 300}
+  local index = math.min(
+    #steps,
+    math.max(1, tonumber(SessionStatus.failureCount) or 1)
+  )
+  return steps[index]
+end
+
+function SessionStatus.fetch(playerName, force)
+  playerName = normalizePlayerName(
+    playerName or SessionStatus.playerName
+  )
+  if not playerName then
+    return nil, "Имя игрока не определено"
+  end
+
+  local now = computer.uptime()
+  if force ~= true and now < SessionStatus.nextCheck then
+    return nil, "Ожидание следующей проверки"
+  end
+
+  local response, err = httpPostJson(
+    SecurePurchase.url,
+    {
+      action = "session_status",
+      name = playerName,
+    },
+    3
+  )
+
+  if not response or response.status ~= "ok" then
+    SessionStatus.failureCount =
+      (tonumber(SessionStatus.failureCount) or 0) + 1
+    SessionStatus.lastError =
+      err
+      or response and response.message
+      or "VPS не ответил"
+    SessionStatus.nextCheck =
+      computer.uptime() + SessionStatus.backoffDelay()
+    return nil, SessionStatus.lastError
+  end
+
+  local data = type(response.data) == "table"
+    and response.data
+    or response
+
+  SessionStatus.playerName = playerName
+  SessionStatus.failureCount = 0
+  SessionStatus.lastError = nil
+  SessionStatus.lastSuccess = computer.uptime()
+
+  local pollAfter = tonumber(data.pollAfter)
+    or SessionStatus.baseInterval
+  pollAfter = math.max(60, math.min(300, pollAfter))
+  SessionStatus.nextCheck = computer.uptime() + pollAfter
+
+  return data, nil
+end
+
+function SessionStatus.updateCatalogVersions(data)
+  local meta = CatalogCache.loadMeta()
+  local buyVersion = tostring(data.buyCatalogVersion or "")
+  local sellVersion = tostring(data.sellCatalogVersion or "")
+  local buyChanged = false
+  local sellChanged = false
+
+  if buyVersion ~= "" then
+    buyChanged =
+      tostring(meta.buy or "") ~= buyVersion
+    SessionStatus.buyCatalogVersion = buyVersion
+    if buyChanged then
+      buyItemsCache = nil
+      Performance.buyCatalogLoadedAt = 0
+    end
+  end
+
+  if sellVersion ~= "" then
+    sellChanged =
+      tostring(meta.sell or "") ~= sellVersion
+    SessionStatus.sellCatalogVersion = sellVersion
+    if sellChanged then
+      sellItemsCache = nil
+      Performance.sellCatalogLoadedAt = 0
+    end
+  end
+
+  return buyChanged, sellChanged
 end
 
 local function getMEQuantities()
@@ -1877,16 +1888,6 @@ local function callPimMethod(pim, methodName)
   ok, result = pcall(pim[methodName], pim)
   if ok then return result end
   return nil
-end
-
-local function normalizePlayerName(value)
-  if type(value) == "table" then
-    value = value.name or value.playerName or value.username or value.nick
-  end
-
-  if type(value) ~= "string" then return nil end
-  if value == "" or value == "null" then return nil end
-  return value
 end
 
 local function getPlayerOnPim()
