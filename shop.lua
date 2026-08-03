@@ -475,6 +475,25 @@ SecurePurchase.timeout = 4
 -- Таблица должна существовать до объявления SecureSale.* функций.
 SecureSale = SecureSale or {}
 
+-- Оптимизация GUI. Глобальная таблица не увеличивает лимит local-переменных
+-- главного блока OpenComputers.
+Performance = Performance or {}
+Performance.searchDelay = 0.12
+Performance.searchDirty = false
+Performance.nextSearchAt = 0
+Performance.lastInputAt = 0
+Performance.networkIdleDelay = 0.75
+Performance.catalogMaxAge = 30
+Performance.buyCatalogLoadedAt = 0
+Performance.sellCatalogLoadedAt = 0
+Performance.idleFor = 0
+Performance.pendingScroll = 0
+Performance.nextScrollAt = 0
+Performance.scrollInterval = 0.04
+
+SelectorCache = SelectorCache or {}
+SelectorCache.key = nil
+
 -- Режим технических работ. Источник истины — config.json на хостинге,
 -- быстрый сигнал о переключении приходит через signal.json на VPS.
 Maintenance = Maintenance or {}
@@ -485,17 +504,17 @@ Maintenance.screenDrawn = false
 Maintenance.lastSignalTime = -1
 Maintenance.nextSignalCheck = 0
 Maintenance.nextConfigCheck = 0
-Maintenance.signalInterval = 2.0
-Maintenance.configInterval = 20.0
-Maintenance.requestTimeout = 2.5
+Maintenance.signalInterval = 4.0
+Maintenance.configInterval = 30.0
+Maintenance.requestTimeout = 1.5
 
 -- Система ограничения доступа для игроков, заблокированных через сайт.
 -- Сайт уже записывает бан в users.json и создаёт signal.json с section="ban".
 BanSystem = BanSystem or {}
 BanSystem.checkUrl = "http://co925228.tw1.ru/check_ban.php"
 BanSystem.signalUrl = WEB_BASE_URL .. "/data/signal.json"
-BanSystem.requestTimeout = 2.5
-BanSystem.checkInterval = 4.0
+BanSystem.requestTimeout = 1.5
+BanSystem.checkInterval = 8.0
 BanSystem.nextCheck = 0
 BanSystem.lastSignalTime = -1
 BanSystem.blockedPlayer = nil
@@ -503,14 +522,271 @@ BanSystem.info = nil
 BanSystem.screenDrawn = false
 BanSystem.lastError = nil
 
+-- ============================================================
+-- LOW TRAFFIC: один общий запрос состояния вместо трёх опросов
+-- ============================================================
+
+CatalogCache = CatalogCache or {}
+CatalogCache.metaFile = "/home/vip_shop_catalog_versions.json"
+CatalogCache.buyFile = "/home/vip_shop_catalog_buy.json"
+CatalogCache.sellFile = "/home/vip_shop_catalog_sell.json"
+CatalogCache.meta = CatalogCache.meta or nil
+
+function CatalogCache.loadMeta()
+  if type(CatalogCache.meta) == "table" then
+    return CatalogCache.meta
+  end
+
+  CatalogCache.meta = {}
+  local file = io.open(CatalogCache.metaFile, "r")
+  if not file then return CatalogCache.meta end
+
+  local raw = file:read("*a")
+  file:close()
+
+  local decoded = decodeJson(raw or "")
+  if type(decoded) == "table" then
+    CatalogCache.meta = decoded
+  end
+
+  return CatalogCache.meta
+end
+
+function CatalogCache.saveMeta()
+  local encoded = encodeJson(CatalogCache.meta or {})
+  if not encoded then return false end
+
+  local tempPath = CatalogCache.metaFile .. ".tmp"
+  local file = io.open(tempPath, "w")
+  if not file then return false end
+
+  file:write(encoded)
+  file:close()
+
+  os.remove(CatalogCache.metaFile)
+  if os.rename(tempPath, CatalogCache.metaFile) then
+    return true
+  end
+
+  local fallback = io.open(CatalogCache.metaFile, "w")
+  if not fallback then return false end
+  fallback:write(encoded)
+  fallback:close()
+  os.remove(tempPath)
+  return true
+end
+
+function CatalogCache.pathFor(kind)
+  return kind == "sell"
+    and CatalogCache.sellFile
+    or CatalogCache.buyFile
+end
+
+function CatalogCache.read(kind)
+  local file = io.open(CatalogCache.pathFor(kind), "r")
+  if not file then return nil end
+
+  local raw = file:read("*a")
+  file:close()
+
+  local decoded = decodeJson(raw or "")
+  if type(decoded) == "table" then
+    return decoded
+  end
+
+  return nil
+end
+
+function CatalogCache.write(kind, data, version)
+  if type(data) ~= "table" then return false end
+
+  local encoded = encodeJson(data)
+  if not encoded then return false end
+
+  local path = CatalogCache.pathFor(kind)
+  local tempPath = path .. ".tmp"
+  local file = io.open(tempPath, "w")
+  if not file then return false end
+
+  file:write(encoded)
+  file:close()
+
+  os.remove(path)
+  if not os.rename(tempPath, path) then
+    local fallback = io.open(path, "w")
+    if not fallback then return false end
+    fallback:write(encoded)
+    fallback:close()
+    os.remove(tempPath)
+  end
+
+  local meta = CatalogCache.loadMeta()
+  meta[kind] = tostring(version or "")
+  CatalogCache.saveMeta()
+  return true
+end
+
+function CatalogCache.fetch(kind, url, desiredVersion)
+  local meta = CatalogCache.loadMeta()
+  local desired = tostring(desiredVersion or "")
+  local cachedVersion = tostring(meta[kind] or "")
+
+  -- После перезапуска OC каталог берётся с HDD без HTTP, если VPS сообщил
+  -- ту же версию файла.
+  if desired ~= ""
+    and desired ~= "missing"
+    and cachedVersion == desired
+  then
+    local cached = CatalogCache.read(kind)
+    if type(cached) == "table" then
+      return cached, nil, true
+    end
+  end
+
+  local result, err = httpRequest(url, 8)
+  if type(result) == "table" then
+    CatalogCache.write(kind, result, desired)
+    return result, nil, false
+  end
+
+  -- При временной сетевой ошибке разрешаем открыть старый каталог с HDD.
+  local cached = CatalogCache.read(kind)
+  if type(cached) == "table" then
+    return cached, err, true
+  end
+
+  return nil, err or "Каталог недоступен", false
+end
+
+SessionStatus = SessionStatus or {}
+SessionStatus.playerName = nil
+SessionStatus.nextCheck = math.huge
+SessionStatus.baseInterval = 120
+SessionStatus.failureCount = 0
+SessionStatus.lastError = nil
+SessionStatus.buyCatalogVersion = nil
+SessionStatus.sellCatalogVersion = nil
+SessionStatus.lastSuccess = 0
+
+function SessionStatus.start(playerName)
+  playerName = normalizePlayerName(playerName)
+  if not playerName then return false end
+
+  SessionStatus.playerName = playerName
+  SessionStatus.nextCheck = 0
+  SessionStatus.failureCount = 0
+  SessionStatus.lastError = nil
+  return true
+end
+
+function SessionStatus.stop()
+  SessionStatus.playerName = nil
+  SessionStatus.nextCheck = math.huge
+  SessionStatus.failureCount = 0
+  SessionStatus.lastError = nil
+end
+
+function SessionStatus.backoffDelay()
+  local steps = {15, 30, 60, 120, 300}
+  local index = math.min(
+    #steps,
+    math.max(1, tonumber(SessionStatus.failureCount) or 1)
+  )
+  return steps[index]
+end
+
+function SessionStatus.fetch(playerName, force)
+  playerName = normalizePlayerName(
+    playerName or SessionStatus.playerName
+  )
+  if not playerName then
+    return nil, "Имя игрока не определено"
+  end
+
+  local now = computer.uptime()
+  if force ~= true and now < SessionStatus.nextCheck then
+    return nil, "Ожидание следующей проверки"
+  end
+
+  local response, err = httpPostJson(
+    SecurePurchase.url,
+    {
+      action = "session_status",
+      name = playerName,
+    },
+    3
+  )
+
+  if not response or response.status ~= "ok" then
+    SessionStatus.failureCount =
+      (tonumber(SessionStatus.failureCount) or 0) + 1
+    SessionStatus.lastError =
+      err
+      or response and response.message
+      or "VPS не ответил"
+    SessionStatus.nextCheck =
+      computer.uptime() + SessionStatus.backoffDelay()
+    return nil, SessionStatus.lastError
+  end
+
+  local data = type(response.data) == "table"
+    and response.data
+    or response
+
+  SessionStatus.playerName = playerName
+  SessionStatus.failureCount = 0
+  SessionStatus.lastError = nil
+  SessionStatus.lastSuccess = computer.uptime()
+
+  local pollAfter = tonumber(data.pollAfter)
+    or SessionStatus.baseInterval
+  pollAfter = math.max(60, math.min(300, pollAfter))
+  SessionStatus.nextCheck = computer.uptime() + pollAfter
+
+  return data, nil
+end
+
+function SessionStatus.updateCatalogVersions(data)
+  local meta = CatalogCache.loadMeta()
+  local buyVersion = tostring(data.buyCatalogVersion or "")
+  local sellVersion = tostring(data.sellCatalogVersion or "")
+  local buyChanged = false
+  local sellChanged = false
+
+  if buyVersion ~= "" then
+    buyChanged =
+      tostring(meta.buy or "") ~= buyVersion
+    SessionStatus.buyCatalogVersion = buyVersion
+    if buyChanged then
+      buyItemsCache = nil
+      Performance.buyCatalogLoadedAt = 0
+    end
+  end
+
+  if sellVersion ~= "" then
+    sellChanged =
+      tostring(meta.sell or "") ~= sellVersion
+    SessionStatus.sellCatalogVersion = sellVersion
+    if sellChanged then
+      sellItemsCache = nil
+      Performance.sellCatalogLoadedAt = 0
+    end
+  end
+
+  return buyChanged, sellChanged
+end
+
 local HTTP_TIMEOUT = 30
 local PURCHASE_HTTP_TIMEOUT = 4
-local PIM_CHECK_INTERVAL = 0.30
+local PIM_CHECK_INTERVAL = 0.65
 local AUTH_DELAY = 2
 local ME_EXPORT_DIRECTION = "up"
 SellFlow = SellFlow or {}
 SellFlow.pushDirection = "down"
 SellFlow.endpoint = WEB_BASE_URL .. "/api/sell_item.php"
+SellFlow.inventorySnapshot = nil
+SellFlow.inventorySnapshotAt = 0
+SellFlow.inventorySnapshotMaxAge = 0.75
 
 local WIDTH, HEIGHT = gpu.getResolution()
 local maxW, maxH = gpu.maxResolution()
@@ -947,6 +1223,7 @@ local function addCatalogItem(target, mapKey, mapping, meQuantities, meCraftable
     -- магазин сам выберет доступные варианты предмета из МЭ.
     nbt_hash = mapping.nbt_hash or mapping.nbtHash,
     article = mapping.article or mapping.sku or mapping.code,
+    _searchName = lowerText(tostring(displayName)),
   }
 end
 
@@ -971,7 +1248,11 @@ local function loadCatalogItems()
   catalogStatus = "Загрузка каталога покупок..."
   catalogLoadError = nil
 
-  local catalog, err = httpRequest(CATALOG_URL, HTTP_TIMEOUT)
+  local catalog, err = CatalogCache.fetch(
+    "buy",
+    CATALOG_URL,
+    SessionStatus.buyCatalogVersion
+  )
   if not catalog then
     allItems = {}
     catalogLoadError = err or "Неизвестная ошибка"
@@ -1007,6 +1288,7 @@ local function loadCatalogItems()
   buyItemsCache = loadedItems
   allItems = buyItemsCache
   catalogStatus = "Каталог покупок загружен: " .. tostring(#allItems) .. " товаров"
+  Performance.buyCatalogLoadedAt = computer.uptime()
   return true, nil
 end
 
@@ -1043,6 +1325,7 @@ local function addSellItem(target, mapping, fallbackKey)
     qty = configuredQty,
     canSell = true,
     article = mapping.article or mapping.sku or mapping.code,
+    _searchName = lowerText(tostring(displayName)),
   }
 end
 
@@ -1050,7 +1333,11 @@ local function loadSellItems()
   catalogStatus = "Загрузка каталога продаж..."
   catalogLoadError = nil
 
-  local result, err = httpRequest(SELL_ITEMS_URL, HTTP_TIMEOUT)
+  local result, err = CatalogCache.fetch(
+    "sell",
+    SELL_ITEMS_URL,
+    SessionStatus.sellCatalogVersion
+  )
   if not result then
     allItems = {}
     catalogLoadError = err or "Неизвестная ошибка"
@@ -1092,6 +1379,7 @@ local function loadSellItems()
   sellItemsCache = loadedItems
   allItems = sellItemsCache
   catalogStatus = "Каталог продаж загружен: " .. tostring(#allItems) .. " товаров"
+  Performance.sellCatalogLoadedAt = computer.uptime()
   return true, nil
 end
 
@@ -1100,18 +1388,24 @@ local function loadItemsForCurrentMode(forceReload)
     if sellItemsCache and not forceReload then
       allItems = sellItemsCache
       catalogLoadError = nil
-      catalogStatus = "Каталог продаж загружен: " .. tostring(#allItems) .. " товаров"
+      catalogStatus =
+        "Каталог продаж загружен: "
+        .. tostring(#allItems) .. " товаров"
       return true, nil
     end
+
     return loadSellItems()
   end
 
   if buyItemsCache and not forceReload then
     allItems = buyItemsCache
     catalogLoadError = nil
-    catalogStatus = "Каталог покупок загружен: " .. tostring(#allItems) .. " товаров"
+    catalogStatus =
+      "Каталог покупок загружен: "
+      .. tostring(#allItems) .. " товаров"
     return true, nil
   end
+
   return loadCatalogItems()
 end
 
@@ -1328,8 +1622,11 @@ function setSelectorSlot(slot, stack)
 end
 
 function clearSelector()
+  if SelectorCache.key == "__clear__" then return end
+
   setSelectorSlot(0, nil)
   setSelectorSlot(1, nil)
+  SelectorCache.key = "__clear__"
 end
 
 function updateSelectorDisplay(item)
@@ -1344,15 +1641,26 @@ function updateSelectorDisplay(item)
     return
   end
 
+  local damage = tonumber(item.damage) or 0
+  local selectorKey = tostring(id) .. ":" .. tostring(damage)
+
+  -- При поиске и частичной перерисовке один и тот же предмет больше не
+  -- отправляется в Item Selector повторно.
+  if SelectorCache.key == selectorKey then return end
+
   local stack = {
     id = tostring(id),
-    dmg = tonumber(item.damage) or 0,
+    dmg = damage,
   }
 
-  -- Если компонент появился позже запуска программы, ensureSelector найдёт его
-  -- непосредственно в момент выбора товара.
-  setSelectorSlot(0, stack)
-  setSelectorSlot(1, stack)
+  local firstOk = setSelectorSlot(0, stack)
+  local secondOk = setSelectorSlot(1, stack)
+
+  if firstOk or secondOk then
+    SelectorCache.key = selectorKey
+  else
+    SelectorCache.key = nil
+  end
 end
 
 selector, selectorAddress = findSelector()
@@ -1456,51 +1764,27 @@ local function loadAccountForPlayer(playerName)
   account.regDate = "Загрузка..."
   account.trans = "..."
 
-  if uiState == "shop" and drawAccountInfo then
-    drawAccountInfo()
+  local player, statusError =
+    SessionStatus.fetch(playerName, true)
+
+  if not player then
+    return false, statusError or "VPS не ответил"
   end
 
-  -- VPS является единственным источником баланса.
-  local response, err = httpPostJson(
-    SecurePurchase.url,
-    {
-      action = "get_balance",
-      name = playerName,
-    },
-    SecurePurchase.timeout
-  )
+  local allowed, stateReason =
+    SessionStatus.apply(player, false)
 
-  if not response or response.status ~= "ok" then
-    account.balanceCoin = 0
-    account.balanceEma = 0
-    account.transactions = 0
-    account.agreed = false
-    account.coina = "0"
-    account.ema = "0"
-    account.regDate = "Ошибка загрузки"
-    account.trans = "0"
-    return false, err or response and response.message
-      or "VPS не ответил"
+  if not allowed then
+    return false, stateReason
   end
-
-  local player = type(response.data) == "table"
-    and response.data
-    or response
 
   if player.found == false then
-    -- Создаём/получаем запись на основном хостинге.
+    -- Редкий случай нового игрока: только тогда выполняется запрос
+    -- регистрации на основном хостинге.
     local created, createError, registeredPlayer =
       createPlayerOnHosting(playerName)
 
     if not created then
-      account.balanceCoin = 0
-      account.balanceEma = 0
-      account.transactions = 0
-      account.agreed = false
-      account.coina = "0"
-      account.ema = "0"
-      account.regDate = "Ошибка регистрации"
-      account.trans = "0"
       return false, createError
     end
 
@@ -1537,56 +1821,20 @@ local function loadAccountForPlayer(playerName)
         or "Не удалось создать аккаунт на VPS"
     end
 
-    player = type(updateResponse.data) == "table"
+    local updated = type(updateResponse.data) == "table"
       and updateResponse.data
       or updateResponse
 
-    player.agreed = registeredPlayer.agreed == true
-    player.regDate = registeredPlayer.regDate
+    updated.found = true
+    updated.agreed = registeredPlayer.agreed == true
+    updated.regDate = registeredPlayer.regDate
       or registeredPlayer.registrationDate
+
+    SessionStatus.applyAccount(updated)
   end
 
-  account.nick = tostring(
-    player.name or player.nick or player.player or playerName
-  )
-  account.balanceCoin = tonumber(
-    player.balanceCoin
-    or player.coin
-    or player.coina
-    or player.balance
-  ) or 0
-  account.balanceEma = tonumber(
-    player.balanceEma or player.ema
-  ) or 0
-  account.transactions = tonumber(
-    player.transactions
-    or player.trans
-    or player.transactionCount
-  ) or 0
-  account.agreed = player.agreed == true
-  account.coina = trimNumber(account.balanceCoin, 4)
-  account.ema = trimNumber(account.balanceEma, 4)
-  account.regDate = tostring(
-    player.regDate
-    or player.registrationDate
-    or player.registeredAt
-    or "Неизвестно"
-  )
-  account.trans = tostring(math.floor(account.transactions))
-  account.banned = player.banned == true
-  account.banReason = player.banReason or player.reason
-  account.banDuration = tonumber(
-    player.banDuration or player.duration or player.expires
-  ) or 0
-  account.bannedBy = player.bannedBy
-    or player.banAdmin
-    or player.admin
-  account.bannedAt = player.bannedAt
-    or player.banDate
-    or player.date
-
-  -- Запросы ниже выполняются только при наличии незавершённых
-  -- операций на HDD.
+  -- Дополнительные запросы выполняются только при реальной незавершённой
+  -- операции на HDD.
   if SecurePurchase
     and type(SecurePurchase.retryForPlayer) == "function"
   then
@@ -1768,31 +2016,81 @@ function SellFlow.getInventoryStack(pimAddress, pim, slot)
   return nil
 end
 
-function SellFlow.scanPlayerInventoryItem(item)
-  if not item then return 0 end
+function SellFlow.invalidateInventorySnapshot()
+  SellFlow.inventorySnapshot = nil
+  SellFlow.inventorySnapshotAt = 0
+end
+
+function SellFlow.getInventorySnapshot(force)
+  local now = computer.uptime()
+
+  if not force
+    and type(SellFlow.inventorySnapshot) == "table"
+    and now - (SellFlow.inventorySnapshotAt or 0)
+      <= SellFlow.inventorySnapshotMaxAge
+  then
+    return SellFlow.inventorySnapshot
+  end
+
+  local snapshot = {}
   local pimAddress = getPimAddr()
-  if not pimAddress then return 0 end
+
+  if not pimAddress then
+    SellFlow.inventorySnapshot = snapshot
+    SellFlow.inventorySnapshotAt = now
+    return snapshot
+  end
 
   local pim = getPimProxy()
   local inventorySize = SellFlow.getInventorySizeForScan(pim)
 
-  local total = 0
-  -- Проверяем 0..size: так поддерживаются и нулевые, и единичные индексы.
-  -- Для реального компонента один из крайних индексов просто вернёт nil.
   for slot = 0, inventorySize do
-    local stack = SellFlow.getInventoryStack(pimAddress, pim, slot)
-    if SellFlow.inventoryStackMatches(stack, item) then
-      total = total + math.max(0, tonumber(
-        stack.size or stack.qty or stack.count or stack.amount
-      ) or 0)
+    local stack = SellFlow.getInventoryStack(
+      pimAddress,
+      pim,
+      slot
+    )
+
+    if type(stack) == "table" then
+      snapshot[#snapshot + 1] = stack
     end
   end
+
+  SellFlow.inventorySnapshot = snapshot
+  SellFlow.inventorySnapshotAt = computer.uptime()
+  return snapshot
+end
+
+function SellFlow.scanPlayerInventoryItem(item, force)
+  if not item then return 0 end
+
+  local total = 0
+  local snapshot = SellFlow.getInventorySnapshot(force == true)
+
+  for _, stack in ipairs(snapshot) do
+    if SellFlow.inventoryStackMatches(stack, item) then
+      total = total + math.max(
+        0,
+        tonumber(
+          stack.size
+          or stack.qty
+          or stack.count
+          or stack.amount
+        ) or 0
+      )
+    end
+  end
+
   return math.floor(total)
 end
 
-function SellFlow.refreshSellInventory(item)
+function SellFlow.refreshSellInventory(item, force)
   if currentShopMode ~= "sell" or not item then return 0 end
-  local amount = SellFlow.scanPlayerInventoryItem(item)
+
+  local amount = SellFlow.scanPlayerInventoryItem(
+    item,
+    force == true
+  )
   item.inventoryQty = amount
   return amount
 end
@@ -1842,6 +2140,7 @@ function SellFlow.movePlayerItemToME(item, amount)
     end
   end
 
+  SellFlow.invalidateInventorySnapshot()
   return movedTotal
 end
 
@@ -1892,6 +2191,8 @@ local function createSession(playerName)
   end
 
   clearSelector()
+  SellFlow.invalidateInventorySnapshot()
+  SessionStatus.start(playerName)
   session.active = true
   session.playerName = playerName
   pimOwner = playerName
@@ -1908,8 +2209,147 @@ local function createSession(playerName)
   return true, nil
 end
 
+function SessionStatus.applyAccount(data)
+  if type(data) ~= "table" or data.found == false then
+    return false
+  end
+
+  account.nick = tostring(
+    data.name or SessionStatus.playerName or account.nick
+  )
+  account.balanceCoin = tonumber(data.balanceCoin) or 0
+  account.balanceEma = tonumber(data.balanceEma) or 0
+  account.transactions = tonumber(data.transactions) or 0
+  account.agreed = data.agreed == true
+  account.coina = trimNumber(account.balanceCoin, 4)
+  account.ema = trimNumber(account.balanceEma, 4)
+  account.regDate = tostring(data.regDate or "Неизвестно")
+  account.trans = tostring(math.floor(account.transactions))
+
+  account.banned = data.banned == true
+  account.banReason = data.banReason
+  account.banDuration = tonumber(data.banDuration) or 0
+  account.bannedBy = data.bannedBy
+  account.bannedAt = data.bannedAt
+
+  if uiState == "shop" and session.active then
+    drawAccountInfo()
+  end
+
+  return true
+end
+
+function SessionStatus.apply(data, restartWhenAllowed)
+  if type(data) ~= "table" then return false, "Некорректный статус" end
+
+  local targetPlayer = normalizePlayerName(
+    data.name or SessionStatus.playerName
+  )
+  local buyChanged, sellChanged =
+    SessionStatus.updateCatalogVersions(data)
+
+  if data.maintenance == true then
+    if Maintenance then
+      Maintenance.setActive(true, false)
+    end
+    return false, "maintenance", buyChanged, sellChanged
+  end
+
+  local wasMaintenance = Maintenance and Maintenance.active == true
+  if wasMaintenance and Maintenance then
+    Maintenance.setActive(false, false)
+  end
+
+  if data.banned == true and targetPlayer and BanSystem then
+    BanSystem.blockPlayer(targetPlayer, {
+      banned = true,
+      reason = data.banReason or "Нарушение правил магазина",
+      duration = tonumber(data.banDuration) or 0,
+      admin = data.bannedBy or "Система",
+      date = data.bannedAt or "Неизвестно",
+    }, true)
+    return false, "banned", buyChanged, sellChanged
+  end
+
+  if BanSystem
+    and BanSystem.blockedPlayer
+    and targetPlayer
+    and BanSystem.samePlayer(BanSystem.blockedPlayer, targetPlayer)
+  then
+    BanSystem.clear(restartWhenAllowed == true, false)
+    return true, nil, buyChanged, sellChanged
+  end
+
+  SessionStatus.applyAccount(data)
+
+  if wasMaintenance
+    and restartWhenAllowed == true
+    and targetPlayer
+    and not session.active
+    and isPlayerStandingOnPim() == true
+  then
+    createSession(targetPlayer)
+  end
+
+  return true, nil, buyChanged, sellChanged
+end
+
+function SessionStatus.refreshCatalogIfNeeded(buyChanged, sellChanged)
+  if uiState ~= "shop" or not session.active then return end
+
+  local shouldReload =
+    (currentShopMode == "buy" and buyChanged)
+    or (currentShopMode == "sell" and sellChanged)
+
+  if not shouldReload then return end
+
+  local loaded = loadItemsForCurrentMode(true)
+  if loaded then
+    filterItems()
+    if #items == 0 then
+      selectedIndex = 0
+    else
+      selectedIndex = math.max(
+        1,
+        math.min(selectedIndex, #items)
+      )
+    end
+    presentShopFrame(true)
+  end
+end
+
+function SessionStatus.poll(now)
+  if not SessionStatus.playerName then return false end
+
+  now = tonumber(now) or computer.uptime()
+  if now < SessionStatus.nextCheck then return false end
+
+  -- Никаких запросов после ухода игрока.
+  if isPlayerStandingOnPim() == false then
+    SessionStatus.stop()
+    return false
+  end
+
+  local data = SessionStatus.fetch(
+    SessionStatus.playerName,
+    false
+  )
+  if not data then return false end
+
+  local _, _, buyChanged, sellChanged =
+    SessionStatus.apply(data, true)
+
+  SessionStatus.refreshCatalogIfNeeded(
+    buyChanged,
+    sellChanged
+  )
+  return true
+end
+
 local function destroySession()
   clearSelector()
+  SellFlow.invalidateInventorySnapshot()
+  SessionStatus.stop()
 
   session.active = false
   session.playerName = nil
@@ -1926,6 +2366,8 @@ local function destroySession()
   searchFocused = false
   selectedIndex = 0
   scrollOffset = 0
+  Performance.pendingScroll = 0
+  Performance.nextScrollAt = 0
   items = {}
   allItems = {}
 
@@ -1939,18 +2381,10 @@ local function destroySession()
 end
 
 local function finishAuthorization()
-  if Maintenance and Maintenance.active then
-    if type(Maintenance.setActive) == "function" then
-      Maintenance.setActive(true, false)
-    end
-    return
-  end
-
   if uiState ~= "auth" or not session.active then
     return
   end
 
-  -- Если за две секунды игрок успел уйти, магазин не открываем.
   if isPlayerStandingOnPim() == false then
     destroySession()
     return
@@ -1959,42 +2393,33 @@ local function finishAuthorization()
   local playerName = session.playerName
   authDeadline = nil
 
-  -- Перед загрузкой каталога проверяем бан напрямую на основном хостинге.
-  -- Это не зависит от задержки синхронизации users.json на VPS.
-  if BanSystem and type(BanSystem.checkPlayer) == "function" then
-    local banned, banInfo = BanSystem.checkPlayer(playerName, false)
-    if banned == true then
-      BanSystem.blockPlayer(playerName, banInfo, true)
+  drawAuthScreen(playerName, "Проверка аккаунта и состояния магазина...")
+
+  local accountLoaded, accountError =
+    loadAccountForPlayer(playerName)
+
+  if not accountLoaded then
+    -- Техработы и бан уже сами переключили экран и закрыли сессию.
+    if not session.active or uiState ~= "auth" then
       return
     end
+
+    local retryAt = tonumber(SessionStatus.nextCheck)
+      or (computer.uptime() + 30)
+    local waitSeconds = math.max(
+      5,
+      math.ceil(retryAt - computer.uptime())
+    )
+
+    drawAuthScreen(
+      playerName,
+      "Сервер недоступен. Повтор через "
+        .. tostring(waitSeconds) .. " сек."
+    )
+    authDeadline = computer.uptime() + waitSeconds
+    return
   end
 
-  -- Магазин открывается только ПОСЛЕ полной загрузки каталога и аккаунта.
-  -- Поэтому при появлении GUI товары и реальные данные игрока уже на месте.
-  drawAuthScreen(playerName, "Загрузка каталога и аккаунта...")
-
-  currentShopMode = "buy"
-  searchQuery = ""
-  searchFocused = false
-  quantity = ""
-  qtyFocused = false
-  selectedIndex = 1
-  scrollOffset = 0
-
-  loadItemsForCurrentMode(true)
-
-  -- Каталог продаж загружаем один раз во время авторизации. После этого
-  -- переключение Покупки/Продажи происходит из памяти без сетевой паузы.
-  local buyStatus = catalogStatus
-  local buyError = catalogLoadError
-  local savedBuyItems = buyItemsCache
-  loadSellItems()
-  currentShopMode = "buy"
-  allItems = savedBuyItems or buyItemsCache or {}
-  catalogStatus = buyStatus
-  catalogLoadError = buyError
-
-  -- Сетевой запрос блокирующий, поэтому после него повторно проверяем PIM.
   if not session.active
     or session.playerName ~= playerName
     or isPlayerStandingOnPim() == false
@@ -2003,18 +2428,27 @@ local function finishAuthorization()
     return
   end
 
-  loadAccountForPlayer(playerName)
+  currentShopMode = "buy"
+  searchQuery = ""
+  searchFocused = false
+  Performance.searchDirty = false
+  Performance.nextSearchAt = 0
+  quantity = ""
+  qtyFocused = false
+  selectedIndex = 1
+  scrollOffset = 0
 
-  -- Резервная проверка по users.json, если отдельный check_ban.php временно
-  -- не ответил, но актуальная запись игрока уже пришла через VPS.
-  if account.banned == true and BanSystem then
-    BanSystem.blockPlayer(playerName, {
-      banned = true,
-      reason = account.banReason,
-      duration = account.banDuration,
-      admin = account.bannedBy,
-      date = account.bannedAt,
-    }, true)
+  drawAuthScreen(playerName, "Загрузка каталога...")
+
+  local catalogLoaded, catalogError =
+    loadItemsForCurrentMode(false)
+
+  if not catalogLoaded then
+    drawAuthScreen(
+      playerName,
+      "Каталог недоступен. Повтор через 60 сек."
+    )
+    authDeadline = computer.uptime() + 60
     return
   end
 
@@ -2044,9 +2478,15 @@ filterItems = function()
 
   for _, value in ipairs(sourceItems) do
     if type(value) == "table" then
-      local itemName = tostring(value.name or value.displayName or value.internalName or "")
+      local searchableName = value._searchName
+        or lowerText(tostring(
+          value.name
+          or value.displayName
+          or value.internalName
+          or ""
+        ))
       local matchesSearch = searchQuery == ""
-        or lowerText(itemName):find(query, 1, true) ~= nil
+        or searchableName:find(query, 1, true) ~= nil
 
       local matchesAvailability = true
       if currentShopMode == "buy" then
@@ -2858,6 +3298,26 @@ function Maintenance.checkSignal(silent)
     if handled then return true end
   end
 
+  local signalSection = lowerText(tostring(data.section or ""))
+  if signalSection == "shop" or signalSection == "catalog" then
+    local catalogType = lowerText(tostring(data.catalog or ""))
+
+    if catalogType == "sell" then
+      sellItemsCache = nil
+      Performance.sellCatalogLoadedAt = 0
+    elseif catalogType == "buy" then
+      buyItemsCache = nil
+      Performance.buyCatalogLoadedAt = 0
+    else
+      buyItemsCache = nil
+      sellItemsCache = nil
+      Performance.buyCatalogLoadedAt = 0
+      Performance.sellCatalogLoadedAt = 0
+    end
+
+    return true
+  end
+
   if tostring(data.section or "") ~= "config"
     or tostring(data.action or "") ~= "pause"
     or data.paused == nil
@@ -2874,29 +3334,15 @@ function Maintenance.checkSignal(silent)
 end
 
 function Maintenance.bootstrap()
-  -- config.json важнее signal.json: сигнал может быть перезаписан изменением
-  -- каталога, а config.json всегда содержит текущее состояние кнопки сайта.
-  local loaded = Maintenance.checkConfig(true)
-  if not loaded then Maintenance.checkSignal(true) end
-
-  local now = computer.uptime()
-  Maintenance.nextSignalCheck = now + Maintenance.signalInterval
-  Maintenance.nextConfigCheck = now + Maintenance.configInterval
+  -- LOW TRAFFIC: без игрока на PIM нет ни одного HTTP-запроса.
+  Maintenance.active = false
+  Maintenance.nextSignalCheck = math.huge
+  Maintenance.nextConfigCheck = math.huge
 end
 
 function Maintenance.poll(now)
-  now = tonumber(now) or computer.uptime()
-
-  if now >= Maintenance.nextSignalCheck then
-    Maintenance.nextSignalCheck = now + Maintenance.signalInterval
-    pcall(Maintenance.checkSignal, false)
-    now = computer.uptime()
-  end
-
-  if now >= Maintenance.nextConfigCheck then
-    Maintenance.nextConfigCheck = now + Maintenance.configInterval
-    pcall(Maintenance.checkConfig, false)
-  end
+  -- Состояние приходит внутри SessionStatus.session_status.
+  return false
 end
 
 -- ============================================================
@@ -3211,25 +3657,12 @@ function BanSystem.handleSignal(data)
 end
 
 function BanSystem.bootstrap()
-  BanSystem.nextCheck = computer.uptime()
+  BanSystem.nextCheck = math.huge
 end
 
 function BanSystem.poll(now)
-  if Maintenance and Maintenance.active then return end
-  now = tonumber(now) or computer.uptime()
-  if now < BanSystem.nextCheck then return end
-  BanSystem.nextCheck = now + BanSystem.checkInterval
-
-  local targetPlayer = nil
-  if session.active and session.playerName then
-    targetPlayer = session.playerName
-  elseif BanSystem.blockedPlayer then
-    targetPlayer = BanSystem.blockedPlayer
-  end
-
-  if targetPlayer then
-    pcall(BanSystem.checkPlayer, targetPlayer, true)
-  end
+  -- Бан приходит внутри единственного session_status.
+  return false
 end
 
 local function drawBackground()
@@ -4139,6 +4572,26 @@ local function redrawCatalogContent()
   updateSelectorDisplay(items[selectedIndex])
 end
 
+function Performance.markInput()
+  Performance.lastInputAt = computer.uptime()
+end
+
+function Performance.scheduleSearch()
+  Performance.searchDirty = true
+  Performance.nextSearchAt =
+    computer.uptime() + Performance.searchDelay
+end
+
+function Performance.applySearchNow()
+  if not Performance.searchDirty then return false end
+
+  Performance.searchDirty = false
+  Performance.nextSearchAt = 0
+  filterItems()
+  redrawCatalogContent()
+  return true
+end
+
 local function drawVisibleItem(index)
   if not index or index < 1 then return end
 
@@ -4267,6 +4720,48 @@ local function scroll(delta)
   setScrollOffset(scrollOffset + delta)
 end
 
+function Performance.queueScroll(delta)
+  delta = tonumber(delta) or 0
+  if delta == 0 then return end
+
+  Performance.pendingScroll =
+    (tonumber(Performance.pendingScroll) or 0) + delta
+
+  if Performance.nextScrollAt <= computer.uptime() then
+    Performance.nextScrollAt =
+      computer.uptime() + Performance.scrollInterval
+  end
+end
+
+function Performance.applyPendingScroll(now)
+  now = tonumber(now) or computer.uptime()
+
+  if Performance.pendingScroll == 0
+    or now < Performance.nextScrollAt
+  then
+    return false
+  end
+
+  Performance.scrollStep = math.max(
+    -6,
+    math.min(6, Performance.pendingScroll)
+  )
+
+  Performance.pendingScroll =
+    Performance.pendingScroll - Performance.scrollStep
+
+  scroll(Performance.scrollStep)
+
+  if Performance.pendingScroll ~= 0 then
+    Performance.nextScrollAt =
+      computer.uptime() + Performance.scrollInterval
+  else
+    Performance.nextScrollAt = 0
+  end
+
+  return true
+end
+
 -- Переход к месту нажатия на дорожке скроллбара.
 -- Ползунок центрируется относительно строки, по которой нажал игрок.
 local function jumpToScrollbarPosition(y)
@@ -4306,17 +4801,19 @@ local function switchShopMode(mode)
   qtyFocused = false
   selectedIndex = 1
   scrollOffset = 0
+  Performance.pendingScroll = 0
+  Performance.nextScrollAt = 0
 
-  -- Важно: каталог нужно перечитывать с хостинга при каждом
-  -- переключении режима, иначе цены товаров остаются из кэша
-  -- и не обновляются после изменений на сайте.
-  loadItemsForCurrentMode(true)
+  -- Используем свежий кэш. Сигнал сайта инвалидирует нужный каталог,
+  -- а максимальный возраст кэша не даёт ценам устареть надолго.
+  loadItemsForCurrentMode(false)
   filterItems()
   presentShopFrame()
 end
 
 local function blurSearch()
   if searchFocused then
+    Performance.applySearchNow()
     searchFocused = false
     redrawSearchField()
   end
@@ -6698,7 +7195,7 @@ function SellFlow.openSaleConfirmPopup()
   local item = items[selectedIndex]
   if not item then return end
 
-  local inventoryQty = SellFlow.refreshSellInventory(item)
+  local inventoryQty = SellFlow.refreshSellInventory(item, true)
   if inventoryQty <= 0 then
     drawVisibleItem(selectedIndex)
     drawInfoBlock()
@@ -6754,7 +7251,7 @@ function SellFlow.confirm()
 
   local data = popupState
   local item = data.item
-  local availableNow = SellFlow.scanPlayerInventoryItem(item)
+  local availableNow = SellFlow.scanPlayerInventoryItem(item, true)
   local sellQty = math.min(
     math.floor(data.sellQty or 0),
     availableNow
@@ -6962,6 +7459,8 @@ local function handleClick(x, y)
 
     searchQuery = ""
     searchFocused = false
+    Performance.searchDirty = false
+    Performance.nextSearchAt = 0
     filterItems()
     redrawSearchField()
     redrawCatalogContent()
@@ -7059,7 +7558,7 @@ local function handleClick(x, y)
   if y == BTN_Y and x >= actionX and x < actionX + actionW then
     local selectedItem = items[selectedIndex]
     if currentShopMode == "sell" and selectedItem then
-      SellFlow.refreshSellInventory(selectedItem)
+      SellFlow.refreshSellInventory(selectedItem, false)
     end
 
     local selectedStock = selectedItem
@@ -7087,13 +7586,7 @@ local function handleClick(x, y)
     if currentShopMode == "buy" then
       performBuy()
     else
-      local inventoryQty = SellFlow.refreshSellInventory(selectedItem)
-      if inventoryQty <= 0 then
-        drawVisibleItem(selectedIndex)
-        drawInfoBlock()
-        drawQuantitySection()
-        return
-      end
+      -- openSaleConfirmPopup выполняет одну обязательную свежую проверку.
       SellFlow.openSaleConfirmPopup()
     end
     return
@@ -7136,18 +7629,27 @@ while true do
   local name = ev[1]
 
   if name == "player_on" or name == "pim" or name == "pim_player_enter" then
+    local playerName = extractPlayerNameFromEvent(ev)
+
+    if playerName and (Maintenance.active or BanSystem.blockedPlayer) then
+      SessionStatus.start(playerName)
+      local statusData = SessionStatus.fetch(playerName, true)
+      if statusData then
+        SessionStatus.apply(statusData, true)
+      end
+    end
+
     if Maintenance.active then
       Maintenance.draw(false)
     elseif BanSystem.blockedPlayer then
       BanSystem.draw(false)
-    else
-      local playerName = extractPlayerNameFromEvent(ev)
-      if playerName and not session.active then
-        createSession(playerName)
-      end
+    elseif playerName and not session.active then
+      createSession(playerName)
     end
 
   elseif name == "player_off" or name == "pim_player_leave" then
+    SessionStatus.stop()
+
     -- Само событие означает, что игрок сошёл с PIM. Не ждём старого ника
     -- или обновления прокси: сразу закрываем сессию и очищаем SELECTOR.
     if BanSystem.blockedPlayer then
@@ -7157,6 +7659,7 @@ while true do
     end
 
   elseif name == "touch" then
+    Performance.markInput()
     if uiState == "shop" and session.active then
       if not isPimOwner(ev[6] or "Неизвестный") then
         writeDebugLog("⚠️ Коснулся не владелец: " .. tostring(ev[6] or "Неизвестный") .. ", игнорируем")
@@ -7166,18 +7669,20 @@ while true do
     end
 
   elseif name == "scroll" then
+    Performance.markInput()
     if uiState == "shop" and session.active and not popupState then
       if not isPimOwner(ev[6] or "Неизвестный") then
         writeDebugLog("⚠️ Прокрутил не владелец: " .. tostring(ev[6] or "Неизвестный") .. ", игнорируем")
       else
         local x, direction = ev[3], ev[5]
         if x >= LIST_X and x < SCROLL_X then
-          scroll(-direction)
+          Performance.queueScroll(-direction)
         end
       end
     end
 
   elseif name == "key_down" then
+    Performance.markInput()
     if not session.active then
       -- Пока PIM-сессии нет, клавиатура полностью заблокирована.
     elseif not isPimOwner(ev[5] or "Неизвестный") then
@@ -7198,9 +7703,11 @@ while true do
       elseif uiState == "shop" then
         if searchFocused then
           if code == keyboard.keys.escape then
+            Performance.applySearchNow()
             searchFocused = false
             redrawSearchField()
           elseif code == keyboard.keys.enter or code == keyboard.keys.tab then
+            Performance.applySearchNow()
             searchFocused = false
             redrawSearchField()
           elseif code == keyboard.keys.back then
@@ -7208,16 +7715,14 @@ while true do
             -- не перерисовывается и не моргает без причины.
             if searchQuery ~= "" then
               searchQuery = unicode.sub(searchQuery, 1, -2)
-              filterItems()
               redrawSearchField()
-              redrawCatalogContent()
+              Performance.scheduleSearch()
             end
           elseif char and char >= 32 then
             if unicode.len(searchQuery) < SEARCH_W - 4 then
               searchQuery = searchQuery .. unicode.char(char)
-              filterItems()
               redrawSearchField()
-              redrawCatalogContent()
+              Performance.scheduleSearch()
             end
           end
 
@@ -7255,15 +7760,45 @@ while true do
   -- товары будут видны сразу при первом кадре интерфейса.
   local now = computer.uptime()
 
-  -- Быстрый signal.json проверяется раз в две секунды, а config.json
-  -- периодически подтверждает настоящее состояние режима обслуживания.
-  Maintenance.poll(now)
-  now = computer.uptime()
-  BanSystem.poll(now)
-  now = computer.uptime()
+  -- Несколько быстрых событий колеса объединяются в один GPU-сдвиг.
+  if Performance.applyPendingScroll(now) then
+    now = computer.uptime()
+  end
+
+  -- Фильтрация выполняется один раз после короткой паузы ввода.
+  if Performance.searchDirty
+    and now >= Performance.nextSearchAt
+    and uiState == "shop"
+    and session.active
+  then
+    Performance.applySearchNow()
+    now = computer.uptime()
+  end
+
+  -- HTTP-проверки больше не останавливают скролл или набор текста.
+  Performance.idleFor =
+    now - (Performance.lastInputAt or 0)
+
+  if Performance.idleFor >= Performance.networkIdleDelay
+    and not transactionLock
+    and not searchFocused
+    and not qtyFocused
+    and uiState ~= "auth"
+  then
+    SessionStatus.poll(now)
+    now = computer.uptime()
+  end
 
   if Maintenance.active then
     Maintenance.draw(false)
+
+    if now - lastPimCheck >= PIM_CHECK_INTERVAL then
+      lastPimCheck = now
+      if isPlayerStandingOnPim() == false then
+        SessionStatus.stop()
+      end
+    end
+
   elseif BanSystem.blockedPlayer then
     BanSystem.draw(false)
 
@@ -7272,6 +7807,7 @@ while true do
     if now - lastPimCheck >= PIM_CHECK_INTERVAL then
       lastPimCheck = now
       if isPlayerStandingOnPim() == false then
+        SessionStatus.stop()
         BanSystem.clear(false, false)
       end
     end
