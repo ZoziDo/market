@@ -472,7 +472,7 @@ end
 -- ============================================================
 
 MODEM_PROTOCOL = "VIPSHOP-MODEM-1"
-MODEM_NETWORK_KEY = "VIPSHOP_PRIVATE_2026_CHANGE_ME"
+MODEM_NETWORK_KEY = "VIPSHOP_ZOZIDO_REALM9_SECRET_2026"
 MODEM_SERVER_PORT = 3410
 MODEM_CLIENT_PORT = 3411
 MODEM_SERVER_ADDRESS = "" -- пусто = автоматический поиск server.lua
