@@ -1,6 +1,7 @@
--- v3.0.5 - VIP-SHOP EXCHANGER: исправлена ложная ошибка выдачи
--- Интерфейс автоматически использует максимальное разрешение видеокарты.
--- BUILD: VIP_SHOP_EXCHANGER_16_ORES_PERSISTENT_TOTAL_SAFE_INTERRUPT
+-- v4.2 CELL TURBO - VIP-SHOP EXCHANGER
+-- Визуальный интерфейс сохранён из v3.0.5 без изменений.
+-- Обмен выполняется внутри ячейки, установленной в ME Chest.
+-- BUILD: VIP_SHOP_CELL_EXCHANGER_16_ORES_TURBO_EXACT_GUI
 
 local unicode = require("unicode")
 local computer = require("computer")
@@ -8,8 +9,6 @@ local com = require("component")
 local event = require("event")
 
 -- Блокируем Ctrl+Alt+C на уровне библиотеки event.
--- В некоторых версиях OpenComputers shouldInterrupt уже существует,
--- поэтому переопределяем его и в этом случае.
 if not event.shouldInterrupt then
     function event.shouldInterrupt()
         return false
@@ -29,9 +28,55 @@ if not fs.exists("/lib/inspect.lua") then
 end
 inspect = require("inspect")
 
-local me = com.isAvailable("me_interface") and com.me_interface or error("Интерфейс не подключен")
+-- ============================================================
+-- ПРОВЕРЕННЫЕ АДРЕСА И НАПРАВЛЕНИЯ
+-- ============================================================
+local CELL_ME_ADDRESS = "b2f2b6b2-1543-4659-b4e5-e8236fc27871"
+local MAIN_ME_ADDRESS = "7867903d-0c1c-43cf-85fb-6437973e1e99"
+local TRANSPOSER_ADDRESS = "1e889179-3120-45ae-b698-5c760ef1f744"
+
+local CELL_CHEST_DIRECTION = "NORTH"
+local MAIN_CHEST_DIRECTION = "SOUTH"
+
+-- Стороны сундуков относительно Transposer.
+local FIRST_CHEST_SIDE = 3  -- FRONT: сундук сети ячейки
+local SECOND_CHEST_SIDE = 2 -- BACK: сундук основной МЭ
+
+-- Используем все слоты сервисных сундуков. Код рассчитывает размер
+-- безопасной партии автоматически по реальному объёму обоих сундуков.
+local CHEST_SLOT_RESERVE = 0
+
+-- Один запрос интерфейсу сразу на всю оставшуюся часть партии.
+-- Реальное перемещённое количество всё равно берётся из ответа компонента.
+local MAX_INTERFACE_REQUEST = 2147483647
+local ERROR_RETRY_DELAY = 0.02
+
+local function requireAddress(address, expectedType, label)
+    local okType, actualType = pcall(com.type, address)
+    if not okType or actualType ~= expectedType then
+        error(
+            tostring(label)
+            .. " не найден. Адрес: "
+            .. tostring(address)
+            .. ", тип: "
+            .. tostring(actualType)
+        )
+    end
+
+    local proxy = com.proxy(address)
+    if not proxy then
+        error("Не удалось подключиться к " .. tostring(label))
+    end
+
+    return proxy
+end
+
+local cellMe = requireAddress(CELL_ME_ADDRESS, "me_interface", "ME Interface ячейки")
+local mainMe = requireAddress(MAIN_ME_ADDRESS, "me_interface", "Основной ME Interface")
+local bridge = requireAddress(TRANSPOSER_ADDRESS, "transposer", "Transposer")
 local pim = com.isAvailable("pim") and com.pim or error("PIM не подключен")
 local gpu = com.gpu
+local invoke = com.invoke
 
 -- ============================================================
 -- МАКСИМАЛЬНОЕ РАЗРЕШЕНИЕ ЭКРАНА
@@ -49,8 +94,6 @@ local defBG, defFG = gpu.getBackground(), gpu.getForeground()
 -- ============================================================
 -- НАСТРОЙКИ ОБМЕННИКА
 -- ============================================================
-local EXPORT_DIR = "UP"
-local PUSH_DIR = "DOWN"
 local currDir = shell.getWorkingDirectory()
 local STATS_FILE = currDir .. "/exchanger_stats.txt"
 -- Постоянный файл общего счётчика. Значение не сбрасывается после перезапуска.
@@ -769,30 +812,60 @@ local function drawInterface()
 end
 
 -- ============================================================
--- ОБНОВЛЕНИЕ ОСТАТКОВ В МЭ
+-- ОБНОВЛЕНИЕ ОСТАТКОВ В ОСНОВНОЙ МЭ
 -- ============================================================
+-- Для GUI читаем только 16 нужных предметов через getItemDetail.
+-- Полный список из нескольких тысяч предметов основной сети здесь не сканируется.
+local function readMainItemDetail(name, damage)
+    local ok, detail = pcall(
+        invoke,
+        MAIN_ME_ADDRESS,
+        "getItemDetail",
+        { id = name, dmg = tonumber(damage) or 0 }
+    )
+
+    if not ok or not detail then
+        return nil
+    end
+
+    if type(detail.basic) == "function" then
+        local okBasic, basic = pcall(detail.basic)
+        if okBasic and type(basic) == "table" then
+            return basic
+        end
+    end
+
+    if type(detail) == "table" then
+        return detail
+    end
+
+    return nil
+end
+
 local function updIngotsSize()
     if #ore_list < 1 then return false end
 
     local meResponded = false
 
     for _, ore in ipairs(ore_list) do
-        local giveDamage = ore.give.damage or 0
-        local success, item = pcall(function()
-            local detail = me.getItemDetail({ id = ore.give.name, dmg = giveDamage })
-            if detail and detail.basic then
-                return detail.basic()
-            end
-            return nil
-        end)
+        local item = readMainItemDetail(
+            ore.give.name,
+            ore.give.damage or 0
+        )
 
-        if success then
+        if item then
             meResponded = true
-        end
-
-        if success and item then
-            ore.size = tonumber(item.qty) or 0
-            ore.maxSize = tonumber(item.max_size) or 64
+            ore.size = tonumber(
+                item.qty
+                or item.size
+                or item.amount
+                or item.count
+            ) or 0
+            ore.maxSize = tonumber(
+                item.max_size
+                or item.maxSize
+                or item.maxStackSize
+            ) or 64
         else
             ore.size = 0
             ore.maxSize = 64
@@ -843,25 +916,47 @@ local function saveStats()
 end
 
 -- ============================================================
--- ЛОГИКА ОБМЕНА
+-- ЛОГИКА ОБМЕНА ВНУТРИ МЭ-ЯЧЕЙКИ — TURBO
 -- ============================================================
--- ME-интерфейс в разных сборках возвращает результат exportItem по-разному:
--- число, таблицу {size=...}/{qty=...} либо дополнительным вторым значением.
--- Раньше код принимал только res.size, поэтому успешная выдача числа 48
--- ошибочно считалась неудачной и на экране появлялось сообщение об ошибке.
-local function getExportedAmount(primaryResult, secondaryResult)
+local function stackName(stack)
+    if not stack then return nil end
+    return stack.name or stack.id or stack.internalName
+end
+
+local function stackDamage(stack)
+    if not stack then return 0 end
+    return tonumber(stack.damage or stack.dmg or stack.meta) or 0
+end
+
+local function stackAmount(stack)
+    if not stack then return 0 end
+    return math.max(0, math.floor(tonumber(
+        stack.size or stack.qty or stack.amount or stack.count
+    ) or 0))
+end
+
+local function stackMaxSize(stack)
+    if not stack then return 64 end
+    return math.max(1, math.floor(tonumber(
+        stack.maxSize or stack.max_size or stack.maxStackSize
+    ) or 64))
+end
+
+local function getMovedAmount(primaryResult, secondaryResult)
     local function readAmount(value)
         if type(value) == "number" then
             return math.max(0, math.floor(value))
         end
 
         if type(value) == "table" then
-            local amount = tonumber(
-                value.size or value.qty or value.amount or value.count or value.exported
-            )
-            if amount then
-                return math.max(0, math.floor(amount))
-            end
+            return math.max(0, math.floor(tonumber(
+                value.size
+                or value.qty
+                or value.amount
+                or value.count
+                or value.exported
+                or value[1]
+            ) or 0))
         end
 
         return 0
@@ -872,127 +967,627 @@ local function getExportedAmount(primaryResult, secondaryResult)
     return readAmount(secondaryResult)
 end
 
-local function giveIngot(toGive, ore, index)
-    local totalGive = 0
-    local giveDamage = ore.give.damage or 0
-    local failedAttempts = 0
+local function exactItemKey(name, damage)
+    return tostring(name) .. ":" .. tostring(math.floor(tonumber(damage) or 0))
+end
 
-    while totalGive < toGive do
-        local remaining = toGive - totalGive
-        local giveSize = math.min(remaining, ore.maxSize or 64)
-        local success, result, extraResult = pcall(
-            me.exportItem,
-            { id = ore.give.name, dmg = giveDamage },
-            EXPORT_DIR,
-            giveSize
-        )
+local function makeFingerprint(item, fallbackName, fallbackDamage)
+    local fingerprint = {
+        id = stackName(item) or fallbackName,
+        dmg = stackDamage(item)
+    }
 
-        local exported = 0
-        if success then
-            exported = getExportedAmount(result, extraResult)
-            exported = math.min(exported, remaining)
-        end
+    if not fingerprint.id then
+        fingerprint.id = fallbackName
+    end
 
-        if exported > 0 then
-            failedAttempts = 0
-            totalGive = totalGive + exported
-            ore_list[index].size = math.max(0, (ore_list[index].size or 0) - exported)
-            stats.ingots = stats.ingots + exported
-            drawOreStock(ore_list[index], index)
-        else
-            failedAttempts = failedAttempts + 1
-            writeDebugLog(string.format(
-                "Выдача временно не выполнена: item=%s, damage=%s, amount=%d, result=%s, extra=%s",
-                tostring(ore.give.name),
-                tostring(giveDamage),
-                giveSize,
-                tostring(result),
-                tostring(extraResult)
-            ))
+    if item and item.nbt_hash ~= nil then
+        fingerprint.nbt_hash = item.nbt_hash
+    end
 
-            -- Техническое красное сообщение больше не показываем.
-            -- При реальной нехватке места обменник спокойно ждёт и повторяет выдачу.
-            if failedAttempts >= 4 then
-                setStatus(
-                    "Освободите место в инвентаре — выдача продолжится автоматически.",
-                    C.yellow,
-                    C.yellow
-                )
-                failedAttempts = 0
+    return fingerprint
+end
+
+local function getNetworkItems(address)
+    local ok, items = pcall(invoke, address, "getItemsInNetwork")
+    if not ok then
+        return nil, tostring(items)
+    end
+
+    if type(items) ~= "table" then
+        return nil, "getItemsInNetwork вернул " .. type(items)
+    end
+
+    return items, nil
+end
+
+local function buildNetworkIndex(items)
+    local index = {}
+
+    for _, item in pairs(items or {}) do
+        if type(item) == "table" then
+            local name = stackName(item)
+            local damage = stackDamage(item)
+            local amount = stackAmount(item)
+
+            if name and amount > 0 then
+                local key = exactItemKey(name, damage)
+                local entry = index[key]
+
+                if not entry then
+                    entry = {
+                        item = item,
+                        name = name,
+                        damage = damage,
+                        amount = 0,
+                        maxSize = stackMaxSize(item)
+                    }
+                    index[key] = entry
+                end
+
+                entry.amount = entry.amount + amount
             end
-
-            os.sleep(0.5)
         end
+    end
+
+    return index
+end
+
+local function getNetworkEntry(index, name, damage)
+    return index[exactItemKey(name, damage)]
+end
+
+-- ============================================================
+-- СУНДУКИ И TRANSPOSER
+-- ============================================================
+local function readChestSize(side)
+    local ok, size = pcall(bridge.getInventorySize, side)
+    if not ok or not tonumber(size) then
+        return nil
+    end
+    return math.floor(tonumber(size))
+end
+
+-- Размеры кэшируются один раз: они не меняются во время работы.
+local FIRST_CHEST_SIZE = readChestSize(FIRST_CHEST_SIDE)
+local SECOND_CHEST_SIZE = readChestSize(SECOND_CHEST_SIDE)
+
+if not FIRST_CHEST_SIZE then
+    error("Transposer не видит первый сундук на стороне FRONT (3)")
+end
+
+if not SECOND_CHEST_SIZE then
+    error("Transposer не видит второй сундук на стороне BACK (2)")
+end
+
+local function scanChestItemSlots(side, size, name, damage)
+    local slots = {}
+    local total = 0
+    local wantedDamage = tonumber(damage) or 0
+
+    for slot = 1, size do
+        local ok, stack = pcall(bridge.getStackInSlot, side, slot)
+        if ok
+            and stack
+            and stackName(stack) == name
+            and stackDamage(stack) == wantedDamage then
+
+            local amount = stackAmount(stack)
+            if amount > 0 then
+                slots[#slots + 1] = {
+                    slot = slot,
+                    amount = amount
+                }
+                total = total + amount
+            end
+        end
+    end
+
+    return slots, total
+end
+
+local function countChestAll(side, size)
+    local total = 0
+
+    for slot = 1, size do
+        local ok, stack = pcall(bridge.getStackInSlot, side, slot)
+        if ok and stack then
+            total = total + stackAmount(stack)
+        end
+    end
+
+    return total
+end
+
+local function serviceChestsEmpty()
+    local first = countChestAll(FIRST_CHEST_SIDE, FIRST_CHEST_SIZE)
+    local second = countChestAll(SECOND_CHEST_SIDE, SECOND_CHEST_SIZE)
+
+    if first > 0 or second > 0 then
+        return false, string.format(
+            "Сервисные сундуки не пусты: первый %d, второй %d.",
+            first,
+            second
+        )
     end
 
     return true
 end
 
-local function exchangeOre(slot, ore, index)
-    local success, curSlot = pcall(pim.getStackInSlot, slot)
-    if not success or not curSlot then
-        setStatus("Вы сошли с PIM. Обмен прерван.", C.red, C.red)
-        os.sleep(1)
-        return false
-    end
+-- Один запрос обычно переносит всю возможную часть. Если сборка ограничивает
+-- его одним стаком, цикл сразу повторяет вызов без искусственной задержки.
+local function exportToChest(address, direction, fingerprint, amount)
+    local total = 0
 
-    local userOreSize = tonumber(curSlot.qty) or 0
-    local takeAmount = tonumber(ore.take.amount) or 1
-    local giveAmount = tonumber(ore.give.amount) or 1
-    local takeSize = userOreSize - (userOreSize % takeAmount)
-
-    if takeSize == 0 then
-        return true
-    end
-
-    local giveSize = (takeSize / takeAmount) * giveAmount
-
-    if (tonumber(ore.size) or 0) < giveSize then
-        setStatus(
-            string.format(
-                "Недостаточно: %s — в МЭ %d, требуется %d.",
-                ore.give.label,
-                tonumber(ore.size) or 0,
-                giveSize
-            ),
-            C.red,
-            C.red
+    while total < amount do
+        local request = math.min(amount - total, MAX_INTERFACE_REQUEST)
+        local ok, result, extra = pcall(
+            invoke,
+            address,
+            "exportItem",
+            fingerprint,
+            direction,
+            request
         )
-        os.sleep(2)
-        return false
+
+        if not ok then
+            return false, total, "exportItem: " .. tostring(result)
+        end
+
+        local moved = getMovedAmount(result, extra)
+        if moved <= 0 then
+            os.sleep(ERROR_RETRY_DELAY)
+            return false, total, "ME Interface ничего не выдал."
+        end
+
+        total = total + math.min(moved, amount - total)
     end
 
-    local pushSuccess, takedOre = pcall(pim.pushItem, PUSH_DIR, slot, takeSize)
-    if not pushSuccess or not takedOre or takedOre == 0 then
-        setStatus(
-            "Не удалось забрать руду. Проверьте ME-интерфейс и направление PUSH_DIR.",
-            C.red,
-            C.red
-        )
-        os.sleep(2)
-        return false
-    end
+    return true, total
+end
 
-    local actualGive = math.floor(takedOre / takeAmount) * giveAmount
-    stats.ores = stats.ores + takedOre
-    total_ores_global = total_ores_global + takedOre
-    saveTotalOres()
-    drawTotalLine()
-
-    setStatus(
-        string.format(
-            "Обмен: %d × %s → %d × %s",
-            takedOre,
-            getOreName(ore),
-            actualGive,
-            ore.give.label
-        ),
-        C.yellow,
-        C.yellow
+-- Сканируем сундук только один раз, затем делаем ровно один transferItem
+-- на каждый занятый стак. Повторного поиска после каждого перемещения нет.
+local function transferBetweenChests(fromSide, fromSize, toSide, name, damage, amount)
+    local slots, availableTotal = scanChestItemSlots(
+        fromSide,
+        fromSize,
+        name,
+        damage
     )
 
-    giveIngot(actualGive, ore, index)
-    return true
+    if availableTotal < amount then
+        return false, 0, string.format(
+            "В сундуке найдено %d из %d предметов.",
+            availableTotal,
+            amount
+        )
+    end
+
+    local total = 0
+
+    for _, source in ipairs(slots) do
+        if total >= amount then break end
+
+        local request = math.min(amount - total, source.amount)
+        local ok, moved = pcall(
+            bridge.transferItem,
+            fromSide,
+            toSide,
+            request,
+            source.slot
+        )
+
+        moved = ok and math.floor(tonumber(moved) or 0) or 0
+        if moved <= 0 then
+            return false, total, "Transposer не перенёс стак из слота " .. tostring(source.slot)
+        end
+
+        total = total + moved
+    end
+
+    if total < amount then
+        return false, total, string.format("Перенесено %d из %d.", total, amount)
+    end
+
+    return true, total
+end
+
+-- Аналогично: один снимок сундука и один pullItem на занятый стак.
+local function pullFromChest(address, direction, chestSide, chestSize, name, damage, amount)
+    local slots, availableTotal = scanChestItemSlots(
+        chestSide,
+        chestSize,
+        name,
+        damage
+    )
+
+    if availableTotal < amount then
+        return false, 0, string.format(
+            "В сундуке найдено %d из %d предметов.",
+            availableTotal,
+            amount
+        )
+    end
+
+    local total = 0
+
+    for _, source in ipairs(slots) do
+        if total >= amount then break end
+
+        local request = math.min(amount - total, source.amount)
+        local ok, result, extra = pcall(
+            invoke,
+            address,
+            "pullItem",
+            direction,
+            source.slot,
+            request
+        )
+
+        if not ok then
+            return false, total, "pullItem: " .. tostring(result)
+        end
+
+        local moved = getMovedAmount(result, extra)
+        if moved <= 0 then
+            os.sleep(ERROR_RETRY_DELAY)
+            return false, total, "ME Interface не забрал стак из слота " .. tostring(source.slot)
+        end
+
+        total = total + math.min(moved, amount - total)
+    end
+
+    if total < amount then
+        return false, total, string.format("Забрано %d из %d.", total, amount)
+    end
+
+    return true, total
+end
+
+local function stacksNeeded(amount, maxStack)
+    amount = math.max(0, math.floor(tonumber(amount) or 0))
+    maxStack = math.max(1, math.floor(tonumber(maxStack) or 64))
+    if amount == 0 then return 0 end
+    return math.ceil(amount / maxStack)
+end
+
+-- Награда резервируется до изъятия руды. Поэтому во втором сундуке
+-- в пиковый момент одновременно находятся награда и руда.
+local function getMaxBatchGroups(entry, remainingGroups)
+    local usableFirst = math.max(1, FIRST_CHEST_SIZE - CHEST_SLOT_RESERVE)
+    local usableSecond = math.max(1, SECOND_CHEST_SIZE - CHEST_SLOT_RESERVE)
+
+    local low = 1
+    local high = math.max(1, math.floor(remainingGroups))
+    local best = 0
+
+    while low <= high do
+        local middle = math.floor((low + high) / 2)
+        local oreAmount = middle * entry.takeAmount
+        local rewardAmount = middle * entry.giveAmount
+
+        local oreSlots = stacksNeeded(oreAmount, entry.takeMaxSize)
+        local rewardSlots = stacksNeeded(rewardAmount, entry.giveMaxSize)
+
+        local fits = oreSlots <= usableFirst
+            and rewardSlots <= usableFirst
+            and (oreSlots + rewardSlots) <= usableSecond
+
+        if fits then
+            best = middle
+            low = middle + 1
+        else
+            high = middle - 1
+        end
+    end
+
+    return best
+end
+
+-- ============================================================
+-- ПЛАН ОБМЕНА
+-- ============================================================
+local function getMainRewardEntry(cache, name, damage)
+    local key = exactItemKey(name, damage)
+    if cache[key] ~= nil then
+        return cache[key] or nil
+    end
+
+    local basic = readMainItemDetail(name, damage)
+    if not basic then
+        cache[key] = false
+        return nil
+    end
+
+    local entry = {
+        item = basic,
+        name = stackName(basic) or name,
+        damage = stackDamage(basic),
+        amount = stackAmount(basic),
+        maxSize = stackMaxSize(basic)
+    }
+
+    cache[key] = entry
+    return entry
+end
+
+local function createExchangePlan()
+    -- Ячейка обычно содержит мало типов предметов, поэтому её сеть
+    -- читается один раз. Основная сеть на 2400+ типов целиком не сканируется.
+    local cellItems, cellError = getNetworkItems(CELL_ME_ADDRESS)
+    if not cellItems then
+        return nil, "Не удалось прочитать ячейку: " .. tostring(cellError)
+    end
+
+    local cellIndex = buildNetworkIndex(cellItems)
+    local rewardCache = {}
+    local plan = {}
+    local totalRewardNeeds = {}
+    local rewardDefinitions = {}
+
+    for index, ore in ipairs(ore_list) do
+        local takeAmount = math.max(1, math.floor(tonumber(ore.take.amount) or 1))
+        local giveAmount = math.max(1, math.floor(tonumber(ore.give.amount) or 1))
+        local takeDamage = tonumber(ore.take.damage) or 0
+        local giveDamage = tonumber(ore.give.damage) or 0
+
+        local takeEntry = getNetworkEntry(cellIndex, ore.take.name, takeDamage)
+        local available = takeEntry and takeEntry.amount or 0
+        local groups = math.floor(available / takeAmount)
+
+        if groups > 0 then
+            local rewardEntry = getMainRewardEntry(
+                rewardCache,
+                ore.give.name,
+                giveDamage
+            )
+
+            local rewardKey = exactItemKey(ore.give.name, giveDamage)
+            local oreKey = exactItemKey(ore.take.name, takeDamage)
+
+            if oreKey == rewardKey then
+                return nil, "Небезопасная настройка: руда и награда совпадают у "
+                    .. tostring(ore.take.label or ore.take.name)
+            end
+
+            totalRewardNeeds[rewardKey] = (totalRewardNeeds[rewardKey] or 0)
+                + groups * giveAmount
+
+            rewardDefinitions[rewardKey] = {
+                name = ore.give.name,
+                damage = giveDamage,
+                label = ore.give.label,
+                entry = rewardEntry
+            }
+
+            plan[#plan + 1] = {
+                index = index,
+                ore = ore,
+                groups = groups,
+                takeAmount = takeAmount,
+                giveAmount = giveAmount,
+                takeDamage = takeDamage,
+                giveDamage = giveDamage,
+                takeFingerprint = makeFingerprint(
+                    takeEntry.item,
+                    ore.take.name,
+                    takeDamage
+                ),
+                giveFingerprint = rewardEntry and makeFingerprint(
+                    rewardEntry.item,
+                    ore.give.name,
+                    giveDamage
+                ) or nil,
+                takeMaxSize = takeEntry.maxSize or 64,
+                giveMaxSize = rewardEntry and rewardEntry.maxSize or 64
+            }
+        end
+    end
+
+    if #plan == 0 then
+        return {}, nil
+    end
+
+    for rewardKey, needed in pairs(totalRewardNeeds) do
+        local definition = rewardDefinitions[rewardKey]
+        local available = definition.entry and definition.entry.amount or 0
+
+        if available < needed then
+            return nil, string.format(
+                "Недостаточно: %s — в МЭ %d, требуется %d.",
+                tostring(definition.label or definition.name),
+                available,
+                needed
+            )
+        end
+    end
+
+    return plan, nil
+end
+
+local function returnChestItemToNetwork(
+    address,
+    direction,
+    chestSide,
+    chestSize,
+    name,
+    damage,
+    limit
+)
+    local _, found = scanChestItemSlots(chestSide, chestSize, name, damage)
+    if found <= 0 then return true end
+
+    return pullFromChest(
+        address,
+        direction,
+        chestSide,
+        chestSize,
+        name,
+        damage,
+        math.min(found, limit)
+    )
+end
+
+local function rollbackUnpaidBatch(entry, oreAmount, rewardAmount)
+    local ore = entry.ore
+
+    -- Руда из второго сундука возвращается в первый.
+    local _, oreSecond = scanChestItemSlots(
+        SECOND_CHEST_SIDE,
+        SECOND_CHEST_SIZE,
+        ore.take.name,
+        entry.takeDamage
+    )
+
+    if oreSecond > 0 then
+        transferBetweenChests(
+            SECOND_CHEST_SIDE,
+            SECOND_CHEST_SIZE,
+            FIRST_CHEST_SIDE,
+            ore.take.name,
+            entry.takeDamage,
+            math.min(oreSecond, oreAmount)
+        )
+    end
+
+    returnChestItemToNetwork(
+        CELL_ME_ADDRESS,
+        CELL_CHEST_DIRECTION,
+        FIRST_CHEST_SIDE,
+        FIRST_CHEST_SIZE,
+        ore.take.name,
+        entry.takeDamage,
+        oreAmount
+    )
+
+    -- Награда из первого сундука сначала возвращается во второй.
+    local _, rewardFirst = scanChestItemSlots(
+        FIRST_CHEST_SIDE,
+        FIRST_CHEST_SIZE,
+        ore.give.name,
+        entry.giveDamage
+    )
+
+    if rewardFirst > 0 then
+        transferBetweenChests(
+            FIRST_CHEST_SIDE,
+            FIRST_CHEST_SIZE,
+            SECOND_CHEST_SIDE,
+            ore.give.name,
+            entry.giveDamage,
+            math.min(rewardFirst, rewardAmount)
+        )
+    end
+
+    returnChestItemToNetwork(
+        MAIN_ME_ADDRESS,
+        MAIN_CHEST_DIRECTION,
+        SECOND_CHEST_SIDE,
+        SECOND_CHEST_SIZE,
+        ore.give.name,
+        entry.giveDamage,
+        rewardAmount
+    )
+end
+
+local function processBatch(entry, batchGroups)
+    local ore = entry.ore
+    local oreAmount = batchGroups * entry.takeAmount
+    local rewardAmount = batchGroups * entry.giveAmount
+
+    -- 1. Резервируем награду до изъятия руды.
+    local ok, _, actionError = exportToChest(
+        MAIN_ME_ADDRESS,
+        MAIN_CHEST_DIRECTION,
+        entry.giveFingerprint,
+        rewardAmount
+    )
+
+    if not ok then
+        rollbackUnpaidBatch(entry, oreAmount, rewardAmount)
+        return false, "Не удалось зарезервировать награду: " .. tostring(actionError)
+    end
+
+    -- 2. Выгружаем рассчитанную руду из ячейки в первый сундук.
+    ok, _, actionError = exportToChest(
+        CELL_ME_ADDRESS,
+        CELL_CHEST_DIRECTION,
+        entry.takeFingerprint,
+        oreAmount
+    )
+
+    if not ok then
+        rollbackUnpaidBatch(entry, oreAmount, rewardAmount)
+        return false, "Не удалось получить руду из ячейки: " .. tostring(actionError)
+    end
+
+    -- 3. Руда: первый сундук -> второй.
+    ok, _, actionError = transferBetweenChests(
+        FIRST_CHEST_SIDE,
+        FIRST_CHEST_SIZE,
+        SECOND_CHEST_SIDE,
+        ore.take.name,
+        entry.takeDamage,
+        oreAmount
+    )
+
+    if not ok then
+        rollbackUnpaidBatch(entry, oreAmount, rewardAmount)
+        return false, "Не удалось передать руду: " .. tostring(actionError)
+    end
+
+    -- 4. Руда: второй сундук -> основная МЭ.
+    ok, _, actionError = pullFromChest(
+        MAIN_ME_ADDRESS,
+        MAIN_CHEST_DIRECTION,
+        SECOND_CHEST_SIDE,
+        SECOND_CHEST_SIZE,
+        ore.take.name,
+        entry.takeDamage,
+        oreAmount
+    )
+
+    if not ok then
+        rollbackUnpaidBatch(entry, oreAmount, rewardAmount)
+        return false, "Основная МЭ не приняла руду: " .. tostring(actionError)
+    end
+
+    -- 5. Награда: второй сундук -> первый.
+    ok, _, actionError = transferBetweenChests(
+        SECOND_CHEST_SIDE,
+        SECOND_CHEST_SIZE,
+        FIRST_CHEST_SIDE,
+        ore.give.name,
+        entry.giveDamage,
+        rewardAmount
+    )
+
+    if not ok then
+        return false,
+            "Руда уже принята, но награда осталась во втором сундуке: "
+            .. tostring(actionError)
+    end
+
+    -- 6. Награда: первый сундук -> ME Chest -> ячейка.
+    ok, _, actionError = pullFromChest(
+        CELL_ME_ADDRESS,
+        CELL_CHEST_DIRECTION,
+        FIRST_CHEST_SIDE,
+        FIRST_CHEST_SIZE,
+        ore.give.name,
+        entry.giveDamage,
+        rewardAmount
+    )
+
+    if not ok then
+        return false,
+            "Руда принята, но награда осталась в первом сундуке. "
+            .. "Освободите место в ячейке: "
+            .. tostring(actionError)
+    end
+
+    return true, nil, oreAmount, rewardAmount
 end
 
 local function playerIsOnPim()
@@ -1000,56 +1595,103 @@ local function playerIsOnPim()
     return success and inventoryName and inventoryName ~= "pim"
 end
 
-local function checkInventory()
-    for i = 2, 1, -1 do
-        setStatus(string.format("Обмен начнётся через %d сек...", i), C.yellow, C.yellow)
-        os.sleep(1)
-    end
-
-    local sizeSuccess, size = pcall(pim.getInventorySize)
-    local dataSuccess, data = pcall(pim.getAllStacks, 0)
-
-    if not sizeSuccess or not dataSuccess or not size or not data then
-        setStatus("Не удалось прочитать инвентарь PIM.", C.red, C.red)
+local function processCellExchange()
+    local chestsOk, chestError = serviceChestsEmpty()
+    if not chestsOk then
+        setStatus(chestError, C.red, C.red)
         return false
     end
 
-    local forceBreak = false
+    setStatus("Считываю содержимое ячейки...", C.white, C.cyan)
 
-    for slot = 1, size do
-        if forceBreak then break end
+    local plan, planError = createExchangePlan()
+    if not plan then
+        setStatus(planError, C.red, C.red)
+        return false
+    end
 
-        if data[slot] then
-            for index, ore in pairs(ore_list) do
-                local needDamage = ore.take.damage or 0
-                if data[slot].id == ore.take.name and data[slot].dmg == needDamage then
-                    if not exchangeOre(slot, ore, index) then
-                        forceBreak = true
-                        break
-                    end
-                end
+    if #plan == 0 then
+        setStatus("В ячейке нет руды в количестве для обмена.", C.yellow, C.yellow)
+        return true
+    end
+
+    local sessionOres = 0
+    local sessionRewards = 0
+
+    for _, entry in ipairs(plan) do
+        local remainingGroups = entry.groups
+        local totalOreForType = entry.groups * entry.takeAmount
+        local totalRewardForType = entry.groups * entry.giveAmount
+
+        -- Статус меняется один раз на вид руды, а не на каждую партию.
+        setStatus(
+            string.format(
+                "Обмен: %d × %s → %d × %s",
+                totalOreForType,
+                getOreName(entry.ore),
+                totalRewardForType,
+                entry.ore.give.label
+            ),
+            C.yellow,
+            C.yellow
+        )
+
+        while remainingGroups > 0 do
+            if not playerIsOnPim() then
+                setStatus("Вы сошли с PIM. Обмен остановлен.", C.red, C.red)
+                return false
             end
+
+            local maxGroups = getMaxBatchGroups(entry, remainingGroups)
+            if maxGroups <= 0 then
+                setStatus(
+                    "Сундуки слишком малы даже для одной партии этой руды.",
+                    C.red,
+                    C.red
+                )
+                return false
+            end
+
+            local batchGroups = math.min(remainingGroups, maxGroups)
+            local ok, batchError, accepted, rewarded = processBatch(
+                entry,
+                batchGroups
+            )
+
+            if not ok then
+                setStatus("ОШИБКА: " .. tostring(batchError), C.red, C.red)
+                return false
+            end
+
+            accepted = tonumber(accepted) or (batchGroups * entry.takeAmount)
+            rewarded = tonumber(rewarded) or (batchGroups * entry.giveAmount)
+
+            remainingGroups = remainingGroups - batchGroups
+            sessionOres = sessionOres + accepted
+            sessionRewards = sessionRewards + rewarded
+            stats.ores = stats.ores + accepted
+            stats.ingots = stats.ingots + rewarded
+            total_ores_global = total_ores_global + accepted
         end
     end
 
+    -- Файлы и GUI обновляются только один раз после всей операции.
+    saveTotalOres()
+    saveStats()
     updIngotsSize()
     refreshStockColumns()
+    drawTotalLine()
+
     setStatus(
         string.format(
             "Обмен завершён. Принято: %d руды, выдано: %d предметов.",
-            stats.ores,
-            stats.ingots
+            sessionOres,
+            sessionRewards
         ),
         C.green,
         C.green
     )
-    saveStats()
 
-    if playerIsOnPim() then
-        return checkInventory()
-    end
-
-    event.push("player_off")
     return true
 end
 
@@ -1160,11 +1802,11 @@ local function handleEvent(eventName, ...)
         stats.ingots = 0
 
         setStatus(
-            string.format("Игрок %s на PIM. Начинаю проверку руды.", playerName ~= "" and playerName or "Неизвестный"),
+            string.format("Игрок %s на PIM. Начинаю обработку ячейки.", playerName ~= "" and playerName or "Неизвестный"),
             C.green,
             C.green
         )
-        checkInventory()
+        processCellExchange()
         return
     end
 
@@ -1230,7 +1872,7 @@ local function resumeExchangeAfterProtectedError(err)
     end
 
     writeDebugLog("Игрок остаётся на PIM, обмен автоматически продолжен после ошибки: " .. tostring(err))
-    local ok, resumeError = safeCall("resumeExchange", checkInventory)
+    local ok, resumeError = safeCall("resumeExchange", processCellExchange)
     if not ok then
         writeDebugLog("Не удалось автоматически продолжить обмен: " .. tostring(resumeError))
     end
