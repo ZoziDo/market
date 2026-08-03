@@ -490,10 +490,11 @@ Performance.idleFor = 0
 Performance.pendingScroll = 0
 Performance.nextScrollAt = 0
 
--- Фиксированная частота кадров каталога.
--- OpenComputers работает символами, поэтому движение идёт по одной строке.
-Performance.scrollInterval = 0.045
-Performance.scrollMaxQueue = 14
+-- Быстрый адаптивный скролл.
+-- События одного движения колеса собираются в течение 20 мс,
+-- после чего каталог сразу перескакивает на всё расстояние одним кадром.
+Performance.scrollBatchDelay = 0.020
+Performance.scrollMaxQueue = 24
 Performance.scrollDirection = 0
 
 SelectorCache = SelectorCache or {}
@@ -4786,7 +4787,7 @@ function Performance.queueScroll(delta)
     math.floor(math.abs(delta) + 0.5)
   )
 
-  -- При смене направления старая инерция полностью отменяется.
+  -- При резкой смене направления старое движение отбрасывается.
   if Performance.scrollDirection ~= 0
     and Performance.scrollDirection ~= direction
   then
@@ -4807,9 +4808,12 @@ function Performance.queueScroll(delta)
   Performance.pendingScroll = pending
 
   local now = computer.uptime()
+
+  -- Таймер ставится только на первое событие пачки.
+  -- Все следующие события успевают войти в тот же один кадр.
   if Performance.nextScrollAt <= 0 then
-    -- Небольшая задержка объединяет несколько событий одного щелчка колеса.
-    Performance.nextScrollAt = now + 0.018
+    Performance.nextScrollAt =
+      now + Performance.scrollBatchDelay
   end
 
   return true
@@ -4831,19 +4835,13 @@ function Performance.applyPendingScroll(now)
     return false
   end
 
-  local step = pending > 0 and 1 or -1
-  Performance.pendingScroll = pending - step
+  -- Весь накопленный рывок выполняется сразу.
+  -- После кадра никакой инерции и медленного докручивания не остаётся.
+  Performance.pendingScroll = 0
+  Performance.nextScrollAt = 0
+  Performance.scrollDirection = 0
 
-  scroll(step)
-
-  if Performance.pendingScroll ~= 0 then
-    Performance.nextScrollAt =
-      computer.uptime() + Performance.scrollInterval
-  else
-    Performance.nextScrollAt = 0
-    Performance.scrollDirection = 0
-  end
-
+  scroll(pending)
   return true
 end
 
