@@ -21,7 +21,7 @@ local gpu=component.gpu
 
 -- Эти значения должны совпадать с shop.lua.
 local PROTOCOL="VIPSHOP-MODEM-1"
-local NETWORK_KEY="VIPSHOP_PRIVATE_2026_CHANGE_ME"
+local NETWORK_KEY="VIPSHOP_ZOZIDO_REALM9_SECRET_2026"
 local SERVER_PORT=3410
 local CLIENT_PORT=3411
 local CHUNK_SIZE=6000
