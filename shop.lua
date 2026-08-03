@@ -489,7 +489,12 @@ Performance.sellCatalogLoadedAt = 0
 Performance.idleFor = 0
 Performance.pendingScroll = 0
 Performance.nextScrollAt = 0
-Performance.scrollInterval = 0
+
+-- Фиксированная частота кадров каталога.
+-- OpenComputers работает символами, поэтому движение идёт по одной строке.
+Performance.scrollInterval = 0.045
+Performance.scrollMaxQueue = 14
+Performance.scrollDirection = 0
 
 SelectorCache = SelectorCache or {}
 SelectorCache.key = nil
@@ -2369,6 +2374,7 @@ local function destroySession()
   scrollOffset = 0
   Performance.pendingScroll = 0
   Performance.nextScrollAt = 0
+  Performance.scrollDirection = 0
   items = {}
   allItems = {}
 
@@ -3726,10 +3732,12 @@ end
 
 local scrollbarState = {
   initialized = false,
+  signature = nil,
 }
 
 local function resetScrollbarState()
   scrollbarState.initialized = false
+  scrollbarState.signature = nil
 end
 
 -- Нижние доли ячейки: позволяют перемещать ползунок не только целыми
@@ -3748,46 +3756,95 @@ local function drawScrollbar(force)
   local total = #items
   local trackColor = C.inputBg
 
-  -- Перерисовывается только один столбец полосы, поэтому моргания нет.
-  fill(SCROLL_X, LIST_Y, 1, LIST_H, trackColor)
-  scrollbarState.initialized = true
-
   if total <= LIST_H then
+    local signature = "empty:" .. tostring(total)
+
+    if not force
+      and scrollbarState.initialized
+      and scrollbarState.signature == signature
+    then
+      return
+    end
+
     fill(SCROLL_X, LIST_Y, 1, LIST_H, C.bg)
+    scrollbarState.initialized = true
+    scrollbarState.signature = signature
     setBG(C.bg)
     return
   end
 
-  local thumbH = math.max(3, math.floor(LIST_H * LIST_H / total))
+  local thumbH = math.max(
+    3,
+    math.floor(LIST_H * LIST_H / total)
+  )
   thumbH = math.min(thumbH, LIST_H)
 
   local maxScroll = math.max(1, total - LIST_H)
   local maxThumbMove = math.max(0, LIST_H - thumbH)
-  local rawPosition = (scrollOffset * maxThumbMove) / maxScroll
+  local rawPosition =
+    (scrollOffset * maxThumbMove) / maxScroll
   local base = math.floor(rawPosition)
   local fraction = rawPosition - base
-  local eighths = math.max(0, math.min(7, math.floor(fraction * 8 + 0.5)))
+  local eighths = math.max(
+    0,
+    math.min(7, math.floor(fraction * 8 + 0.5))
+  )
+
+  local signature = table.concat({
+    tostring(total),
+    tostring(thumbH),
+    tostring(base),
+    tostring(eighths),
+  }, ":")
+
+  -- Один и тот же ползунок повторно не перерисовывается.
+  if not force
+    and scrollbarState.initialized
+    and scrollbarState.signature == signature
+  then
+    return
+  end
+
+  fill(SCROLL_X, LIST_Y, 1, LIST_H, trackColor)
+  scrollbarState.initialized = true
+  scrollbarState.signature = signature
 
   if eighths == 0 then
-    fill(SCROLL_X, LIST_Y + base, 1, thumbH, C.accent)
+    fill(
+      SCROLL_X,
+      LIST_Y + base,
+      1,
+      thumbH,
+      C.accent
+    )
   else
-    -- Верхняя неполная ячейка: цвет ползунка занимает нижнюю часть.
     setBG(trackColor)
     setFG(C.accent)
-    gpu.set(SCROLL_X, LIST_Y + base, scrollBlock(8 - eighths))
+    gpu.set(
+      SCROLL_X,
+      LIST_Y + base,
+      scrollBlock(8 - eighths)
+    )
 
-    -- Полностью заполненная середина ползунка.
     if thumbH > 1 then
-      fill(SCROLL_X, LIST_Y + base + 1, 1, thumbH - 1, C.accent)
+      fill(
+        SCROLL_X,
+        LIST_Y + base + 1,
+        1,
+        thumbH - 1,
+        C.accent
+      )
     end
 
-    -- Нижняя неполная ячейка: фон ползунка остаётся сверху, а нижняя
-    -- часть закрашивается цветом дорожки.
     local bottomY = LIST_Y + base + thumbH
     if bottomY <= LIST_Y + LIST_H - 1 then
       setBG(C.accent)
       setFG(trackColor)
-      gpu.set(SCROLL_X, bottomY, scrollBlock(8 - eighths))
+      gpu.set(
+        SCROLL_X,
+        bottomY,
+        scrollBlock(8 - eighths)
+      )
     end
   end
 
@@ -4317,53 +4374,52 @@ end
 -- Используется при клике по дорожке, когда смещение может быть большим.
 -- Остальная часть магазина вообще не затрагивается.
 function renderCatalogViewportAtomically()
-  local function drawViewportToBuffer()
+  local function drawListToBuffer()
     drawProductList()
-    resetScrollbarState()
-    drawScrollbar(true)
   end
 
-  local function drawViewportDirect()
-    -- На реальном экране не очищаем прямоугольник целиком:
-    -- каждая строка заменяется сразу готовой новой строкой.
+  local function drawListDirect()
     drawProductListInPlace()
-    resetScrollbarState()
-    drawScrollbar(true)
   end
 
   local buffer = ensureRenderBuffer()
+
   if not buffer
     or type(gpu.setActiveBuffer) ~= "function"
     or type(gpu.bitblt) ~= "function"
   then
     activateFrontBuffer()
-    drawViewportDirect()
+    drawListDirect()
+    drawScrollbar(false)
     return false
   end
 
   local activated = pcall(gpu.setActiveBuffer, buffer)
   if not activated then
     activateFrontBuffer()
-    drawViewportDirect()
+    drawListDirect()
+    drawScrollbar(false)
     return false
   end
 
-  local ok = pcall(drawViewportToBuffer)
+  local ok = pcall(drawListToBuffer)
   pcall(gpu.setActiveBuffer, 0)
 
   if not ok then
     activateFrontBuffer()
-    drawViewportDirect()
+    drawListDirect()
+    drawScrollbar(false)
     return false
   end
 
-  local viewportWidth = SCROLL_X - LIST_X + 1
+  -- Копируется только область товаров.
+  -- Скроллбар больше не подрагивает вместе со всем списком.
   local copied, result = pcall(
     gpu.bitblt,
     0,
     LIST_X,
     LIST_Y,
-    viewportWidth,
+    LIST_W,
     LIST_H,
     buffer,
     LIST_X,
@@ -4374,10 +4430,12 @@ function renderCatalogViewportAtomically()
 
   if not copied or result == false then
     activateFrontBuffer()
-    drawViewportDirect()
+    drawListDirect()
+    drawScrollbar(false)
     return false
   end
 
+  drawScrollbar(false)
   return true
 end
 
@@ -4722,18 +4780,71 @@ function Performance.queueScroll(delta)
   delta = tonumber(delta) or 0
   if delta == 0 then return false end
 
-  -- OpenComputers обычно передаёт +1/-1.
-  -- Обрабатываем событие сразу, без накопления и анимации.
-  Performance.pendingScroll = 0
-  Performance.nextScrollAt = 0
-  scroll(delta)
+  local direction = delta > 0 and 1 or -1
+  local amount = math.max(
+    1,
+    math.floor(math.abs(delta) + 0.5)
+  )
+
+  -- При смене направления старая инерция полностью отменяется.
+  if Performance.scrollDirection ~= 0
+    and Performance.scrollDirection ~= direction
+  then
+    Performance.pendingScroll = 0
+  end
+
+  Performance.scrollDirection = direction
+
+  local pending =
+    tonumber(Performance.pendingScroll) or 0
+
+  pending = pending + direction * amount
+  pending = math.max(
+    -Performance.scrollMaxQueue,
+    math.min(Performance.scrollMaxQueue, pending)
+  )
+
+  Performance.pendingScroll = pending
+
+  local now = computer.uptime()
+  if Performance.nextScrollAt <= 0 then
+    -- Небольшая задержка объединяет несколько событий одного щелчка колеса.
+    Performance.nextScrollAt = now + 0.018
+  end
+
   return true
 end
 
 function Performance.applyPendingScroll(now)
-  -- Очередь отключена: промежуточные анимационные кадры
-  -- были причиной мигания на многомониторной сборке.
-  return false
+  now = tonumber(now) or computer.uptime()
+
+  local pending =
+    tonumber(Performance.pendingScroll) or 0
+
+  if pending == 0 then
+    Performance.nextScrollAt = 0
+    Performance.scrollDirection = 0
+    return false
+  end
+
+  if now < Performance.nextScrollAt then
+    return false
+  end
+
+  local step = pending > 0 and 1 or -1
+  Performance.pendingScroll = pending - step
+
+  scroll(step)
+
+  if Performance.pendingScroll ~= 0 then
+    Performance.nextScrollAt =
+      computer.uptime() + Performance.scrollInterval
+  else
+    Performance.nextScrollAt = 0
+    Performance.scrollDirection = 0
+  end
+
+  return true
 end
 
 -- Переход к месту нажатия на дорожке скроллбара.
@@ -4777,6 +4888,7 @@ local function switchShopMode(mode)
   scrollOffset = 0
   Performance.pendingScroll = 0
   Performance.nextScrollAt = 0
+  Performance.scrollDirection = 0
 
   -- Используем свежий кэш. Сигнал сайта инвалидирует нужный каталог,
   -- а максимальный возраст кэша не даёт ценам устареть надолго.
