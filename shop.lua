@@ -654,7 +654,12 @@ QuestSystem.selectedQuest = nil
 QuestSystem.pending = nil
 QuestSystem.nextDeliveryAt = 0
 QuestSystem.deliveryInterval = 1.0
-QuestSystem.runtimeCraftRequests = QuestSystem.runtimeCraftRequests or {}
+
+-- В квестах автокрафт полностью отключён.
+-- Наличие комплектации проверяется непосредственно в основном МЭ.
+QuestSystem.availabilityInterval = 5.0
+QuestSystem.nextAvailabilityAt = 0
+QuestSystem.lastAvailabilitySignature = nil
 local currentShopMode = "buy"
 availabilityFilter = "all" -- all / available / unavailable
 availabilityMenuOpen = false
@@ -1208,6 +1213,67 @@ local function getMEQuantities()
   return quantities, craftableFlags
 end
 
+function QuestSystem.stockKey(internalName, damage)
+  return tostring(internalName or "")
+    .. ":"
+    .. tostring(tonumber(damage) or 0)
+end
+
+function QuestSystem.getStockSnapshot()
+  local quantities = getMEQuantities()
+  if type(quantities) ~= "table" then
+    return {}
+  end
+  return quantities
+end
+
+function QuestSystem.applyQuestAvailability(questItem, quantities)
+  if type(questItem) ~= "table" then return false end
+
+  quantities = type(quantities) == "table" and quantities or {}
+  local questData = type(questItem.questData) == "table"
+    and questItem.questData
+    or {}
+
+  local allAvailable = true
+  local missingKinds = 0
+  local missingTotal = 0
+
+  for _, questEntry in ipairs(questData.items or {}) do
+    if type(questEntry) == "table" then
+      local internalName =
+        tostring(questEntry.internalName or questEntry.id or "")
+      local damage = tonumber(questEntry.damage) or 0
+      local required = math.max(
+        0,
+        math.floor(tonumber(
+          questEntry.qty
+          or questEntry.amount
+          or questEntry.count
+        ) or 0)
+      )
+
+      if internalName ~= "" and required > 0 then
+        local stock = tonumber(
+          quantities[QuestSystem.stockKey(internalName, damage)]
+        ) or 0
+
+        if stock < required then
+          allAvailable = false
+          missingKinds = missingKinds + 1
+          missingTotal = missingTotal + (required - stock)
+        end
+      end
+    end
+  end
+
+  questItem.questAvailable = allAvailable
+  questItem.missingKinds = missingKinds
+  questItem.missingTotal = missingTotal
+  questItem.star = allAvailable
+  return allAvailable
+end
+
 local function parseCatalogKey(key, mapping)
   mapping = mapping or {}
 
@@ -1427,9 +1493,16 @@ end
 
 function QuestSystem.loadCatalog(forceReload)
   if questItemsCache and not forceReload then
+    local quantities = QuestSystem.getStockSnapshot()
+    for _, questItem in ipairs(questItemsCache) do
+      QuestSystem.applyQuestAvailability(questItem, quantities)
+    end
+
     allItems = questItemsCache
     catalogLoadError = nil
     catalogStatus = "Квесты и наборы загружены: " .. tostring(#allItems)
+    QuestSystem.nextAvailabilityAt =
+      computer.uptime() + QuestSystem.availabilityInterval
     return true, nil
   end
 
@@ -1475,6 +1548,12 @@ function QuestSystem.loadCatalog(forceReload)
     end
   end
   table.sort(loaded, function(a,b) return lowerText(a.name)<lowerText(b.name) end)
+
+  local quantities = QuestSystem.getStockSnapshot()
+  for _, questItem in ipairs(loaded) do
+    QuestSystem.applyQuestAvailability(questItem, quantities)
+  end
+
   questItemsCache = loaded
   allItems = loaded
   catalogLoadError = nil
@@ -3929,8 +4008,15 @@ local function drawItemRow(index, y)
   if not item then return end
 
   local isSelected = (index == selectedIndex)
-  local noStock = currentShopMode == "buy"
-    and (tonumber(item.meRaw or item.qty) or 0) <= 0
+  local questUnavailable =
+    (currentShopMode == "quests"
+      or currentShopMode == "quest_items")
+    and item.questAvailable == false
+
+  local noStock =
+    (currentShopMode == "buy"
+      and (tonumber(item.meRaw or item.qty) or 0) <= 0)
+    or questUnavailable
 
   if isSelected then
     fill(LIST_X, y, LIST_W, 1, C.selectedBg)
@@ -4061,6 +4147,24 @@ local function drawInfoBlock()
     text(RIGHT_INNER_X, INFO_Y + 3, "Содержит: " .. tostring(item.itemKinds or 0) .. " видов / " .. tostring(item.totalItems or 0) .. " предметов", C.green, C.bg)
     text(RIGHT_INNER_X, INFO_Y + 4, "COINA: " .. item.coina, C.coin, C.bg)
     text(RIGHT_INNER_X, INFO_Y + 5, "EMA: " .. item.ema, C.ema, C.bg)
+
+    local statusText
+    local statusColor
+    if item.questAvailable == true then
+      statusText = "Статус: КОМПЛЕКТ ГОТОВ"
+      statusColor = C.green
+    else
+      statusText = "Статус: НЕДОСТАТОЧНО ПРЕДМЕТОВ"
+      statusColor = C.darkGray
+    end
+
+    text(
+      RIGHT_INNER_X,
+      INFO_Y + 6,
+      truncate(statusText, RIGHT_INNER_W),
+      statusColor,
+      C.bg
+    )
     return
   elseif currentShopMode == "quest_items" then
     sectionHeader(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, "СОДЕРЖИМОЕ НАБОРА", C.sectionLine, C.white)
@@ -4069,6 +4173,38 @@ local function drawInfoBlock()
     text(RIGHT_INNER_X, INFO_Y + 3, "Товар: " .. truncate(item.name, RIGHT_INNER_W - 7), C.white, C.bg)
     text(RIGHT_INNER_X, INFO_Y + 4, "Содержит: " .. tostring(item.requiredQty or 0), C.green, C.bg)
     text(RIGHT_INNER_X, INFO_Y + 5, "Выдано: " .. tostring(item.deliveredQty or 0), C.cyan, C.bg)
+
+    local remaining = math.max(
+      0,
+      (tonumber(item.requiredQty) or 0)
+        - (tonumber(item.deliveredQty) or 0)
+    )
+    local stock = math.max(0, tonumber(item.meRaw) or 0)
+
+    local statusText
+    local statusColor
+    if remaining <= 0 then
+      statusText = "Статус: ВЫДАНО"
+      statusColor = C.green
+    elseif item.questAvailable == true then
+      statusText =
+        "В МЭ: " .. tostring(math.floor(stock))
+        .. " | ГОТОВО К ВЫДАЧЕ"
+      statusColor = C.green
+    else
+      statusText =
+        "В МЭ: " .. tostring(math.floor(stock))
+        .. " | НЕДОСТАТОЧНО ПРЕДМЕТОВ"
+      statusColor = C.darkGray
+    end
+
+    text(
+      RIGHT_INNER_X,
+      INFO_Y + 6,
+      truncate(statusText, RIGHT_INNER_W),
+      statusColor,
+      C.bg
+    )
     return
   end
 
@@ -4222,9 +4358,43 @@ local function drawQuantitySection()
     local pending = QuestSystem.pending
     local delivered = pending and tonumber(pending.totalDelivered) or 0
     local total = QuestSystem.selectedQuest.totalItems or 0
-    text(RIGHT_INNER_X, TOTAL_Y, "Выдано: " .. tostring(delivered) .. " / " .. tostring(total), C.cyan, C.bg)
+
+    text(
+      RIGHT_INNER_X,
+      TOTAL_Y,
+      "Выдано: " .. tostring(delivered) .. " / " .. tostring(total),
+      C.cyan,
+      C.bg
+    )
+
+    local ready = QuestSystem.selectedQuest.questAvailable == true
+    text(
+      RIGHT_INNER_X,
+      TOTAL_Y + 1,
+      ready
+        and "Все оставшиеся предметы есть в МЭ"
+        or "Недостаточно предметов в МЭ",
+      ready and C.green or C.darkGray,
+      C.bg
+    )
   elseif currentShopMode == "quests" and item then
-    text(RIGHT_INNER_X, TOTAL_Y, "Цена набора: " .. item.coina .. " COINA | " .. item.ema .. " EMA", C.white, C.bg)
+    text(
+      RIGHT_INNER_X,
+      TOTAL_Y,
+      "Цена набора: " .. item.coina
+        .. " COINA | " .. item.ema .. " EMA",
+      C.white,
+      C.bg
+    )
+    text(
+      RIGHT_INNER_X,
+      TOTAL_Y + 1,
+      item.questAvailable == true
+        and "Комплект полностью доступен"
+        or "Недостаточно предметов в МЭ",
+      item.questAvailable == true and C.green or C.darkGray,
+      C.bg
+    )
   elseif currentShopMode == "sell" and item then
     local summary = string.format("Итог: %s × %d шт.", item.name, effectiveQty)
     text(RIGHT_INNER_X, TOTAL_Y, truncate(summary, RIGHT_INNER_W), C.white, C.bg)
@@ -4247,7 +4417,16 @@ local function drawQuantitySection()
 
   local actionText, actionX, _, clearX = getQuantityButtonLayout()
   local stock = item and math.max(0, math.floor(tonumber(item.meRaw or item.qty) or 0)) or 0
-  local questUnavailable = (currentShopMode == "quests" or currentShopMode == "quest_items") and not item
+  local questUnavailable =
+    (currentShopMode == "quests" and not item)
+    or (
+      currentShopMode == "quest_items"
+      and (
+        not item
+        or not QuestSystem.selectedQuest
+        or QuestSystem.selectedQuest.questAvailable ~= true
+      )
+    )
   local buyUnavailable = currentShopMode == "buy"
     and (not item or (stock <= 0 and item.craftable ~= true))
   local sellUnavailable = currentShopMode == "sell"
@@ -4838,6 +5017,10 @@ function QuestSystem.openQuest(questItem)
   end
 
   local loaded = {}
+  local quantities = QuestSystem.getStockSnapshot()
+  local allRemainingAvailable = true
+  local missingKinds = 0
+  local missingTotal = 0
 
   for index, questEntry in ipairs(questData.items) do
     if type(questEntry) == "table" then
@@ -4863,6 +5046,19 @@ function QuestSystem.openQuest(questItem)
             tonumber(deliveredByKey[key]) or 0
           )
 
+        local stock = tonumber(
+          quantities[QuestSystem.stockKey(internalName, damage)]
+        ) or 0
+        local remaining = math.max(0, required - delivered)
+        local available = remaining <= 0 or stock >= remaining
+
+        if not available then
+          allRemainingAvailable = false
+          missingKinds = missingKinds + 1
+          missingTotal =
+            missingTotal + math.max(0, remaining - stock)
+        end
+
         loaded[#loaded + 1] = {
           name = tostring(
             questEntry.displayName
@@ -4875,14 +5071,15 @@ function QuestSystem.openQuest(questItem)
           -- В режиме состава колонки используются так:
           -- COINA -> «Содержит», EMA -> «Выдано».
           me = "-",
-          meRaw = 0,
+          meRaw = stock,
           coina = tostring(required),
           ema = tostring(delivered),
 
           requiredQty = required,
           deliveredQty = delivered,
           qty = required,
-          star = delivered >= required,
+          questAvailable = available,
+          star = available,
           questContent = true,
           article = string.format("#Q-%02d", index),
           _searchName = lowerText(tostring(
@@ -4894,6 +5091,10 @@ function QuestSystem.openQuest(questItem)
       end
     end
   end
+
+  questItem.questAvailable = allRemainingAvailable
+  questItem.missingKinds = missingKinds
+  questItem.missingTotal = missingTotal
 
   currentShopMode = "quest_items"
   allItems = loaded
@@ -5137,6 +5338,11 @@ local function switchShopMode(mode)
   Performance.pendingScroll = 0
   Performance.nextScrollAt = 0
   Performance.scrollDirection = 0
+
+  if mode == "quests" then
+    QuestSystem.nextAvailabilityAt = 0
+    QuestSystem.lastAvailabilitySignature = nil
+  end
 
   -- Используем свежий кэш. Сигнал сайта инвалидирует нужный каталог,
   -- а максимальный возраст кэша не даёт ценам устареть надолго.
@@ -7113,6 +7319,143 @@ function QuestSystem.refreshDisplayedProgress()
   end
 end
 
+function QuestSystem.refreshVisibleAvailability(redraw)
+  if currentShopMode ~= "quests"
+    and currentShopMode ~= "quest_items"
+  then
+    return true, false
+  end
+
+  local quantities = QuestSystem.getStockSnapshot()
+  local signature = {}
+  local allReady = true
+
+  if currentShopMode == "quests" then
+    local source = type(allItems) == "table" and allItems or {}
+
+    for _, questItem in ipairs(source) do
+      local ready =
+        QuestSystem.applyQuestAvailability(questItem, quantities)
+      if not ready then allReady = false end
+
+      signature[#signature + 1] =
+        tostring(questItem.questId or questItem.name or "")
+        .. "="
+        .. (ready and "1" or "0")
+        .. ":"
+        .. tostring(questItem.missingTotal or 0)
+    end
+  else
+    local pendingByKey = {}
+
+    if type(QuestSystem.pending) == "table"
+      and lowerText(QuestSystem.pending.player or "")
+        == lowerText(account.nick or "")
+    then
+      for _, pendingEntry in ipairs(QuestSystem.pending.items or {}) do
+        pendingByKey[
+          QuestSystem.stockKey(
+            pendingEntry.internalName or pendingEntry.id,
+            pendingEntry.damage
+          )
+        ] = pendingEntry
+      end
+    end
+
+    for _, item in ipairs(allItems or {}) do
+      local key =
+        QuestSystem.stockKey(item.internalName, item.damage)
+      local pendingEntry = pendingByKey[key]
+
+      if pendingEntry then
+        item.deliveredQty = tonumber(
+          pendingEntry.delivered
+          or pendingEntry.deliveredQty
+        ) or item.deliveredQty or 0
+        item.ema = tostring(math.floor(item.deliveredQty))
+      end
+
+      local required = math.max(
+        0,
+        math.floor(tonumber(item.requiredQty) or 0)
+      )
+      local delivered = math.max(
+        0,
+        math.floor(tonumber(item.deliveredQty) or 0)
+      )
+      local remaining = math.max(0, required - delivered)
+      local stock = math.max(
+        0,
+        math.floor(tonumber(quantities[key]) or 0)
+      )
+      local ready = remaining <= 0 or stock >= remaining
+
+      item.meRaw = stock
+      item.questAvailable = ready
+      item.star = ready
+
+      if not ready then allReady = false end
+
+      signature[#signature + 1] =
+        key
+        .. "="
+        .. tostring(stock)
+        .. "/"
+        .. tostring(remaining)
+        .. ":"
+        .. (ready and "1" or "0")
+    end
+
+    if QuestSystem.selectedQuest then
+      QuestSystem.selectedQuest.questAvailable = allReady
+    end
+  end
+
+  local newSignature = table.concat(signature, "|")
+  local changed =
+    newSignature ~= tostring(
+      QuestSystem.lastAvailabilitySignature or ""
+    )
+
+  QuestSystem.lastAvailabilitySignature = newSignature
+
+  if redraw == true
+    and changed
+    and uiState == "shop"
+    and not popupState
+  then
+    drawProductListInPlace()
+    drawScrollbar(true)
+    drawInfoBlock()
+    drawQuantitySection()
+  end
+
+  return allReady, changed
+end
+
+function QuestSystem.pollAvailability(now)
+  if uiState ~= "shop"
+    or not session.active
+    or (
+      currentShopMode ~= "quests"
+      and currentShopMode ~= "quest_items"
+    )
+  then
+    return false
+  end
+
+  now = tonumber(now) or computer.uptime()
+  if now < (QuestSystem.nextAvailabilityAt or 0) then
+    return false
+  end
+
+  QuestSystem.nextAvailabilityAt =
+    now + QuestSystem.availabilityInterval
+
+  QuestSystem.refreshVisibleAvailability(true)
+  return true
+end
+
 function QuestSystem.getPendingFor(playerName, questId)
   local pending = QuestSystem.pending
 
@@ -7175,6 +7518,23 @@ function QuestSystem.purchaseSelected()
   -- Если набор уже оплачен и очередь сохранена на HDD,
   -- кнопка не делает новую покупку, а продолжает старую выдачу.
   if QuestSystem.resumePending(quest) then
+    return
+  end
+
+  -- Непосредственно перед списанием денег заново проверяем всю
+  -- комплектацию. Проверка идёт локально по основному МЭ.
+  local ready = QuestSystem.refreshVisibleAvailability(true)
+  if ready ~= true
+    or QuestSystem.selectedQuest.questAvailable ~= true
+  then
+    popupState = {
+      type = "quest_error",
+      title = "НЕДОСТАТОЧНО ПРЕДМЕТОВ",
+      message =
+        "В МЭ нет полного количества предметов для этого набора. "
+        .. "Деньги не списаны. После пополнения комплект станет активным.",
+    }
+    presentCurrentPopup()
     return
   end
 
@@ -7242,8 +7602,6 @@ function QuestSystem.purchaseSelected()
       displayName = tostring(qi.displayName or qi.name or qi.internalName),
       required = math.max(0, math.floor(tonumber(qi.qty) or 0)),
       delivered = 0,
-      craftRequested = false,
-      craftRequestAt = 0,
     }
   end
   QuestSystem.pending = {
@@ -7264,27 +7622,6 @@ function QuestSystem.purchaseSelected()
   QuestSystem.nextDeliveryAt = 0
   popupState = {type="quest_started", title="НАБОР ОПЛАЧЕН", message="Выдача началась. Освобождайте место — магазин продолжит автоматически."}
   presentCurrentPopup()
-end
-
-function QuestSystem.tryStartCraft(me, entry, missing)
-  if missing <= 0 then return false end
-  local now = os.time and os.time() or math.floor(computer.uptime())
-  if entry.craftRequested == true and now - (tonumber(entry.craftRequestAt) or 0) < 600 then
-    return false
-  end
-  local item = {internalName=entry.internalName, damage=entry.damage}
-  local recipe = AutoCraft.findRecipe(me, item)
-  if not recipe then return false end
-  local output = math.max(1, math.floor(tonumber(recipe.output) or 1))
-  local operations = math.max(1, math.ceil(missing / output))
-  local ok, status = AutoCraft.callProxyMethod(recipe.craftable, "request", operations)
-  if ok and status then
-    entry.craftRequested = true
-    entry.craftRequestAt = now
-    QuestSystem.savePending()
-    return true
-  end
-  return false
 end
 
 function QuestSystem.processPending(force)
@@ -7329,16 +7666,38 @@ function QuestSystem.processPending(force)
   local moved = MEExport.exportToPlayer(me, item, remaining, maxStack)
   if moved > 0 then
     entry.delivered = delivered + moved
-    pending.totalDelivered = math.max(0, math.floor(tonumber(pending.totalDelivered) or 0)) + moved
-    entry.craftRequested = false
-    if entry.delivered >= required then pending.currentItemIndex = index + 1 end
+    pending.totalDelivered =
+      math.max(
+        0,
+        math.floor(tonumber(pending.totalDelivered) or 0)
+      ) + moved
+    entry.waitingForStock = false
+    if entry.delivered >= required then
+      pending.currentItemIndex = index + 1
+    end
     QuestSystem.savePending()
     QuestSystem.refreshDisplayedProgress()
     if uiState == "shop" and currentShopMode == "quest_items" and not popupState then
       drawProductListInPlace(); drawScrollbar(true); drawInfoBlock(); drawQuantitySection(); drawAccountInfo()
     end
   else
-    QuestSystem.tryStartCraft(me, entry, remaining)
+    -- Автокрафт для квестов отключён.
+    -- Если в МЭ нет предмета или инвентарь игрока заполнен,
+    -- очередь остаётся на HDD и повторит обычную выдачу позже.
+    if entry.waitingForStock ~= true then
+      entry.waitingForStock = true
+      QuestSystem.savePending()
+    end
+
+    QuestSystem.nextDeliveryAt =
+      computer.uptime() + math.max(
+        2.0,
+        QuestSystem.deliveryInterval
+      )
+
+    if currentShopMode == "quest_items" and not popupState then
+      QuestSystem.refreshVisibleAvailability(true)
+    end
   end
 end
 
@@ -8231,6 +8590,22 @@ local function handleClick(x, y)
       QuestSystem.openQuest(selectedItem)
       return
     elseif currentShopMode == "quest_items" then
+      QuestSystem.refreshVisibleAvailability(true)
+
+      if not QuestSystem.selectedQuest
+        or QuestSystem.selectedQuest.questAvailable ~= true
+      then
+        popupState = {
+          type = "quest_error",
+          title = "НЕДОСТАТОЧНО ПРЕДМЕТОВ",
+          message =
+            "Полный комплект пока отсутствует в МЭ. "
+            .. "Недостающие позиции отмечены серым цветом.",
+        }
+        presentCurrentPopup()
+        return
+      end
+
       QuestSystem.purchaseSelected()
       return
     end
@@ -8472,6 +8847,11 @@ while true do
   -- операция остаётся на HDD и автоматически продолжится после освобождения места.
   if session.active and not transactionLock then
     QuestSystem.processPending(false)
+    now = computer.uptime()
+
+    -- Для экранов квестов раз в несколько секунд проверяем обычное
+    -- наличие предметов. Шаблоны и getCraftables не вызываются.
+    QuestSystem.pollAvailability(now)
     now = computer.uptime()
   end
 
