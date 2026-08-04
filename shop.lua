@@ -689,6 +689,12 @@ local ACC_Y = BTN_Y + 3
 local BOT_Y = HEIGHT - 2
 
 local allItems = {}
+
+-- Объявляем account заранее, чтобы функции QuestSystem,
+-- созданные выше заполнения таблицы аккаунта, захватывали именно
+-- локальную переменную, а не искали глобальную account.
+local account
+
 buyItemsCache = nil
 sellItemsCache = nil
 questItemsCache = nil
@@ -1830,7 +1836,7 @@ BOTTOM_AUTOCRAFT_X = BOTTOM_QUEST_X + BOTTOM_QUEST_W + 2
 local QTY_CLEAR_TEXT = "[ Стереть ]"
 local QTY_CLEAR_W = unicode.len(QTY_CLEAR_TEXT) + 2
 
-local account = {
+account = {
   nick = "Ожидание игрока",
   coina = "0",
   ema = "0",
