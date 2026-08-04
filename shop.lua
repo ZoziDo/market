@@ -463,6 +463,7 @@ end
 local WEB_BASE_URL = "http://201.24.112.170:8080"
 local CATALOG_URL = WEB_BASE_URL .. "/data/catalog.json"
 local SELL_ITEMS_URL = WEB_BASE_URL .. "/data/sell_items.json"
+local QUESTS_URL = WEB_BASE_URL .. "/data/quests.json"
 local USERS_URL = WEB_BASE_URL .. "/data/users.json"
 local BALANCE_UPDATE_URL = "http://co925228.tw1.ru/api/command/set_balance.php"
 REGISTER_PLAYER_URL = "http://co925228.tw1.ru/api/command/register_player.php"
@@ -645,6 +646,15 @@ local BOT_Y = HEIGHT - 2
 local allItems = {}
 buyItemsCache = nil
 sellItemsCache = nil
+questItemsCache = nil
+QuestSystem = QuestSystem or {}
+QuestSystem.catalogFile = "/home/vip_shop_quests.json"
+QuestSystem.pendingFile = "/home/pending_quest_delivery.json"
+QuestSystem.selectedQuest = nil
+QuestSystem.pending = nil
+QuestSystem.nextDeliveryAt = 0
+QuestSystem.deliveryInterval = 1.0
+QuestSystem.runtimeCraftRequests = QuestSystem.runtimeCraftRequests or {}
 local currentShopMode = "buy"
 availabilityFilter = "all" -- all / available / unavailable
 availabilityMenuOpen = false
@@ -897,6 +907,7 @@ CatalogCache = CatalogCache or {}
 CatalogCache.metaFile = "/home/vip_shop_catalog_versions.json"
 CatalogCache.buyFile = "/home/vip_shop_catalog_buy.json"
 CatalogCache.sellFile = "/home/vip_shop_catalog_sell.json"
+CatalogCache.questFile = "/home/vip_shop_quests.json"
 CatalogCache.meta = CatalogCache.meta or nil
 
 function CatalogCache.loadMeta()
@@ -944,9 +955,9 @@ function CatalogCache.saveMeta()
 end
 
 function CatalogCache.pathFor(kind)
-  return kind == "sell"
-    and CatalogCache.sellFile
-    or CatalogCache.buyFile
+  if kind == "sell" then return CatalogCache.sellFile end
+  if kind == "quest" then return CatalogCache.questFile end
+  return CatalogCache.buyFile
 end
 
 function CatalogCache.read(kind)
@@ -1033,6 +1044,7 @@ SessionStatus.failureCount = 0
 SessionStatus.lastError = nil
 SessionStatus.buyCatalogVersion = nil
 SessionStatus.sellCatalogVersion = nil
+SessionStatus.questCatalogVersion = nil
 SessionStatus.lastSuccess = 0
 
 function SessionStatus.start(playerName)
@@ -1117,8 +1129,10 @@ function SessionStatus.updateCatalogVersions(data)
   local meta = CatalogCache.loadMeta()
   local buyVersion = tostring(data.buyCatalogVersion or "")
   local sellVersion = tostring(data.sellCatalogVersion or "")
+  local questVersion = tostring(data.questCatalogVersion or "")
   local buyChanged = false
   local sellChanged = false
+  local questChanged = false
 
   if buyVersion ~= "" then
     buyChanged =
@@ -1140,7 +1154,13 @@ function SessionStatus.updateCatalogVersions(data)
     end
   end
 
-  return buyChanged, sellChanged
+  if questVersion ~= "" then
+    questChanged = tostring(meta.quest or "") ~= questVersion
+    SessionStatus.questCatalogVersion = questVersion
+    if questChanged then questItemsCache = nil end
+  end
+
+  return buyChanged, sellChanged, questChanged
 end
 
 local function getMEQuantities()
@@ -1398,7 +1418,110 @@ local function loadSellItems()
   return true, nil
 end
 
+function QuestSystem.normalizeCatalog(result)
+  if type(result) ~= "table" then return {} end
+  local list = result.quests or result.items or result
+  if type(list) ~= "table" then return {} end
+  return list
+end
+
+function QuestSystem.loadCatalog(forceReload)
+  if questItemsCache and not forceReload then
+    allItems = questItemsCache
+    catalogLoadError = nil
+    catalogStatus = "Квесты и наборы загружены: " .. tostring(#allItems)
+    return true, nil
+  end
+
+  catalogStatus = "Загрузка квестов и наборов..."
+  local result, err = CatalogCache.fetch(
+    "quest", QUESTS_URL, SessionStatus.questCatalogVersion
+  )
+  if not result then
+    allItems = {}
+    catalogLoadError = err or "Каталог квестов недоступен"
+    catalogStatus = "ОШИБКА ЗАГРУЗКИ КВЕСТОВ: " .. catalogLoadError
+    return false, catalogLoadError
+  end
+
+  local loaded = {}
+  for _, q in pairs(QuestSystem.normalizeCatalog(result)) do
+    if type(q) == "table" and q.enabled ~= false and q.id then
+      local total = 0
+      local kinds = 0
+      for _, qi in ipairs(q.items or {}) do
+        local amount = math.max(0, math.floor(tonumber(qi.qty) or 0))
+        if amount > 0 then kinds = kinds + 1; total = total + amount end
+      end
+      loaded[#loaded + 1] = {
+        name = tostring(q.displayName or q.name or q.id),
+        internalName = "quest:" .. tostring(q.id),
+        damage = 0,
+        me = tostring(kinds) .. " видов",
+        meRaw = total,
+        coina = trimNumber(q.priceCoin or 0, 4),
+        ema = trimNumber(q.priceEma or 0, 4),
+        priceCoin = tonumber(q.priceCoin) or 0,
+        priceEma = tonumber(q.priceEma) or 0,
+        qty = 1,
+        star = true,
+        isQuest = true,
+        questId = tostring(q.id),
+        questData = q,
+        totalItems = total,
+        itemKinds = kinds,
+        _searchName = lowerText(tostring(q.displayName or q.name or q.id)),
+      }
+    end
+  end
+  table.sort(loaded, function(a,b) return lowerText(a.name)<lowerText(b.name) end)
+  questItemsCache = loaded
+  allItems = loaded
+  catalogLoadError = nil
+  catalogStatus = "Квесты и наборы загружены: " .. tostring(#loaded)
+  return true, nil
+end
+
+function QuestSystem.openQuest(questItem)
+  if not questItem or not questItem.isQuest then return false end
+  QuestSystem.selectedQuest = questItem
+  local loaded = {}
+  for index, qi in ipairs(questItem.questData.items or {}) do
+    local required = math.max(0, math.floor(tonumber(qi.qty) or 0))
+    loaded[#loaded + 1] = {
+      name = tostring(qi.displayName or qi.name or qi.internalName),
+      internalName = tostring(qi.internalName or qi.id or ""),
+      damage = tonumber(qi.damage) or 0,
+      me = "-",
+      meRaw = 0,
+      coina = tostring(required),
+      ema = "0",
+      requiredQty = required,
+      deliveredQty = 0,
+      qty = required,
+      star = true,
+      questContent = true,
+      article = string.format("#Q-%02d", index),
+      _searchName = lowerText(tostring(qi.displayName or qi.name or qi.internalName)),
+    }
+  end
+  currentShopMode = "quest_items"
+  allItems = loaded
+  searchQuery = ""; searchFocused = false
+  quantity = "1"; qtyFocused = false
+  selectedIndex = 1; scrollOffset = 0
+  filterItems()
+  presentShopFrame()
+  return true
+end
+
 local function loadItemsForCurrentMode(forceReload)
+  if currentShopMode == "quests" then
+    return QuestSystem.loadCatalog(forceReload)
+  end
+  if currentShopMode == "quest_items" then
+    return true, nil
+  end
   if currentShopMode == "sell" then
     if sellItemsCache and not forceReload then
       allItems = sellItemsCache
@@ -1501,9 +1624,12 @@ local BOTTOM_SELL_X = BOTTOM_BUY_X + BOTTOM_BUY_W + 2
 
 -- Глобальные значения, чтобы не увеличивать число local-переменных
 -- в основном блоке Lua, где действует ограничение 200 local.
+BOTTOM_QUEST_TEXT = "[ Квесты и Наборы ]"
+BOTTOM_QUEST_W = unicode.len(BOTTOM_QUEST_TEXT) + 2
+BOTTOM_QUEST_X = BOTTOM_SELL_X + BOTTOM_SELL_W + 2
 BOTTOM_AUTOCRAFT_TEXT = "[ Автокрафт ]"
 BOTTOM_AUTOCRAFT_W = unicode.len(BOTTOM_AUTOCRAFT_TEXT) + 2
-BOTTOM_AUTOCRAFT_X = BOTTOM_SELL_X + BOTTOM_SELL_W + 2
+BOTTOM_AUTOCRAFT_X = BOTTOM_QUEST_X + BOTTOM_QUEST_W + 2
 
 local QTY_CLEAR_TEXT = "[ Стереть ]"
 local QTY_CLEAR_W = unicode.len(QTY_CLEAR_TEXT) + 2
@@ -2250,7 +2376,7 @@ function SessionStatus.apply(data, restartWhenAllowed)
   local targetPlayer = normalizePlayerName(
     data.name or SessionStatus.playerName
   )
-  local buyChanged, sellChanged =
+  local buyChanged, sellChanged, questChanged =
     SessionStatus.updateCatalogVersions(data)
 
   if data.maintenance == true then
@@ -2296,15 +2422,16 @@ function SessionStatus.apply(data, restartWhenAllowed)
     createSession(targetPlayer)
   end
 
-  return true, nil, buyChanged, sellChanged
+  return true, nil, buyChanged, sellChanged, questChanged
 end
 
-function SessionStatus.refreshCatalogIfNeeded(buyChanged, sellChanged)
+function SessionStatus.refreshCatalogIfNeeded(buyChanged, sellChanged, questChanged)
   if uiState ~= "shop" or not session.active then return end
 
   local shouldReload =
     (currentShopMode == "buy" and buyChanged)
     or (currentShopMode == "sell" and sellChanged)
+    or (currentShopMode == "quests" and questChanged)
 
   if not shouldReload then return end
 
@@ -2346,7 +2473,8 @@ function SessionStatus.poll(now)
 
   SessionStatus.refreshCatalogIfNeeded(
     buyChanged,
-    sellChanged
+    sellChanged,
+    questChanged
   )
   return true
 end
@@ -2365,7 +2493,7 @@ local function destroySession()
   popupButtons = {}
   transactionLock = false
 
-  quantity = ""
+  quantity = mode == "quests" and "1" or ""
   qtyFocused = false
   searchQuery = ""
   searchFocused = false
@@ -2512,7 +2640,7 @@ filterItems = function()
 
   selectedIndex = (#items > 0) and 1 or 0
   scrollOffset = 0
-  quantity = ""
+  quantity = (currentShopMode == "quests" or currentShopMode == "quest_items") and "1" or ""
 
   if selectedIndex == 0 then
     clearSelector()
@@ -3706,14 +3834,23 @@ local function drawMainFrames()
 end
 
 local function drawLeftHeader()
-  local title = currentShopMode == "sell" and "КАТАЛОГ ПРОДАЖ" or "КАТАЛОГ ПОКУПОК"
+  local title = currentShopMode == "sell" and "КАТАЛОГ ПРОДАЖ"
+    or currentShopMode == "quests" and "КВЕСТЫ И НАБОРЫ"
+    or currentShopMode == "quest_items" and "СОДЕРЖИМОЕ НАБОРА"
+    or "КАТАЛОГ ПОКУПОК"
   sectionHeader(2, MAIN_Y + 1, LEFT_W - 3, title, C.mainLine, C.white)
   local colY = MAIN_Y + 2
   fill(2, colY, LEFT_W - 3, 1, C.headerBg)
   text(COL_NAME_X, colY, "ТОВАР", C.white, C.headerBg)
-  text(COL_ME_X, colY, "В ME", C.white, C.headerBg)
-  text(COL_COINA_X, colY, "COINA", C.coin, C.headerBg)
-  text(COL_EMA_X, colY, "EMA", C.ema, C.headerBg)
+  if currentShopMode == "quest_items" then
+    text(COL_ME_X, colY, "", C.white, C.headerBg)
+    text(COL_COINA_X, colY, "СОДЕРЖИТ", C.coin, C.headerBg)
+    text(COL_EMA_X, colY, "ВЫДАНО", C.ema, C.headerBg)
+  else
+    text(COL_ME_X, colY, currentShopMode == "quests" and "СОСТАВ" or "В ME", C.white, C.headerBg)
+    text(COL_COINA_X, colY, "COINA", C.coin, C.headerBg)
+    text(COL_EMA_X, colY, "EMA", C.ema, C.headerBg)
+  end
 end
 
 local function drawSeparator()
@@ -3929,6 +4066,24 @@ local function drawInfoBlock()
   local item = items[selectedIndex]
   if not item then return end
 
+  if currentShopMode == "quests" then
+    sectionHeader(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, "ИНФОРМАЦИЯ О КВЕСТЕ", C.sectionLine, C.white)
+    local q = item.questData or {}
+    text(RIGHT_INNER_X, INFO_Y + 2, "Название: " .. truncate(item.name, RIGHT_INNER_W - 10), C.white, C.bg)
+    text(RIGHT_INNER_X, INFO_Y + 3, "Содержит: " .. tostring(item.itemKinds or 0) .. " видов / " .. tostring(item.totalItems or 0) .. " предметов", C.green, C.bg)
+    text(RIGHT_INNER_X, INFO_Y + 4, "COINA: " .. item.coina, C.coin, C.bg)
+    text(RIGHT_INNER_X, INFO_Y + 5, "EMA: " .. item.ema, C.ema, C.bg)
+    return
+  elseif currentShopMode == "quest_items" then
+    sectionHeader(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, "СОДЕРЖИМОЕ НАБОРА", C.sectionLine, C.white)
+    local q = QuestSystem.selectedQuest
+    text(RIGHT_INNER_X, INFO_Y + 2, "Набор: " .. truncate(q and q.name or "-", RIGHT_INNER_W - 7), C.white, C.bg)
+    text(RIGHT_INNER_X, INFO_Y + 3, "Товар: " .. truncate(item.name, RIGHT_INNER_W - 7), C.white, C.bg)
+    text(RIGHT_INNER_X, INFO_Y + 4, "Содержит: " .. tostring(item.requiredQty or 0), C.green, C.bg)
+    text(RIGHT_INNER_X, INFO_Y + 5, "Выдано: " .. tostring(item.deliveredQty or 0), C.cyan, C.bg)
+    return
+  end
+
   local noStock = currentShopMode == "buy"
     and (tonumber(item.meRaw or item.qty) or 0) <= 0
   local sellInventory = currentShopMode == "sell"
@@ -3960,6 +4115,7 @@ local function drawInfoBlock()
 end
 
 local function getQuantityInputLimit()
+  if currentShopMode == "quests" or currentShopMode == "quest_items" then return 1 end
   local item = items[selectedIndex]
   if not item then return 0 end
 
@@ -3977,6 +4133,7 @@ local function getQuantityInputLimit()
 end
 
 local function appendQuantityDigit(charCode)
+  if currentShopMode == "quests" or currentShopMode == "quest_items" then quantity = "1"; return end
   local digit = unicode.char(charCode)
   local candidate = quantity .. digit
   local candidateNumber = math.max(0, math.floor(tonumber(candidate) or 0))
@@ -3997,7 +4154,11 @@ local function getQuantityButtonLayout()
   local stock = item and math.max(0, math.floor(tonumber(item.meRaw or item.qty) or 0)) or 0
 
   local actionText
-  if currentShopMode == "sell" then
+  if currentShopMode == "quests" then
+    actionText = "[ Открыть ]"
+  elseif currentShopMode == "quest_items" then
+    actionText = "[ Купить ]"
+  elseif currentShopMode == "sell" then
     actionText = "[ Продать ]"
   elseif item and requestedQty > stock and item.craftable == true then
     actionText = "[ Автокрафт ]"
@@ -4028,7 +4189,10 @@ local function drawQuantitySection()
 
   local fieldText
   local fieldColor
-  if qtyFocused then
+  if currentShopMode == "quests" or currentShopMode == "quest_items" then
+    fieldText = "1"
+    fieldColor = C.inputFg
+  elseif qtyFocused then
     fieldText = quantity .. "_"
     fieldColor = C.accent
   elseif quantity == "" then
@@ -4054,7 +4218,9 @@ local function drawQuantitySection()
   local totalEma = 0
 
   if item then
-    if currentShopMode == "sell" then
+    if currentShopMode == "quests" or currentShopMode == "quest_items" then
+      effectiveQty = 1
+    elseif currentShopMode == "sell" then
       local inventoryQty = math.max(0, math.floor(tonumber(item.inventoryQty) or 0))
       -- Пустое поле означает продажу всего найденного количества.
       if effectiveQty <= 0 then effectiveQty = inventoryQty end
@@ -4064,7 +4230,14 @@ local function drawQuantitySection()
     totalEma = effectiveQty * (tonumber(item.ema) or 0)
   end
 
-  if currentShopMode == "sell" and item then
+  if currentShopMode == "quest_items" and QuestSystem.selectedQuest then
+    local pending = QuestSystem.pending
+    local delivered = pending and tonumber(pending.totalDelivered) or 0
+    local total = QuestSystem.selectedQuest.totalItems or 0
+    text(RIGHT_INNER_X, TOTAL_Y, "Выдано: " .. tostring(delivered) .. " / " .. tostring(total), C.cyan, C.bg)
+  elseif currentShopMode == "quests" and item then
+    text(RIGHT_INNER_X, TOTAL_Y, "Цена набора: " .. item.coina .. " COINA | " .. item.ema .. " EMA", C.white, C.bg)
+  elseif currentShopMode == "sell" and item then
     local summary = string.format("Итог: %s × %d шт.", item.name, effectiveQty)
     text(RIGHT_INNER_X, TOTAL_Y, truncate(summary, RIGHT_INNER_W), C.white, C.bg)
   else
@@ -4086,12 +4259,13 @@ local function drawQuantitySection()
 
   local actionText, actionX, _, clearX = getQuantityButtonLayout()
   local stock = item and math.max(0, math.floor(tonumber(item.meRaw or item.qty) or 0)) or 0
+  local questUnavailable = (currentShopMode == "quests" or currentShopMode == "quest_items") and not item
   local buyUnavailable = currentShopMode == "buy"
     and (not item or (stock <= 0 and item.craftable ~= true))
   local sellUnavailable = currentShopMode == "sell"
     and (not item or (tonumber(item.inventoryQty) or 0) <= 0)
   local buyQuantityMissing = currentShopMode == "buy" and requestedQty <= 0
-  local actionDisabled = buyUnavailable or sellUnavailable or buyQuantityMissing
+  local actionDisabled = questUnavailable or buyUnavailable or sellUnavailable or buyQuantityMissing
   local needsCraft = currentShopMode == "buy"
     and item and requestedQty > stock and item.craftable == true
   local actionColor
@@ -4105,7 +4279,8 @@ local function drawQuantitySection()
     actionColor = C.buttonBuy
   end
 
-  local clearColor = quantity == "" and C.darkGray or C.buttonClear
+  local fixedQuestQty = currentShopMode == "quests" or currentShopMode == "quest_items"
+  local clearColor = (quantity == "" or fixedQuestQty) and C.darkGray or C.buttonClear
   local disabledTextColor = C.gray
   drawPaddedButton(
     actionX, BTN_Y, actionText, actionColor,
@@ -4113,7 +4288,7 @@ local function drawQuantitySection()
   )
   drawPaddedButton(
     clearX, BTN_Y, QTY_CLEAR_TEXT, clearColor,
-    quantity == "" and disabledTextColor or C.white
+    (quantity == "" or fixedQuestQty) and disabledTextColor or C.white
   )
 end
 
@@ -4220,6 +4395,14 @@ local function drawBottomBar()
     BOT_Y,
     BOTTOM_SELL_TEXT,
     C.buttonSales,
+    C.white
+  )
+
+  drawPaddedButton(
+    BOTTOM_QUEST_X,
+    BOT_Y,
+    BOTTOM_QUEST_TEXT,
+    C.buttonFilter,
     C.white
   )
 
@@ -4751,7 +4934,11 @@ local function selectItem(index)
   end
 
   selectedIndex = index
-  quantity = ""
+  if currentShopMode == "quests" or currentShopMode == "quest_items" then
+    quantity = "1"
+  else
+    quantity = ""
+  end
 
   if currentShopMode == "sell" then
     SellFlow.refreshSellInventory(items[selectedIndex])
@@ -4810,7 +4997,7 @@ local function jumpToScrollbarPosition(y)
 end
 
 local function switchShopMode(mode)
-  if mode ~= "buy" and mode ~= "sell" then return end
+  if mode ~= "buy" and mode ~= "sell" and mode ~= "quests" then return end
   if mode == currentShopMode and uiState == "shop" then return end
 
   currentShopMode = mode
@@ -5324,9 +5511,29 @@ local function drawAutocraftErrorPopup()
   popupButton(box, "[  ПОНЯТНО  ]", 14, C.buttonClear, C.white, "close")
 end
 
+local function drawQuestMessagePopup()
+  if not popupState or (popupState.type ~= "quest_started" and popupState.type ~= "quest_complete" and popupState.type ~= "quest_error") then return end
+  local complete = popupState.type == "quest_complete"
+  local failed = popupState.type == "quest_error"
+  local border = failed and C.red or (complete and C.green or C.buttonFilter)
+  local box = drawPopupFrame(72, 17, tostring(popupState.title or "КВЕСТЫ И НАБОРЫ"), border, true)
+  popupWrite(box, 5, tostring(popupState.message or "Операция выполнена."), failed and C.yellow or C.white, "center")
+  if failed then
+    popupWrite(box, 8, "Деньги не списаны повторно.", C.green, "center")
+  elseif complete then
+    popupWrite(box, 8, "Временная очередь удалена с HDD.", C.green, "center")
+  else
+    popupWrite(box, 8, "Выдача продолжится автоматически после освобождения места.", C.cyan, "center")
+    popupWrite(box, 10, "Не покупайте набор повторно.", C.yellow, "center")
+  end
+  popupButton(box, "[  ПОНЯТНО  ]", 14, failed and C.buttonClear or (complete and C.buttonBuy or C.buttonFilter), C.white, "close")
+end
+
 local function drawCurrentPopup()
   if not popupState then return end
-  if popupState.type == "insufficient" then
+  if popupState.type == "quest_started" or popupState.type == "quest_complete" or popupState.type == "quest_error" then
+    drawQuestMessagePopup()
+  elseif popupState.type == "insufficient" then
     drawInsufficientFundsPopup()
   elseif popupState.type == "inventory_full" then
     drawInventoryFullPopup()
@@ -6707,6 +6914,209 @@ end
 -- Загружаем постоянный кэш сразу при запуске магазина.
 AutoCraft.loadPersistentCache()
 
+function QuestSystem.atomicSave(path, data)
+  local encoded = encodeJson(data)
+  if not encoded then return false end
+  local temp = path .. ".tmp"
+  local file = io.open(temp, "w")
+  if not file then return false end
+  file:write(encoded); file:close()
+  pcall(os.remove, path)
+  if os.rename(temp, path) then return true end
+  local fallback = io.open(path, "w")
+  if not fallback then return false end
+  fallback:write(encoded); fallback:close(); pcall(os.remove, temp)
+  return true
+end
+
+function QuestSystem.loadPending()
+  local file = io.open(QuestSystem.pendingFile, "r")
+  if not file then QuestSystem.pending = nil; return nil end
+  local raw = file:read("*a"); file:close()
+  local decoded = decodeJson(raw or "")
+  if type(decoded) == "table" and decoded.completed ~= true then
+    QuestSystem.pending = decoded
+    return decoded
+  end
+  QuestSystem.pending = nil
+  pcall(os.remove, QuestSystem.pendingFile)
+  return nil
+end
+
+function QuestSystem.savePending()
+  if type(QuestSystem.pending) ~= "table" then return false end
+  return QuestSystem.atomicSave(QuestSystem.pendingFile, QuestSystem.pending)
+end
+
+function QuestSystem.clearPending()
+  QuestSystem.pending = nil
+  pcall(os.remove, QuestSystem.pendingFile)
+end
+
+function QuestSystem.makeTransactionId(player, questId)
+  return "QUEST-" .. tostring(player) .. "-" .. tostring(questId)
+    .. "-" .. tostring(math.floor(computer.uptime() * 1000))
+    .. "-" .. tostring(math.random(100000, 999999))
+end
+
+function QuestSystem.refreshDisplayedProgress()
+  if currentShopMode ~= "quest_items" or not QuestSystem.pending then return end
+  local byKey = {}
+  for _, entry in ipairs(QuestSystem.pending.items or {}) do
+    byKey[tostring(entry.internalName) .. ":" .. tostring(entry.damage or 0)] = entry
+  end
+  for _, item in ipairs(allItems or {}) do
+    local entry = byKey[tostring(item.internalName) .. ":" .. tostring(item.damage or 0)]
+    if entry then
+      item.deliveredQty = tonumber(entry.delivered) or 0
+      item.ema = tostring(item.deliveredQty)
+    end
+  end
+  for _, item in ipairs(items or {}) do
+    local entry = byKey[tostring(item.internalName) .. ":" .. tostring(item.damage or 0)]
+    if entry then
+      item.deliveredQty = tonumber(entry.delivered) or 0
+      item.ema = tostring(item.deliveredQty)
+    end
+  end
+end
+
+function QuestSystem.purchaseSelected()
+  if transactionLock or not session.active then return end
+  local quest = QuestSystem.selectedQuest
+  if not quest or not quest.questData then return end
+  transactionLock = true
+  local transactionId = QuestSystem.makeTransactionId(account.nick, quest.questId)
+  local response, err = httpPostJson(SecurePurchase.url, {
+    action = "quest_purchase",
+    name = account.nick,
+    questId = quest.questId,
+    transactionId = transactionId,
+  }, 6)
+  if not response or response.status ~= "ok" then
+    transactionLock = false
+    popupState = {type="quest_error", title="ПОКУПКА НАБОРА ОТКЛОНЕНА", message=tostring(err or response and response.message or "Не удалось купить набор")}
+    presentCurrentPopup()
+    return
+  end
+  local data = type(response.data)=="table" and response.data or response
+  account.balanceCoin = tonumber(data.balanceCoin) or account.balanceCoin
+  account.balanceEma = tonumber(data.balanceEma) or account.balanceEma
+  account.coina = trimNumber(account.balanceCoin, 4)
+  account.ema = trimNumber(account.balanceEma, 4)
+  account.transactions = tonumber(data.transactions) or account.transactions
+  account.trans = tostring(math.floor(account.transactions or 0))
+
+  local pendingItems = {}
+  for _, qi in ipairs(quest.questData.items or {}) do
+    pendingItems[#pendingItems+1] = {
+      internalName = tostring(qi.internalName or qi.id or ""),
+      damage = tonumber(qi.damage) or 0,
+      displayName = tostring(qi.displayName or qi.name or qi.internalName),
+      required = math.max(0, math.floor(tonumber(qi.qty) or 0)),
+      delivered = 0,
+      craftRequested = false,
+      craftRequestAt = 0,
+    }
+  end
+  QuestSystem.pending = {
+    version = 1,
+    transactionId = tostring(data.transactionId or transactionId),
+    player = account.nick,
+    questId = quest.questId,
+    questName = quest.name,
+    completed = false,
+    totalRequired = quest.totalItems or 0,
+    totalDelivered = 0,
+    currentItemIndex = 1,
+    items = pendingItems,
+  }
+  QuestSystem.savePending()
+  QuestSystem.refreshDisplayedProgress()
+  transactionLock = false
+  QuestSystem.nextDeliveryAt = 0
+  popupState = {type="quest_started", title="НАБОР ОПЛАЧЕН", message="Выдача началась. Освобождайте место — магазин продолжит автоматически."}
+  presentCurrentPopup()
+end
+
+function QuestSystem.tryStartCraft(me, entry, missing)
+  if missing <= 0 then return false end
+  local now = os.time and os.time() or math.floor(computer.uptime())
+  if entry.craftRequested == true and now - (tonumber(entry.craftRequestAt) or 0) < 600 then
+    return false
+  end
+  local item = {internalName=entry.internalName, damage=entry.damage}
+  local recipe = AutoCraft.findRecipe(me, item)
+  if not recipe then return false end
+  local output = math.max(1, math.floor(tonumber(recipe.output) or 1))
+  local operations = math.max(1, math.ceil(missing / output))
+  local ok, status = AutoCraft.callProxyMethod(recipe.craftable, "request", operations)
+  if ok and status then
+    entry.craftRequested = true
+    entry.craftRequestAt = now
+    QuestSystem.savePending()
+    return true
+  end
+  return false
+end
+
+function QuestSystem.processPending(force)
+  local pending = QuestSystem.pending
+  if type(pending) ~= "table" or pending.completed == true then return end
+  if not session.active or lowerText(pending.player or "") ~= lowerText(account.nick or "") then return end
+  local now = computer.uptime()
+  if not force and now < (QuestSystem.nextDeliveryAt or 0) then return end
+  QuestSystem.nextDeliveryAt = now + QuestSystem.deliveryInterval
+
+  local me = component.isAvailable("me_interface") and component.me_interface or nil
+  if not me then return end
+  local index = math.max(1, math.floor(tonumber(pending.currentItemIndex) or 1))
+  local entry = pending.items and pending.items[index]
+  if not entry then
+    pending.completed = true
+    QuestSystem.savePending()
+    local response = httpPostJson(SecurePurchase.url, {
+      action="quest_complete", name=account.nick,
+      transactionId=pending.transactionId, questId=pending.questId,
+    }, 5)
+    QuestSystem.clearPending()
+    QuestSystem.refreshDisplayedProgress()
+    if not popupState then
+      popupState={type="quest_complete", title="НАБОР ПОЛНОСТЬЮ ВЫДАН", message="Все предметы успешно выданы."}
+      presentCurrentPopup()
+    end
+    return
+  end
+
+  local required = math.max(0, math.floor(tonumber(entry.required) or 0))
+  local delivered = math.max(0, math.floor(tonumber(entry.delivered) or 0))
+  local remaining = required - delivered
+  if remaining <= 0 then
+    pending.currentItemIndex = index + 1
+    QuestSystem.savePending()
+    return
+  end
+
+  local item = {internalName=entry.internalName, damage=entry.damage}
+  local maxStack = getMaxStackSize(me, item)
+  local moved = MEExport.exportToPlayer(me, item, remaining, maxStack)
+  if moved > 0 then
+    entry.delivered = delivered + moved
+    pending.totalDelivered = math.max(0, math.floor(tonumber(pending.totalDelivered) or 0)) + moved
+    entry.craftRequested = false
+    if entry.delivered >= required then pending.currentItemIndex = index + 1 end
+    QuestSystem.savePending()
+    QuestSystem.refreshDisplayedProgress()
+    if uiState == "shop" and currentShopMode == "quest_items" and not popupState then
+      drawProductListInPlace(); drawScrollbar(true); drawInfoBlock(); drawQuantitySection(); drawAccountInfo()
+    end
+  else
+    QuestSystem.tryStartCraft(me, entry, remaining)
+  end
+end
+
+QuestSystem.loadPending()
+
 function AutoCraft.readStatus(status, methodName)
   local ok, value = AutoCraft.callProxyMethod(status, methodName)
   if not ok then return nil end
@@ -7522,7 +7932,8 @@ local function handleClick(x, y)
   blurSearch()
 
   local fieldY = QTY_Y + 2
-  if y == fieldY
+  if currentShopMode ~= "quests" and currentShopMode ~= "quest_items"
+    and y == fieldY
     and x >= RIGHT_INNER_X
     and x < RIGHT_INNER_X + RIGHT_INNER_W
   then
@@ -7542,6 +7953,9 @@ local function handleClick(x, y)
       return
     elseif x >= BOTTOM_SELL_X and x < BOTTOM_SELL_X + BOTTOM_SELL_W then
       switchShopMode("sell")
+      return
+    elseif x >= BOTTOM_QUEST_X and x < BOTTOM_QUEST_X + BOTTOM_QUEST_W then
+      switchShopMode("quests")
       return
     elseif x >= BOTTOM_AUTOCRAFT_X
       and x < BOTTOM_AUTOCRAFT_X + BOTTOM_AUTOCRAFT_W
@@ -7584,6 +7998,14 @@ local function handleClick(x, y)
       SellFlow.refreshSellInventory(selectedItem, false)
     end
 
+    if currentShopMode == "quests" then
+      QuestSystem.openQuest(selectedItem)
+      return
+    elseif currentShopMode == "quest_items" then
+      QuestSystem.purchaseSelected()
+      return
+    end
+
     local selectedStock = selectedItem
       and math.max(0, math.floor(tonumber(selectedItem.meRaw or selectedItem.qty) or 0))
       or 0
@@ -7616,6 +8038,7 @@ local function handleClick(x, y)
   end
 
   if y == BTN_Y and x >= clearX and x < clearX + clearW then
+    if currentShopMode == "quests" or currentShopMode == "quest_items" then return end
     if quantity == "" then return end
     quantity = ""
     drawQuantitySection()
@@ -7749,7 +8172,7 @@ while true do
             end
           end
 
-        elseif qtyFocused then
+        elseif qtyFocused and currentShopMode ~= "quests" and currentShopMode ~= "quest_items" then
           if code == keyboard.keys.escape then
             qtyFocused = false
             drawQuantitySection()
@@ -7782,6 +8205,13 @@ while true do
   -- Сам магазин откроется только после завершения загрузки, поэтому
   -- товары будут видны сразу при первом кадре интерфейса.
   local now = computer.uptime()
+
+  -- Незавершённый набор выдаётся небольшими шагами. Если инвентарь заполнен,
+  -- операция остаётся на HDD и автоматически продолжится после освобождения места.
+  if session.active and not transactionLock then
+    QuestSystem.processPending(false)
+    now = computer.uptime()
+  end
 
   -- Фильтрация выполняется один раз после короткой паузы ввода.
   if Performance.searchDirty
