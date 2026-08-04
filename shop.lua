@@ -532,6 +532,51 @@ local PURCHASE_HTTP_TIMEOUT = 4
 local PIM_CHECK_INTERVAL = 0.65
 local AUTH_DELAY = 2
 local ME_EXPORT_DIRECTION = "up"
+
+-- Основная МЭ-система магазина. При нескольких me_interface
+-- автоматический component.me_interface может выбрать буферную сеть.
+MainME = MainME or {}
+MainME.address = "af0760da-aec9-41de-b28d-a2a07e89445d"
+MainME.proxy = nil
+MainME.lastError = nil
+
+function MainME.getProxy()
+  local address = tostring(MainME.address or "")
+  if address == "" then
+    MainME.proxy = nil
+    MainME.lastError = "Не указан адрес основной МЭ-системы"
+    return nil, MainME.lastError
+  end
+
+  local okType, componentType = pcall(component.type, address)
+  if not okType or not componentType then
+    MainME.proxy = nil
+    MainME.lastError =
+      "Основной МЭ-интерфейс не найден: " .. address
+    return nil, MainME.lastError
+  end
+
+  if MainME.proxy
+    and tostring(MainME.proxy.address or "") == address
+  then
+    MainME.lastError = nil
+    return MainME.proxy, nil
+  end
+
+  local okProxy, proxy = pcall(component.proxy, address)
+  if not okProxy or type(proxy) ~= "table" then
+    MainME.proxy = nil
+    MainME.lastError =
+      "Не удалось открыть основной МЭ-интерфейс: "
+      .. tostring(proxy)
+    return nil, MainME.lastError
+  end
+
+  MainME.proxy = proxy
+  MainME.lastError = nil
+  return proxy, nil
+end
+
 SellFlow = SellFlow or {}
 SellFlow.pushDirection = "down"
 SellFlow.endpoint = WEB_BASE_URL .. "/api/sell_item.php"
@@ -653,7 +698,7 @@ QuestSystem.pendingFile = "/home/pending_quest_delivery.json"
 QuestSystem.selectedQuest = nil
 QuestSystem.pending = nil
 QuestSystem.nextDeliveryAt = 0
-QuestSystem.deliveryInterval = 1.0
+QuestSystem.deliveryInterval = 0.5
 
 -- В квестах автокрафт полностью отключён.
 -- Наличие комплектации проверяется непосредственно в основном МЭ.
@@ -1172,13 +1217,37 @@ local function getMEQuantities()
   local quantities = {}
   local craftableFlags = {}
 
-  if not component.isAvailable("me_interface") then
+  local me = MainME.getProxy()
+  if not me then
     return quantities, craftableFlags
   end
 
-  local me = component.me_interface
-  local ok, networkItems = pcall(me.getItemsInNetwork)
-  if not ok or type(networkItems) ~= "table" then
+  local networkItems = nil
+
+  local okItems, resultItems = pcall(
+    component.invoke,
+    MainME.address,
+    "getItemsInNetwork"
+  )
+  if okItems and type(resultItems) == "table" then
+    networkItems = resultItems
+  end
+
+  if type(networkItems) ~= "table"
+    or next(networkItems) == nil
+  then
+    local okAvailable, resultAvailable = pcall(
+      component.invoke,
+      MainME.address,
+      "getAvailableItems",
+      "NONE"
+    )
+    if okAvailable and type(resultAvailable) == "table" then
+      networkItems = resultAvailable
+    end
+  end
+
+  if type(networkItems) ~= "table" then
     return quantities, craftableFlags
   end
 
@@ -2670,6 +2739,16 @@ local function finishAuthorization()
 
   uiState = "shop"
   presentShopFrame(true)
+
+  -- Владелец незавершённого набора снова встал на PIM.
+  -- Сразу пробуем выдать всё, что уже появилось в основной МЭ.
+  if type(QuestSystem.pending) == "table"
+    and lowerText(QuestSystem.pending.player or "")
+      == lowerText(account.nick or "")
+  then
+    QuestSystem.nextDeliveryAt = 0
+    QuestSystem.processPending(true)
+  end
 end
 
 filterItems = function()
@@ -3910,7 +3989,7 @@ local function drawLeftHeader()
   fill(2, colY, LEFT_W - 3, 1, C.headerBg)
   text(COL_NAME_X, colY, "ТОВАР", C.white, C.headerBg)
   if currentShopMode == "quest_items" then
-    text(COL_ME_X, colY, "", C.white, C.headerBg)
+    text(COL_ME_X, colY, "В МЭ", C.white, C.headerBg)
     text(COL_COINA_X, colY, "СОДЕРЖИТ", C.coin, C.headerBg)
     text(COL_EMA_X, colY, "ВЫДАНО", C.ema, C.headerBg)
   else
@@ -5069,8 +5148,8 @@ function QuestSystem.openQuest(questItem)
           damage = damage,
 
           -- В режиме состава колонки используются так:
-          -- COINA -> «Содержит», EMA -> «Выдано».
-          me = "-",
+          -- ME -> «В МЭ», COINA -> «Содержит», EMA -> «Выдано».
+          me = tostring(math.floor(stock)),
           meRaw = stock,
           coina = tostring(required),
           ema = tostring(delivered),
@@ -6154,17 +6233,10 @@ function MEExport.normalizeId(value)
 end
 
 function MEExport.getAddress(me)
-  if me and type(me.address) == "string" and me.address ~= "" then
-    return me.address
+  local proxy = MainME.getProxy()
+  if proxy then
+    return MainME.address
   end
-
-  for address in component.list("me_interface") do
-    return address
-  end
-  for address in component.list("me_bridge") do
-    return address
-  end
-
   return nil
 end
 
@@ -7391,6 +7463,7 @@ function QuestSystem.refreshVisibleAvailability(redraw)
       local ready = remaining <= 0 or stock >= remaining
 
       item.meRaw = stock
+      item.me = tostring(stock)
       item.questAvailable = ready
       item.star = ready
 
@@ -7527,14 +7600,8 @@ function QuestSystem.purchaseSelected()
   if ready ~= true
     or QuestSystem.selectedQuest.questAvailable ~= true
   then
-    popupState = {
-      type = "quest_error",
-      title = "НЕДОСТАТОЧНО ПРЕДМЕТОВ",
-      message =
-        "В МЭ нет полного количества предметов для этого набора. "
-        .. "Деньги не списаны. После пополнения комплект станет активным.",
-    }
-    presentCurrentPopup()
+    -- Защита от гонки: состояние могло измениться между отрисовкой
+    -- и кликом. Запрос на VPS не отправляется, popup не показывается.
     return
   end
 
@@ -7624,81 +7691,263 @@ function QuestSystem.purchaseSelected()
   presentCurrentPopup()
 end
 
+function QuestSystem.isPendingComplete(pending)
+  if type(pending) ~= "table" then return false end
+
+  for _, entry in ipairs(pending.items or {}) do
+    local required = math.max(
+      0,
+      math.floor(tonumber(entry.required) or 0)
+    )
+    local delivered = math.max(
+      0,
+      math.floor(tonumber(
+        entry.delivered or entry.deliveredQty
+      ) or 0)
+    )
+
+    if delivered < required then
+      return false
+    end
+  end
+
+  return true
+end
+
+function QuestSystem.completePending(pending)
+  if type(pending) ~= "table" then return false end
+
+  pending.completed = true
+  QuestSystem.savePending()
+
+  httpPostJson(SecurePurchase.url, {
+    action = "quest_complete",
+    name = account.nick,
+    transactionId = pending.transactionId,
+    questId = pending.questId,
+  }, 5)
+
+  QuestSystem.clearPending()
+  QuestSystem.refreshDisplayedProgress()
+
+  if not popupState then
+    popupState = {
+      type = "quest_complete",
+      title = "НАБОР ПОЛНОСТЬЮ ВЫДАН",
+      message = "Все предметы успешно выданы.",
+    }
+    presentCurrentPopup()
+  end
+
+  return true
+end
+
+function QuestSystem.findAvailablePendingEntry(pending, quantities)
+  if type(pending) ~= "table"
+    or type(pending.items) ~= "table"
+  then
+    return nil
+  end
+
+  quantities = type(quantities) == "table"
+    and quantities
+    or {}
+
+  local itemCount = #pending.items
+  if itemCount <= 0 then return nil end
+
+  local startIndex = math.max(
+    1,
+    math.min(
+      itemCount,
+      math.floor(tonumber(pending.currentItemIndex) or 1)
+    )
+  )
+
+  -- Ищем не только первую позицию. Если раннее зелье отсутствует,
+  -- но другое уже появилось в МЭ, оно тоже будет выдано автоматически.
+  for offset = 0, itemCount - 1 do
+    local index = ((startIndex + offset - 1) % itemCount) + 1
+    local entry = pending.items[index]
+
+    if type(entry) == "table" then
+      local required = math.max(
+        0,
+        math.floor(tonumber(entry.required) or 0)
+      )
+      local delivered = math.max(
+        0,
+        math.floor(tonumber(
+          entry.delivered or entry.deliveredQty
+        ) or 0)
+      )
+      local remaining = math.max(0, required - delivered)
+
+      if remaining > 0 then
+        local key = QuestSystem.stockKey(
+          entry.internalName or entry.id,
+          entry.damage
+        )
+        local stock = math.max(
+          0,
+          math.floor(tonumber(quantities[key]) or 0)
+        )
+
+        if stock > 0 then
+          return index, entry, remaining, stock
+        end
+      end
+    end
+  end
+
+  return nil
+end
+
 function QuestSystem.processPending(force)
   local pending = QuestSystem.pending
-  if type(pending) ~= "table" or pending.completed == true then return end
-  if not session.active or lowerText(pending.player or "") ~= lowerText(account.nick or "") then return end
+
+  if type(pending) ~= "table"
+    or pending.completed == true
+  then
+    return false
+  end
+
+  -- Выдача разрешена только владельцу очереди,
+  -- который прямо сейчас стоит на PIM.
+  if not session.active
+    or isPlayerStandingOnPim() == false
+    or lowerText(pending.player or "")
+      ~= lowerText(account.nick or "")
+  then
+    return false
+  end
+
   local now = computer.uptime()
-  if not force and now < (QuestSystem.nextDeliveryAt or 0) then return end
-  QuestSystem.nextDeliveryAt = now + QuestSystem.deliveryInterval
+  if not force
+    and now < (QuestSystem.nextDeliveryAt or 0)
+  then
+    return false
+  end
 
-  local me = component.isAvailable("me_interface") and component.me_interface or nil
-  if not me then return end
-  local index = math.max(1, math.floor(tonumber(pending.currentItemIndex) or 1))
-  local entry = pending.items and pending.items[index]
+  local me = MainME.getProxy()
+  if not me then
+    QuestSystem.nextDeliveryAt = now + 3.0
+    return false
+  end
+
+  if QuestSystem.isPendingComplete(pending) then
+    return QuestSystem.completePending(pending)
+  end
+
+  -- Один снимок основной МЭ на попытку выдачи.
+  local quantities = QuestSystem.getStockSnapshot()
+
+  local index, entry, remaining, stock =
+    QuestSystem.findAvailablePendingEntry(
+      pending,
+      quantities
+    )
+
   if not entry then
-    pending.completed = true
-    QuestSystem.savePending()
-    local response = httpPostJson(SecurePurchase.url, {
-      action="quest_complete", name=account.nick,
-      transactionId=pending.transactionId, questId=pending.questId,
-    }, 5)
-    QuestSystem.clearPending()
-    QuestSystem.refreshDisplayedProgress()
-    if not popupState then
-      popupState={type="quest_complete", title="НАБОР ПОЛНОСТЬЮ ВЫДАН", message="Все предметы успешно выданы."}
-      presentCurrentPopup()
+    -- Ничего из оставшегося пока нет в МЭ.
+    -- Очередь остаётся на HDD и будет проверена снова.
+    QuestSystem.nextDeliveryAt = now + 2.0
+
+    if currentShopMode == "quest_items"
+      and not popupState
+    then
+      QuestSystem.refreshVisibleAvailability(true)
     end
-    return
+
+    return false
   end
 
-  local required = math.max(0, math.floor(tonumber(entry.required) or 0))
-  local delivered = math.max(0, math.floor(tonumber(entry.delivered) or 0))
-  local remaining = required - delivered
-  if remaining <= 0 then
-    pending.currentItemIndex = index + 1
-    QuestSystem.savePending()
-    return
-  end
+  pending.currentItemIndex = index
 
-  local item = {internalName=entry.internalName, damage=entry.damage}
+  local item = {
+    internalName = entry.internalName,
+    damage = entry.damage,
+  }
+
   local maxStack = getMaxStackSize(me, item)
-  local moved = MEExport.exportToPlayer(me, item, remaining, maxStack)
+  local requested = math.min(remaining, stock)
+  local moved = MEExport.exportToPlayer(
+    me,
+    item,
+    requested,
+    maxStack
+  )
+
   if moved > 0 then
-    entry.delivered = delivered + moved
+    local delivered = math.max(
+      0,
+      math.floor(tonumber(
+        entry.delivered or entry.deliveredQty
+      ) or 0)
+    )
+
+    entry.delivered = math.min(
+      math.max(0, math.floor(tonumber(entry.required) or 0)),
+      delivered + moved
+    )
+    entry.deliveredQty = nil
+    entry.waitingForStock = false
+    entry.waitingForSpace = false
+
     pending.totalDelivered =
       math.max(
         0,
         math.floor(tonumber(pending.totalDelivered) or 0)
       ) + moved
-    entry.waitingForStock = false
-    if entry.delivered >= required then
-      pending.currentItemIndex = index + 1
+
+    local itemCount = #(pending.items or {})
+    if itemCount > 0 then
+      pending.currentItemIndex =
+        (index % itemCount) + 1
     end
+
     QuestSystem.savePending()
     QuestSystem.refreshDisplayedProgress()
-    if uiState == "shop" and currentShopMode == "quest_items" and not popupState then
-      drawProductListInPlace(); drawScrollbar(true); drawInfoBlock(); drawQuantitySection(); drawAccountInfo()
-    end
-  else
-    -- Автокрафт для квестов отключён.
-    -- Если в МЭ нет предмета или инвентарь игрока заполнен,
-    -- очередь остаётся на HDD и повторит обычную выдачу позже.
-    if entry.waitingForStock ~= true then
-      entry.waitingForStock = true
-      QuestSystem.savePending()
+
+    if uiState == "shop"
+      and currentShopMode == "quest_items"
+      and not popupState
+    then
+      QuestSystem.refreshVisibleAvailability(false)
+      drawProductListInPlace()
+      drawScrollbar(true)
+      drawInfoBlock()
+      drawQuantitySection()
+      drawAccountInfo()
     end
 
+    if QuestSystem.isPendingComplete(pending) then
+      return QuestSystem.completePending(pending)
+    end
+
+    -- Следующую доступную позицию пробуем почти сразу.
     QuestSystem.nextDeliveryAt =
-      computer.uptime() + math.max(
-        2.0,
-        QuestSystem.deliveryInterval
-      )
-
-    if currentShopMode == "quest_items" and not popupState then
-      QuestSystem.refreshVisibleAvailability(true)
-    end
+      computer.uptime() + 0.15
+    return true
   end
+
+  -- Предмет в МЭ есть, но exportItem не смог его передать.
+  -- Обычно это означает заполненный инвентарь игрока.
+  if entry.waitingForSpace ~= true then
+    entry.waitingForSpace = true
+    QuestSystem.savePending()
+  end
+
+  QuestSystem.nextDeliveryAt =
+    computer.uptime() + 2.0
+
+  if currentShopMode == "quest_items"
+    and not popupState
+  then
+    QuestSystem.refreshVisibleAvailability(true)
+  end
+
+  return false
 end
 
 QuestSystem.loadPending()
@@ -8592,17 +8841,11 @@ local function handleClick(x, y)
     elseif currentShopMode == "quest_items" then
       QuestSystem.refreshVisibleAvailability(true)
 
+      -- Кнопка визуально неактивна. Нажатие полностью игнорируется:
+      -- без popup, без запроса к VPS и без списания денег.
       if not QuestSystem.selectedQuest
         or QuestSystem.selectedQuest.questAvailable ~= true
       then
-        popupState = {
-          type = "quest_error",
-          title = "НЕДОСТАТОЧНО ПРЕДМЕТОВ",
-          message =
-            "Полный комплект пока отсутствует в МЭ. "
-            .. "Недостающие позиции отмечены серым цветом.",
-        }
-        presentCurrentPopup()
         return
       end
 
