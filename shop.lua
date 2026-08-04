@@ -2932,7 +2932,7 @@ local welcomeRainbow = {
   0x8B00FF, -- top: violet
 }
 
-local function centeredX(value)
+function centeredX(value)
   return math.max(1, math.floor((WIDTH - unicode.len(value)) / 2) + 1)
 end
 
@@ -2941,7 +2941,7 @@ end
 local WELCOME_PIXEL_W = 2
 local WELCOME_PIXEL_H = 2
 
-local function welcomeSourceWidth()
+function welcomeSourceWidth()
   local maxLen = 0
   for _, line in ipairs(welcomeDiamond) do
     local len = unicode.len(line)
@@ -2950,28 +2950,28 @@ local function welcomeSourceWidth()
   return maxLen
 end
 
-local function welcomeSourceSolid(row, col)
+function welcomeSourceSolid(row, col)
   local line = welcomeDiamond[row]
   if not line or col < 1 or col > unicode.len(line) then return false end
   local ch = unicode.sub(line, col, col)
   return ch ~= "" and ch ~= " "
 end
 
-local function splitColor(color)
+function splitColor(color)
   local r = math.floor(color / 0x10000) % 0x100
   local g = math.floor(color / 0x100) % 0x100
   local b = color % 0x100
   return r, g, b
 end
 
-local function joinColor(r, g, b)
+function joinColor(r, g, b)
   r = math.max(0, math.min(255, math.floor(r + 0.5)))
   g = math.max(0, math.min(255, math.floor(g + 0.5)))
   b = math.max(0, math.min(255, math.floor(b + 0.5)))
   return r * 0x10000 + g * 0x100 + b
 end
 
-local function mixColor(colorA, colorB, t)
+function mixColor(colorA, colorB, t)
   local ar, ag, ab = splitColor(colorA)
   local br, bg, bb = splitColor(colorB)
   return joinColor(
@@ -3193,7 +3193,7 @@ function welcomeAnim.stopTimer()
   welcomeAnim.timerId = nil
 end
 
-local function drawWelcomeFrame()
+function drawWelcomeFrame()
   activateFrontBuffer()
   fill(1, 1, WIDTH, HEIGHT, C.bg)
 
@@ -3222,7 +3222,7 @@ local function drawWelcomeFrame()
   return welcomeAnim.textY
 end
 
-local function prepareWelcomeTextArea()
+function prepareWelcomeTextArea()
   if not welcomeAnim.visible then drawWelcomeFrame() end
 
   -- Очищаем пять строк: текст приветствия и авторизации теперь расположен
@@ -3945,11 +3945,11 @@ function BanSystem.poll(now)
   return false
 end
 
-local function drawBackground()
+function drawBackground()
   fill(1, 1, WIDTH, HEIGHT, C.bg)
 end
 
-local function drawTopBar()
+function drawTopBar()
   fill(1, 1, WIDTH, 3, 0x0A0A0A)
 
   local title = "──── VIP-SHOP ────"
@@ -3968,7 +3968,7 @@ local function drawTopBar()
   redrawSearchField()
 end
 
-local function drawMainFrames()
+function drawMainFrames()
   setBG(C.bg)
   setFG(C.mainLine)
   gpu.set(1, MAIN_Y, "+" .. string.rep("=", WIDTH - 2) .. "+")
@@ -3979,7 +3979,7 @@ local function drawMainFrames()
   gpu.set(1, MAIN_Y + MAIN_H - 1, "+" .. string.rep("=", WIDTH - 2) .. "+")
 end
 
-local function drawLeftHeader()
+function drawLeftHeader()
   local title = currentShopMode == "sell" and "КАТАЛОГ ПРОДАЖ"
     or currentShopMode == "quests" and "КВЕСТЫ И НАБОРЫ"
     or currentShopMode == "quest_items" and "СОДЕРЖИМОЕ НАБОРА"
@@ -3999,7 +3999,7 @@ local function drawLeftHeader()
   end
 end
 
-local function drawSeparator()
+function drawSeparator()
   setBG(C.bg)
   setFG(C.mainLine)
   for y = MAIN_Y + 1, MAIN_Y + MAIN_H - 2 do
@@ -4016,7 +4016,7 @@ local scrollbarState = {
   initialized = false,
 }
 
-local function resetScrollbarState()
+function resetScrollbarState()
   scrollbarState.initialized = false
 end
 
@@ -4027,12 +4027,12 @@ local SCROLL_BLOCKS = {
   " ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"
 }
 
-local function scrollBlock(parts)
+function scrollBlock(parts)
   parts = math.max(0, math.min(8, math.floor(parts or 0)))
   return SCROLL_BLOCKS[parts + 1]
 end
 
-local function drawScrollbar(force)
+function drawScrollbar(force)
   local total = #items
   local trackColor = C.inputBg
 
@@ -4082,7 +4082,7 @@ local function drawScrollbar(force)
   setBG(C.bg)
 end
 
-local function drawItemRow(index, y)
+function drawItemRow(index, y)
   local item = items[index]
   if not item then return end
 
@@ -4137,7 +4137,7 @@ local function drawItemRow(index, y)
   text(COL_EMA_X, y, truncate(item.ema, emaWidth), emaColor, rowBG)
 end
 
-local function drawProductList()
+function drawProductList()
   fill(LIST_X, LIST_Y, LIST_W, LIST_H, C.bg)
   if #items == 0 then
     local msg
@@ -4213,7 +4213,7 @@ function drawProductListInPlace()
   end
 end
 
-local function drawInfoBlock()
+function drawInfoBlock()
   fill(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, 7, C.bg)
   sectionHeader(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, "ИНФОРМАЦИЯ О ТОВАРЕ", C.sectionLine, C.white)
   local item = items[selectedIndex]
@@ -4360,7 +4360,7 @@ local function drawInfoBlock()
   text(RIGHT_INNER_X, y, "EMA: " .. item.ema, emaColor, C.bg)
 end
 
-local function getQuantityInputLimit()
+function getQuantityInputLimit()
   if currentShopMode == "quests" or currentShopMode == "quest_items" then return 1 end
   local item = items[selectedIndex]
   if not item then return 0 end
@@ -4378,7 +4378,7 @@ local function getQuantityInputLimit()
   return math.max(0, math.floor(tonumber(item.meRaw or item.qty) or 0))
 end
 
-local function appendQuantityDigit(charCode)
+function appendQuantityDigit(charCode)
   if currentShopMode == "quests" or currentShopMode == "quest_items" then quantity = "1"; return end
   local digit = unicode.char(charCode)
   local candidate = quantity .. digit
@@ -4394,7 +4394,7 @@ local function appendQuantityDigit(charCode)
   quantity = tostring(candidateNumber)
 end
 
-local function getQuantityButtonLayout()
+function getQuantityButtonLayout()
   local item = items[selectedIndex]
   local requestedQty = math.max(0, math.floor(tonumber(quantity) or 0))
   local stock = item and math.max(0, math.floor(tonumber(item.meRaw or item.qty) or 0)) or 0
@@ -4419,14 +4419,14 @@ local function getQuantityButtonLayout()
   return actionText, actionX, actionW, clearX, QTY_CLEAR_W
 end
 
-local function getQuantityButtonY()
+function getQuantityButtonY()
   if currentShopMode == "quest_items" then
     return BTN_Y + 1
   end
   return BTN_Y
 end
 
-local function drawQuantitySection()
+function drawQuantitySection()
   fill(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, 10, C.bg)
   sectionHeader(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, "КОЛИЧЕСТВО", C.sectionLine, C.white)
 
@@ -4635,7 +4635,7 @@ drawAccountInfo = function()
   text(RIGHT_INNER_X, y, "Транзакции: " .. account.trans, C.cyan, C.bg)
 end
 
-local function drawInformationSection()
+function drawInformationSection()
   local infoY = ACC_Y + 7
   local maxRows = math.max(0, BOT_Y - infoY - 1)
   if maxRows <= 0 then return end
@@ -4695,7 +4695,7 @@ drawRightPanel = function()
   drawInformationSection()
 end
 
-local function drawBottomBar()
+function drawBottomBar()
   fill(1, BOT_Y, WIDTH, 2, 0x0A0A0A)
   setFG(C.mainLine)
   setBG(C.bg)
@@ -4734,7 +4734,7 @@ local function drawBottomBar()
   )
 end
 
-local function drawBottomBorder()
+function drawBottomBorder()
   local footerText = "[ ZoziDo ] [ v_3.0.1 ]"
   local footerLen = unicode.len(footerText)
   local footerX = math.max(2, WIDTH - footerLen - 2)
@@ -5276,7 +5276,7 @@ function QuestSystem.openQuest(questItem)
   return true
 end
 
-local function redrawCatalogContent()
+function redrawCatalogContent()
   -- Используется поиском: верхняя панель, рамки, аккаунт и низ не трогаются.
   drawProductList()
   resetScrollbarState()
@@ -5306,7 +5306,7 @@ function Performance.applySearchNow()
   return true
 end
 
-local function drawVisibleItem(index)
+function drawVisibleItem(index)
   if not index or index < 1 then return end
 
   local row = index - scrollOffset
@@ -5315,7 +5315,7 @@ local function drawVisibleItem(index)
   end
 end
 
-local function setScrollOffset(newOffset)
+function setScrollOffset(newOffset)
   local maxScroll = math.max(0, #items - LIST_H)
   newOffset = math.max(0, math.min(maxScroll, newOffset))
 
@@ -5395,7 +5395,7 @@ local function setScrollOffset(newOffset)
   return true
 end
 
-local function selectItem(index)
+function selectItem(index)
   if #items == 0 then return end
 
   index = math.max(1, math.min(#items, index))
@@ -5433,7 +5433,7 @@ local function selectItem(index)
   updateSelectorDisplay(items[selectedIndex])
 end
 
-local function scroll(delta)
+function scroll(delta)
   if not delta or delta == 0 then return end
   setScrollOffset(scrollOffset + delta)
 end
