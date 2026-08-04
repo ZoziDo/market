@@ -2465,7 +2465,13 @@ local function destroySession()
   popupButtons = {}
   transactionLock = false
 
-  quantity = mode == "quests" and "1" or ""
+  -- Незавершённый набор не удаляется при уходе игрока.
+  -- Перед очисткой интерфейса ещё раз сохраняем актуальный прогресс.
+  if QuestSystem and type(QuestSystem.pending) == "table" then
+    QuestSystem.savePending()
+  end
+
+  quantity = ""
   qtyFocused = false
   searchQuery = ""
   searchFocused = false
@@ -2532,6 +2538,16 @@ local function finishAuthorization()
   then
     if session.active then destroySession() end
     return
+  end
+
+  -- Повторно загружаем очередь квеста с HDD при каждом входе игрока.
+  -- Так прогресс не зависит от старого состояния оперативной памяти.
+  QuestSystem.loadPending()
+  if type(QuestSystem.pending) == "table"
+    and lowerText(QuestSystem.pending.player or "")
+      == lowerText(playerName or "")
+  then
+    QuestSystem.nextDeliveryAt = 0
   end
 
   currentShopMode = "buy"
@@ -4793,8 +4809,14 @@ function QuestSystem.openQuest(questItem)
 
   QuestSystem.selectedQuest = questItem
 
+  -- После повторного входа перечитываем сохранённый прогресс,
+  -- прежде чем формировать строки «Содержит / Выдано».
+  QuestSystem.loadPending()
+
   local deliveredByKey = {}
   if type(QuestSystem.pending) == "table"
+    and lowerText(QuestSystem.pending.player or "")
+      == lowerText(account.nick or "")
     and tostring(QuestSystem.pending.questId or "")
       == tostring(questItem.questId or "")
   then
@@ -4807,7 +4829,10 @@ function QuestSystem.openQuest(questItem)
       deliveredByKey[pendingKey] =
         math.max(
           0,
-          math.floor(tonumber(pendingItem.deliveredQty) or 0)
+          math.floor(tonumber(
+            pendingItem.delivered
+            or pendingItem.deliveredQty
+          ) or 0)
         )
     end
   end
@@ -7067,23 +7092,106 @@ function QuestSystem.refreshDisplayedProgress()
   for _, item in ipairs(allItems or {}) do
     local entry = byKey[tostring(item.internalName) .. ":" .. tostring(item.damage or 0)]
     if entry then
-      item.deliveredQty = tonumber(entry.delivered) or 0
+      item.deliveredQty = tonumber(
+        entry.delivered or entry.deliveredQty
+      ) or 0
       item.ema = tostring(item.deliveredQty)
+      item.star =
+        item.deliveredQty >= (tonumber(item.requiredQty) or 0)
     end
   end
   for _, item in ipairs(items or {}) do
     local entry = byKey[tostring(item.internalName) .. ":" .. tostring(item.damage or 0)]
     if entry then
-      item.deliveredQty = tonumber(entry.delivered) or 0
+      item.deliveredQty = tonumber(
+        entry.delivered or entry.deliveredQty
+      ) or 0
       item.ema = tostring(item.deliveredQty)
+      item.star =
+        item.deliveredQty >= (tonumber(item.requiredQty) or 0)
     end
   end
 end
 
+function QuestSystem.getPendingFor(playerName, questId)
+  local pending = QuestSystem.pending
+
+  if type(pending) ~= "table" then
+    pending = QuestSystem.loadPending()
+  end
+
+  if type(pending) ~= "table" or pending.completed == true then
+    return nil
+  end
+
+  if lowerText(pending.player or "")
+    ~= lowerText(playerName or "")
+  then
+    return nil
+  end
+
+  if questId ~= nil
+    and tostring(pending.questId or "")
+      ~= tostring(questId or "")
+  then
+    return nil
+  end
+
+  return pending
+end
+
+function QuestSystem.resumePending(quest)
+  local pending = QuestSystem.getPendingFor(
+    account.nick,
+    quest and quest.questId or nil
+  )
+
+  if not pending then
+    return false
+  end
+
+  QuestSystem.nextDeliveryAt = 0
+  QuestSystem.refreshDisplayedProgress()
+  QuestSystem.savePending()
+
+  transactionLock = false
+  popupState = {
+    type = "quest_resume",
+    title = "ВЫДАЧА НАБОРА ПРОДОЛЖЕНА",
+    message =
+      "Оплата уже была выполнена. Повторно деньги не списаны. "
+      .. "Освободите место — оставшиеся предметы будут выданы автоматически.",
+  }
+  presentCurrentPopup()
+  return true
+end
+
 function QuestSystem.purchaseSelected()
   if transactionLock or not session.active then return end
+
   local quest = QuestSystem.selectedQuest
   if not quest or not quest.questData then return end
+
+  -- Если набор уже оплачен и очередь сохранена на HDD,
+  -- кнопка не делает новую покупку, а продолжает старую выдачу.
+  if QuestSystem.resumePending(quest) then
+    return
+  end
+
+  -- У игрока может быть незавершён другой набор.
+  local otherPending = QuestSystem.getPendingFor(account.nick, nil)
+  if otherPending then
+    popupState = {
+      type = "quest_error",
+      title = "УЖЕ ЕСТЬ НЕЗАВЕРШЁННЫЙ НАБОР",
+      message =
+        "Сначала завершите выдачу набора: "
+        .. tostring(otherPending.questName or otherPending.questId or "-"),
+    }
+    presentCurrentPopup()
+    return
+  end
+
   transactionLock = true
   local transactionId = QuestSystem.makeTransactionId(account.nick, quest.questId)
   local response, err = httpPostJson(SecurePurchase.url, {
@@ -7094,7 +7202,27 @@ function QuestSystem.purchaseSelected()
   }, 6)
   if not response or response.status ~= "ok" then
     transactionLock = false
-    popupState = {type="quest_error", title="ПОКУПКА НАБОРА ОТКЛОНЕНА", message=tostring(err or response and response.message or "Не удалось купить набор")}
+
+    local serverMessage = tostring(
+      err
+      or response and response.message
+      or "Не удалось купить набор"
+    )
+
+    -- После сетевой ошибки или повторного входа локальная очередь
+    -- могла быть загружена уже после первого запроса.
+    QuestSystem.loadPending()
+    if serverMessage:find("уже приобр", 1, true)
+      and QuestSystem.resumePending(quest)
+    then
+      return
+    end
+
+    popupState = {
+      type = "quest_error",
+      title = "ПОКУПКА НАБОРА ОТКЛОНЕНА",
+      message = serverMessage,
+    }
     presentCurrentPopup()
     return
   end
@@ -8036,6 +8164,8 @@ local function handleClick(x, y)
     and x >= RIGHT_INNER_X
     and x < RIGHT_INNER_X + RIGHT_INNER_W
   then
+    searchFocused = false
+    redrawSearchField()
     qtyFocused = true
     drawQuantitySection()
     return
@@ -8289,12 +8419,45 @@ while true do
           end
 
         else
+          -- Поиск является режимом ввода по умолчанию.
+          -- Нажимать мышкой на строку поиска больше не требуется.
           if code == keyboard.keys.up then
             selectItem(selectedIndex - 1)
+
           elseif code == keyboard.keys.down then
             selectItem(selectedIndex + 1)
+
+          elseif code == keyboard.keys.back then
+            if searchQuery ~= "" then
+              searchFocused = true
+              searchQuery = unicode.sub(searchQuery, 1, -2)
+              redrawSearchField()
+              Performance.scheduleSearch()
+            end
+
+          elseif code == keyboard.keys.enter
+            or code == keyboard.keys.tab
+          then
+            Performance.applySearchNow()
+            searchFocused = false
+            redrawSearchField()
+
+          elseif code == keyboard.keys.escape then
+            -- Escape снимает визуальный курсор поиска,
+            -- но не закрывает и не завершает магазин.
+            Performance.applySearchNow()
+            searchFocused = false
+            redrawSearchField()
+
+          elseif char and char >= 32 then
+            if unicode.len(searchQuery) < SEARCH_W - 4 then
+              searchFocused = true
+              searchQuery =
+                searchQuery .. unicode.char(char)
+              redrawSearchField()
+              Performance.scheduleSearch()
+            end
           end
-          -- Escape вне поля или POPUP намеренно ничего не делает: экран заблокирован.
         end
       end
     end
