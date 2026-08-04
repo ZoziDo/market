@@ -1482,38 +1482,10 @@ function QuestSystem.loadCatalog(forceReload)
   return true, nil
 end
 
-function QuestSystem.openQuest(questItem)
-  if not questItem or not questItem.isQuest then return false end
-  QuestSystem.selectedQuest = questItem
-  local loaded = {}
-  for index, qi in ipairs(questItem.questData.items or {}) do
-    local required = math.max(0, math.floor(tonumber(qi.qty) or 0))
-    loaded[#loaded + 1] = {
-      name = tostring(qi.displayName or qi.name or qi.internalName),
-      internalName = tostring(qi.internalName or qi.id or ""),
-      damage = tonumber(qi.damage) or 0,
-      me = "-",
-      meRaw = 0,
-      coina = tostring(required),
-      ema = "0",
-      requiredQty = required,
-      deliveredQty = 0,
-      qty = required,
-      star = true,
-      questContent = true,
-      article = string.format("#Q-%02d", index),
-      _searchName = lowerText(tostring(qi.displayName or qi.name or qi.internalName)),
-    }
-  end
-  currentShopMode = "quest_items"
-  allItems = loaded
-  searchQuery = ""; searchFocused = false
-  quantity = "1"; qtyFocused = false
-  selectedIndex = 1; scrollOffset = 0
-  filterItems()
-  presentShopFrame()
-  return true
-end
+-- Реализация QuestSystem.openQuest объявляется ниже, после создания
+-- локальных переменных интерфейса и функции filterItems.
+-- Это важно для Lua: функция, объявленная здесь, увидела бы filterItems
+-- как глобальную переменную и получила бы nil при нажатии «Открыть».
 
 local function loadItemsForCurrentMode(forceReload)
   if currentShopMode == "quests" then
@@ -4797,6 +4769,133 @@ presentShopFrame = function(forceFullRedraw)
     invalidateWelcomeFrame()
   end
   updateSelectorDisplay(items[selectedIndex])
+end
+
+-- ============================================================
+-- КВЕСТЫ: ОТКРЫТИЕ СОСТАВА НАБОРА
+-- ============================================================
+-- Функция находится после объявления локальных:
+-- items, searchQuery, quantity, selectedIndex, scrollOffset и filterItems.
+-- Поэтому она изменяет реальное состояние интерфейса, а не одноимённые
+-- глобальные переменные.
+function QuestSystem.openQuest(questItem)
+  if type(questItem) ~= "table" or questItem.isQuest ~= true then
+    return false
+  end
+
+  local questData = type(questItem.questData) == "table"
+    and questItem.questData
+    or nil
+
+  if not questData or type(questData.items) ~= "table" then
+    return false
+  end
+
+  QuestSystem.selectedQuest = questItem
+
+  local deliveredByKey = {}
+  if type(QuestSystem.pending) == "table"
+    and tostring(QuestSystem.pending.questId or "")
+      == tostring(questItem.questId or "")
+  then
+    for _, pendingItem in ipairs(QuestSystem.pending.items or {}) do
+      local pendingKey =
+        tostring(pendingItem.internalName or pendingItem.id or "")
+        .. ":"
+        .. tostring(tonumber(pendingItem.damage) or 0)
+
+      deliveredByKey[pendingKey] =
+        math.max(
+          0,
+          math.floor(tonumber(pendingItem.deliveredQty) or 0)
+        )
+    end
+  end
+
+  local loaded = {}
+
+  for index, questEntry in ipairs(questData.items) do
+    if type(questEntry) == "table" then
+      local internalName =
+        tostring(questEntry.internalName or questEntry.id or "")
+      local damage = tonumber(questEntry.damage) or 0
+      local required =
+        math.max(
+          0,
+          math.floor(tonumber(
+            questEntry.qty
+            or questEntry.amount
+            or questEntry.count
+          ) or 0)
+        )
+
+      if internalName ~= "" and required > 0 then
+        local key =
+          internalName .. ":" .. tostring(damage)
+        local delivered =
+          math.min(
+            required,
+            tonumber(deliveredByKey[key]) or 0
+          )
+
+        loaded[#loaded + 1] = {
+          name = tostring(
+            questEntry.displayName
+            or questEntry.name
+            or internalName
+          ),
+          internalName = internalName,
+          damage = damage,
+
+          -- В режиме состава колонки используются так:
+          -- COINA -> «Содержит», EMA -> «Выдано».
+          me = "-",
+          meRaw = 0,
+          coina = tostring(required),
+          ema = tostring(delivered),
+
+          requiredQty = required,
+          deliveredQty = delivered,
+          qty = required,
+          star = delivered >= required,
+          questContent = true,
+          article = string.format("#Q-%02d", index),
+          _searchName = lowerText(tostring(
+            questEntry.displayName
+            or questEntry.name
+            or internalName
+          )),
+        }
+      end
+    end
+  end
+
+  currentShopMode = "quest_items"
+  allItems = loaded
+
+  searchQuery = ""
+  searchFocused = false
+  Performance.searchDirty = false
+  Performance.nextSearchAt = 0
+
+  quantity = "1"
+  qtyFocused = false
+
+  scrollOffset = 0
+  if #loaded > 0 then
+    selectedIndex = 1
+  else
+    selectedIndex = 0
+  end
+
+  filterItems()
+
+  -- filterItems может скорректировать selectedIndex.
+  quantity = "1"
+  qtyFocused = false
+
+  presentShopFrame(false)
+  return true
 end
 
 local function redrawCatalogContent()
