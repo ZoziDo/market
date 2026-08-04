@@ -1553,6 +1553,80 @@ local function loadSellItems()
   return true, nil
 end
 
+function QuestSystem.getHistoryRecord(questId)
+  questId = tostring(questId or "")
+  if questId == "" then return nil end
+
+  local history = account.questHistory
+  if type(history) ~= "table" then return nil end
+
+  local direct = history[questId]
+  if type(direct) == "table" then
+    return direct
+  end
+
+  for key, entry in pairs(history) do
+    if type(entry) == "table"
+      and tostring(entry.questId or key) == questId
+    then
+      return entry
+    end
+  end
+
+  return nil
+end
+
+function QuestSystem.isQuestCompleted(questId)
+  return QuestSystem.getHistoryRecord(questId) ~= nil
+end
+
+function QuestSystem.isQuestActive(questId)
+  local active = account.questPurchase
+  return type(active) == "table"
+    and active.completed ~= true
+    and tostring(active.questId or "")
+      == tostring(questId or "")
+end
+
+function QuestSystem.applyPlayerState(questItem)
+  if type(questItem) ~= "table" then return end
+
+  questItem.questCompleted =
+    QuestSystem.isQuestCompleted(questItem.questId)
+  questItem.questActive =
+    QuestSystem.isQuestActive(questItem.questId)
+end
+
+function QuestSystem.markCompletedLocally(questId, record)
+  questId = tostring(questId or "")
+  if questId == "" then return end
+
+  if type(account.questHistory) ~= "table" then
+    account.questHistory = {}
+  end
+
+  record = type(record) == "table" and record or {}
+  record.questId = questId
+  record.completed = true
+  record.status = "completed"
+  account.questHistory[questId] = record
+  account.questPurchase = nil
+
+  for _, questItem in ipairs(questItemsCache or {}) do
+    if tostring(questItem.questId or "") == questId then
+      questItem.questCompleted = true
+      questItem.questActive = false
+    end
+  end
+
+  if QuestSystem.selectedQuest
+    and tostring(QuestSystem.selectedQuest.questId or "") == questId
+  then
+    QuestSystem.selectedQuest.questCompleted = true
+    QuestSystem.selectedQuest.questActive = false
+  end
+end
+
 function QuestSystem.normalizeCatalog(result)
   if type(result) ~= "table" then return {} end
   local list = result.quests or result.items or result
@@ -1564,6 +1638,7 @@ function QuestSystem.loadCatalog(forceReload)
   if questItemsCache and not forceReload then
     local quantities = QuestSystem.getStockSnapshot()
     for _, questItem in ipairs(questItemsCache) do
+      QuestSystem.applyPlayerState(questItem)
       QuestSystem.applyQuestAvailability(questItem, quantities)
     end
 
@@ -1620,6 +1695,7 @@ function QuestSystem.loadCatalog(forceReload)
 
   local quantities = QuestSystem.getStockSnapshot()
   for _, questItem in ipairs(loaded) do
+    QuestSystem.applyPlayerState(questItem)
     QuestSystem.applyQuestAvailability(questItem, quantities)
   end
 
@@ -1764,6 +1840,8 @@ local account = {
   balanceEma = 0,
   transactions = 0,
   agreed = false,
+  questPurchase = nil,
+  questHistory = {},
 }
 
 local popupState = nil
@@ -1937,6 +2015,8 @@ local function resetAccount()
   account.balanceEma = 0
   account.transactions = 0
   account.agreed = false
+  account.questPurchase = nil
+  account.questHistory = {}
   account.banned = false
   account.banReason = nil
   account.banDuration = 0
@@ -2477,6 +2557,15 @@ function SessionStatus.applyAccount(data)
   account.regDate = tostring(data.regDate or "Неизвестно")
   account.trans = tostring(math.floor(account.transactions))
 
+  account.questPurchase =
+    type(data.questPurchase) == "table"
+    and data.questPurchase
+    or nil
+  account.questHistory =
+    type(data.questHistory) == "table"
+    and data.questHistory
+    or {}
+
   account.banned = data.banned == true
   account.banReason = data.banReason
   account.banDuration = tonumber(data.banDuration) or 0
@@ -2588,7 +2677,7 @@ function SessionStatus.poll(now)
   )
   if not data then return false end
 
-  local _, _, buyChanged, sellChanged =
+  local _, _, buyChanged, sellChanged, questChanged =
     SessionStatus.apply(data, true)
 
   SessionStatus.refreshCatalogIfNeeded(
@@ -4091,6 +4180,7 @@ function drawItemRow(index, y)
     (currentShopMode == "quests"
       or currentShopMode == "quest_items")
     and item.questAvailable == false
+    and item.questCompleted ~= true
 
   local noStock =
     (currentShopMode == "buy"
@@ -4225,7 +4315,13 @@ function drawInfoBlock()
 
     local statusText
     local statusColor
-    if item.questAvailable == true then
+    if item.questCompleted == true then
+      statusText = "Статус: ВЫПОЛНЕН"
+      statusColor = C.green
+    elseif item.questActive == true then
+      statusText = "Статус: ВЫДАЧА ПРЕДМЕТОВ"
+      statusColor = C.cyan
+    elseif item.questAvailable == true then
       statusText = "Статус: КОМПЛЕКТ ГОТОВ"
       statusColor = C.green
     else
@@ -4420,7 +4516,9 @@ function getQuantityButtonLayout()
 end
 
 function getQuantityButtonY()
-  if currentShopMode == "quest_items" then
+  if currentShopMode == "quests"
+    or currentShopMode == "quest_items"
+  then
     return BTN_Y + 1
   end
   return BTN_Y
@@ -4485,9 +4583,14 @@ function drawQuantitySection()
 
   if currentShopMode == "quest_items" and QuestSystem.selectedQuest then
     local pending = QuestSystem.pending
-    local delivered =
-      pending and tonumber(pending.totalDelivered) or 0
     local total = QuestSystem.selectedQuest.totalItems or 0
+    local delivered
+    if QuestSystem.selectedQuest.questCompleted == true then
+      delivered = total
+    else
+      delivered =
+        pending and tonumber(pending.totalDelivered) or 0
+    end
 
     -- QTY_Y + 3 остаётся пустой строкой.
     text(
@@ -4504,34 +4607,64 @@ function drawQuantitySection()
     -- QTY_Y + 5 остаётся пустой строкой.
     local ready =
       QuestSystem.selectedQuest.questAvailable == true
+    local contentStateText
+    local contentStateColor
+
+    if QuestSystem.selectedQuest.questCompleted == true then
+      contentStateText = "Статус: ВЫПОЛНЕН"
+      contentStateColor = C.green
+    elseif ready then
+      contentStateText = "Все оставшиеся предметы есть в МЭ"
+      contentStateColor = C.green
+    else
+      contentStateText = "Недостаточно предметов в МЭ"
+      contentStateColor = C.darkGray
+    end
+
     text(
       RIGHT_INNER_X,
       QTY_Y + 6,
-      ready
-        and "Все оставшиеся предметы есть в МЭ"
-        or "Недостаточно предметов в МЭ",
-      ready and C.green or C.darkGray,
+      contentStateText,
+      contentStateColor,
       C.bg
     )
     -- QTY_Y + 7 остаётся пустой строкой.
   elseif currentShopMode == "quests" and item then
+    -- QTY_Y + 3 — пустая строка.
     text(
       RIGHT_INNER_X,
-      TOTAL_Y,
+      QTY_Y + 4,
       "Цена набора: " .. item.coina
         .. " COINA | " .. item.ema .. " EMA",
       C.white,
       C.bg
     )
+
+    -- QTY_Y + 5 — пустая строка.
+    local questStateText
+    local questStateColor
+    if item.questCompleted == true then
+      questStateText = "Статус: ВЫПОЛНЕН"
+      questStateColor = C.green
+    elseif item.questActive == true then
+      questStateText = "Выдача набора ещё не завершена"
+      questStateColor = C.cyan
+    elseif item.questAvailable == true then
+      questStateText = "Комплект полностью доступен"
+      questStateColor = C.green
+    else
+      questStateText = "Недостаточно предметов в МЭ"
+      questStateColor = C.darkGray
+    end
+
     text(
       RIGHT_INNER_X,
-      TOTAL_Y + 1,
-      item.questAvailable == true
-        and "Комплект полностью доступен"
-        or "Недостаточно предметов в МЭ",
-      item.questAvailable == true and C.green or C.darkGray,
+      QTY_Y + 6,
+      questStateText,
+      questStateColor,
       C.bg
     )
+    -- QTY_Y + 7 — пустая строка.
   elseif currentShopMode == "sell" and item then
     local summary = string.format("Итог: %s × %d шт.", item.name, effectiveQty)
     text(RIGHT_INNER_X, TOTAL_Y, truncate(summary, RIGHT_INNER_W), C.white, C.bg)
@@ -4561,6 +4694,7 @@ function drawQuantitySection()
       and (
         not item
         or not QuestSystem.selectedQuest
+        or QuestSystem.selectedQuest.questCompleted == true
         or QuestSystem.selectedQuest.questAvailable ~= true
       )
     )
@@ -5138,6 +5272,7 @@ function QuestSystem.openQuest(questItem)
     return false
   end
 
+  QuestSystem.applyPlayerState(questItem)
   QuestSystem.selectedQuest = questItem
 
   -- После повторного входа перечитываем сохранённый прогресс,
@@ -5192,11 +5327,16 @@ function QuestSystem.openQuest(questItem)
       if internalName ~= "" and required > 0 then
         local key =
           internalName .. ":" .. tostring(damage)
-        local delivered =
-          math.min(
-            required,
-            tonumber(deliveredByKey[key]) or 0
-          )
+        local delivered
+        if questItem.questCompleted == true then
+          delivered = required
+        else
+          delivered =
+            math.min(
+              required,
+              tonumber(deliveredByKey[key]) or 0
+            )
+        end
 
         local stock = tonumber(
           quantities[QuestSystem.stockKey(internalName, damage)]
@@ -5230,8 +5370,13 @@ function QuestSystem.openQuest(questItem)
           requiredQty = required,
           deliveredQty = delivered,
           qty = required,
-          questAvailable = available,
-          star = available,
+          questAvailable =
+            questItem.questCompleted == true
+            or available,
+          questCompleted = questItem.questCompleted == true,
+          star =
+            questItem.questCompleted == true
+            or available,
           questContent = true,
           article = string.format("#Q-%02d", index),
           _searchName = lowerText(tostring(
@@ -6003,7 +6148,20 @@ local function drawQuestMessagePopup()
   if failed then
     popupWrite(box, 8, "Деньги не списаны повторно.", C.green, "center")
   elseif complete then
-    popupWrite(box, 8, "Временная очередь удалена с HDD.", C.green, "center")
+    popupWrite(
+      box,
+      8,
+      "Статус испытания: ВЫПОЛНЕН",
+      C.green,
+      "center"
+    )
+    popupWrite(
+      box,
+      10,
+      "Теперь доступно следующее испытание.",
+      C.cyan,
+      "center"
+    )
   else
     popupWrite(box, 8, "Выдача продолжится автоматически после освобождения места.", C.cyan, "center")
     popupWrite(box, 10, "Не покупайте набор повторно.", C.yellow, "center")
@@ -7479,6 +7637,7 @@ function QuestSystem.refreshVisibleAvailability(redraw)
     local source = type(allItems) == "table" and allItems or {}
 
     for _, questItem in ipairs(source) do
+      QuestSystem.applyPlayerState(questItem)
       local ready =
         QuestSystem.applyQuestAvailability(questItem, quantities)
       if not ready then allReady = false end
@@ -7524,10 +7683,20 @@ function QuestSystem.refreshVisibleAvailability(redraw)
         0,
         math.floor(tonumber(item.requiredQty) or 0)
       )
-      local delivered = math.max(
-        0,
-        math.floor(tonumber(item.deliveredQty) or 0)
-      )
+
+      local completed =
+        QuestSystem.selectedQuest
+        and QuestSystem.selectedQuest.questCompleted == true
+
+      local delivered
+      if completed then
+        delivered = required
+      else
+        delivered = math.max(
+          0,
+          math.floor(tonumber(item.deliveredQty) or 0)
+        )
+      end
       local remaining = math.max(0, required - delivered)
       local stock = math.max(
         0,
@@ -7537,8 +7706,11 @@ function QuestSystem.refreshVisibleAvailability(redraw)
 
       item.meRaw = stock
       item.me = tostring(stock)
-      item.questAvailable = ready
-      item.star = ready
+      item.deliveredQty = delivered
+      item.ema = tostring(delivered)
+      item.questCompleted = completed
+      item.questAvailable = completed or ready
+      item.star = completed or ready
 
       if not ready then allReady = false end
 
@@ -7660,6 +7832,11 @@ function QuestSystem.purchaseSelected()
 
   local quest = QuestSystem.selectedQuest
   if not quest or not quest.questData then return end
+
+  QuestSystem.applyPlayerState(quest)
+  if quest.questCompleted == true then
+    return
+  end
 
   -- Если набор уже оплачен и очередь сохранена на HDD,
   -- кнопка не делает новую покупку, а продолжает старую выдачу.
@@ -7790,27 +7967,67 @@ end
 function QuestSystem.completePending(pending)
   if type(pending) ~= "table" then return false end
 
-  pending.completed = true
+  pending.deliveryComplete = true
+  pending.awaitingServerCompletion = true
   QuestSystem.savePending()
 
-  httpPostJson(SecurePurchase.url, {
+  local response, err = httpPostJson(SecurePurchase.url, {
     action = "quest_complete",
     name = account.nick,
     transactionId = pending.transactionId,
     questId = pending.questId,
   }, 5)
 
+  if not response or response.status ~= "ok" then
+    -- Пока VPS не подтвердил завершение, очередь не удаляется.
+    -- Следующая фоновая попытка отправит тот же transactionId.
+    pending.lastCompleteError =
+      tostring(
+        err
+        or response and response.message
+        or "VPS не подтвердил завершение"
+      )
+    QuestSystem.savePending()
+    QuestSystem.nextDeliveryAt = computer.uptime() + 5
+    return false
+  end
+
+  local responseData =
+    type(response.data) == "table"
+    and response.data
+    or {}
+
+  account.questPurchase = nil
+  if type(responseData.questHistory) == "table" then
+    account.questHistory = responseData.questHistory
+  end
+
+  QuestSystem.markCompletedLocally(
+    pending.questId,
+    {
+      questId = pending.questId,
+      displayName = pending.questName,
+      transactionId = pending.transactionId,
+      completed = true,
+      status = "completed",
+      totalItems = pending.totalRequired,
+      completedAt = responseData.completedAt,
+    }
+  )
+
+  pending.completed = true
+  pending.awaitingServerCompletion = false
+  QuestSystem.savePending()
   QuestSystem.clearPending()
   QuestSystem.refreshDisplayedProgress()
 
-  if not popupState then
-    popupState = {
-      type = "quest_complete",
-      title = "НАБОР ПОЛНОСТЬЮ ВЫДАН",
-      message = "Все предметы успешно выданы.",
-    }
-    presentCurrentPopup()
-  end
+  popupState = {
+    type = "quest_complete",
+    title = "ИСПЫТАНИЕ ЗАВЕРШЕНО",
+    message =
+      "Поздравляем! Все предметы набора успешно получены.",
+  }
+  presentCurrentPopup()
 
   return true
 end
@@ -7879,9 +8096,7 @@ end
 function QuestSystem.processPending(force)
   local pending = QuestSystem.pending
 
-  if type(pending) ~= "table"
-    or pending.completed == true
-  then
+  if type(pending) ~= "table" then
     return false
   end
 
