@@ -4222,10 +4222,6 @@ local function drawInfoBlock()
   if currentShopMode == "quests" then
     sectionHeader(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, "ИНФОРМАЦИЯ О КВЕСТЕ", C.sectionLine, C.white)
     local q = item.questData or {}
-    text(RIGHT_INNER_X, INFO_Y + 2, "Название: " .. truncate(item.name, RIGHT_INNER_W - 10), C.white, C.bg)
-    text(RIGHT_INNER_X, INFO_Y + 3, "Содержит: " .. tostring(item.itemKinds or 0) .. " видов / " .. tostring(item.totalItems or 0) .. " предметов", C.green, C.bg)
-    text(RIGHT_INNER_X, INFO_Y + 4, "COINA: " .. item.coina, C.coin, C.bg)
-    text(RIGHT_INNER_X, INFO_Y + 5, "EMA: " .. item.ema, C.ema, C.bg)
 
     local statusText
     local statusColor
@@ -4239,49 +4235,96 @@ local function drawInfoBlock()
 
     text(
       RIGHT_INNER_X,
-      INFO_Y + 6,
+      INFO_Y + 2,
+      "Название: "
+        .. truncate(item.name, RIGHT_INNER_W - 10),
+      C.white,
+      C.bg
+    )
+    text(
+      RIGHT_INNER_X,
+      INFO_Y + 3,
       truncate(statusText, RIGHT_INNER_W),
       statusColor,
       C.bg
     )
-    return
-  elseif currentShopMode == "quest_items" then
-    sectionHeader(RIGHT_INNER_X, INFO_Y, RIGHT_INNER_W, "СОДЕРЖИМОЕ НАБОРА", C.sectionLine, C.white)
-    local q = QuestSystem.selectedQuest
-    text(RIGHT_INNER_X, INFO_Y + 2, "Набор: " .. truncate(q and q.name or "-", RIGHT_INNER_W - 7), C.white, C.bg)
-    text(RIGHT_INNER_X, INFO_Y + 3, "Товар: " .. truncate(item.name, RIGHT_INNER_W - 7), C.white, C.bg)
-    text(RIGHT_INNER_X, INFO_Y + 4, "Содержит: " .. tostring(item.requiredQty or 0), C.green, C.bg)
-    text(RIGHT_INNER_X, INFO_Y + 5, "Выдано: " .. tostring(item.deliveredQty or 0), C.cyan, C.bg)
-
-    local remaining = math.max(
-      0,
-      (tonumber(item.requiredQty) or 0)
-        - (tonumber(item.deliveredQty) or 0)
+    text(
+      RIGHT_INNER_X,
+      INFO_Y + 4,
+      "Содержит: "
+        .. tostring(item.itemKinds or 0)
+        .. " видов / "
+        .. tostring(item.totalItems or 0)
+        .. " предметов",
+      C.green,
+      C.bg
     )
-    local stock = math.max(0, tonumber(item.meRaw) or 0)
-
-    local statusText
-    local statusColor
-    if remaining <= 0 then
-      statusText = "Статус: ВЫДАНО"
-      statusColor = C.green
-    elseif item.questAvailable == true then
-      statusText =
-        "В МЭ: " .. tostring(math.floor(stock))
-        .. " | ГОТОВО К ВЫДАЧЕ"
-      statusColor = C.green
-    else
-      statusText =
-        "В МЭ: " .. tostring(math.floor(stock))
-        .. " | НЕДОСТАТОЧНО ПРЕДМЕТОВ"
-      statusColor = C.darkGray
-    end
-
+    text(
+      RIGHT_INNER_X,
+      INFO_Y + 5,
+      "COINA: " .. item.coina,
+      C.coin,
+      C.bg
+    )
     text(
       RIGHT_INNER_X,
       INFO_Y + 6,
-      truncate(statusText, RIGHT_INNER_W),
-      statusColor,
+      "EMA: " .. item.ema,
+      C.ema,
+      C.bg
+    )
+    return
+  elseif currentShopMode == "quest_items" then
+    sectionHeader(
+      RIGHT_INNER_X,
+      INFO_Y,
+      RIGHT_INNER_W,
+      "СОДЕРЖИМОЕ ТОВАРА",
+      C.sectionLine,
+      C.white
+    )
+
+    local q = QuestSystem.selectedQuest
+    local stock = math.max(
+      0,
+      math.floor(tonumber(item.meRaw) or 0)
+    )
+
+    text(
+      RIGHT_INNER_X,
+      INFO_Y + 2,
+      "Набор: "
+        .. truncate(q and q.name or "-", RIGHT_INNER_W - 7),
+      C.white,
+      C.bg
+    )
+    text(
+      RIGHT_INNER_X,
+      INFO_Y + 3,
+      "Товар: "
+        .. truncate(item.name, RIGHT_INNER_W - 7),
+      C.white,
+      C.bg
+    )
+    text(
+      RIGHT_INNER_X,
+      INFO_Y + 4,
+      "В МЭ: " .. tostring(stock),
+      item.questAvailable == true and C.green or C.darkGray,
+      C.bg
+    )
+    text(
+      RIGHT_INNER_X,
+      INFO_Y + 5,
+      "Содержит: " .. tostring(item.requiredQty or 0),
+      C.green,
+      C.bg
+    )
+    text(
+      RIGHT_INNER_X,
+      INFO_Y + 6,
+      "Выдано: " .. tostring(item.deliveredQty or 0),
+      C.cyan,
       C.bg
     )
     return
@@ -4376,8 +4419,15 @@ local function getQuantityButtonLayout()
   return actionText, actionX, actionW, clearX, QTY_CLEAR_W
 end
 
+local function getQuantityButtonY()
+  if currentShopMode == "quest_items" then
+    return BTN_Y + 1
+  end
+  return BTN_Y
+end
+
 local function drawQuantitySection()
-  fill(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, 9, C.bg)
+  fill(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, 10, C.bg)
   sectionHeader(RIGHT_INNER_X, QTY_Y, RIGHT_INNER_W, "КОЛИЧЕСТВО", C.sectionLine, C.white)
 
   local fieldY = QTY_Y + 2
@@ -4435,27 +4485,35 @@ local function drawQuantitySection()
 
   if currentShopMode == "quest_items" and QuestSystem.selectedQuest then
     local pending = QuestSystem.pending
-    local delivered = pending and tonumber(pending.totalDelivered) or 0
+    local delivered =
+      pending and tonumber(pending.totalDelivered) or 0
     local total = QuestSystem.selectedQuest.totalItems or 0
 
+    -- QTY_Y + 3 остаётся пустой строкой.
     text(
       RIGHT_INNER_X,
-      TOTAL_Y,
-      "Выдано: " .. tostring(delivered) .. " / " .. tostring(total),
+      QTY_Y + 4,
+      "Выдано: "
+        .. tostring(delivered)
+        .. " / "
+        .. tostring(total),
       C.cyan,
       C.bg
     )
 
-    local ready = QuestSystem.selectedQuest.questAvailable == true
+    -- QTY_Y + 5 остаётся пустой строкой.
+    local ready =
+      QuestSystem.selectedQuest.questAvailable == true
     text(
       RIGHT_INNER_X,
-      TOTAL_Y + 1,
+      QTY_Y + 6,
       ready
         and "Все оставшиеся предметы есть в МЭ"
         or "Недостаточно предметов в МЭ",
       ready and C.green or C.darkGray,
       C.bg
     )
+    -- QTY_Y + 7 остаётся пустой строкой.
   elseif currentShopMode == "quests" and item then
     text(
       RIGHT_INNER_X,
@@ -4525,16 +4583,31 @@ local function drawQuantitySection()
     actionColor = C.buttonBuy
   end
 
-  local fixedQuestQty = currentShopMode == "quests" or currentShopMode == "quest_items"
-  local clearColor = (quantity == "" or fixedQuestQty) and C.darkGray or C.buttonClear
+  local fixedQuestQty =
+    currentShopMode == "quests"
+    or currentShopMode == "quest_items"
+  local clearColor =
+    (quantity == "" or fixedQuestQty)
+    and C.darkGray
+    or C.buttonClear
   local disabledTextColor = C.gray
+  local actionY = getQuantityButtonY()
+
   drawPaddedButton(
-    actionX, BTN_Y, actionText, actionColor,
+    actionX,
+    actionY,
+    actionText,
+    actionColor,
     actionDisabled and disabledTextColor or C.white
   )
   drawPaddedButton(
-    clearX, BTN_Y, QTY_CLEAR_TEXT, clearColor,
-    (quantity == "" or fixedQuestQty) and disabledTextColor or C.white
+    clearX,
+    actionY,
+    QTY_CLEAR_TEXT,
+    clearColor,
+    (quantity == "" or fixedQuestQty)
+      and disabledTextColor
+      or C.white
   )
 end
 
@@ -8827,9 +8900,14 @@ local function handleClick(x, y)
     return
   end
 
-  local _, actionX, actionW, clearX, clearW = getQuantityButtonLayout()
+  local _, actionX, actionW, clearX, clearW =
+    getQuantityButtonLayout()
+  local actionY = getQuantityButtonY()
 
-  if y == BTN_Y and x >= actionX and x < actionX + actionW then
+  if y == actionY
+    and x >= actionX
+    and x < actionX + actionW
+  then
     local selectedItem = items[selectedIndex]
     if currentShopMode == "sell" and selectedItem then
       SellFlow.refreshSellInventory(selectedItem, false)
@@ -8884,7 +8962,10 @@ local function handleClick(x, y)
     return
   end
 
-  if y == BTN_Y and x >= clearX and x < clearX + clearW then
+  if y == actionY
+    and x >= clearX
+    and x < clearX + clearW
+  then
     if currentShopMode == "quests" or currentShopMode == "quest_items" then return end
     if quantity == "" then return end
     quantity = ""
