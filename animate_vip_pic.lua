@@ -1,48 +1,20 @@
--- Animated rainbow VIP-SHOP pickaxe for OpenComputers / OpenOS
+-- FINAL fullscreen wave animation for OpenComputers / OpenOS
+-- Picture stays on screen; only colors flow in a wave.
+-- No bottom service line.
+--
+-- Put in /home:
+--   vip_pickaxe_final_fullscreen.pic
+--   animate_vip_final.lua
+--
+-- Run:
+--   animate_vip_final.lua
+
 local component = require("component")
 local gpu = component.gpu
 local os = require("os")
 
-local frames = {
-  "/home/vip_pickaxe_1.pic",
-  "/home/vip_pickaxe_2.pic",
-  "/home/vip_pickaxe_3.pic",
-  "/home/vip_pickaxe_4.pic"
-}
-
 local args = {...}
-if args[1] then
-  frames = {}
-  for i = 1, #args do
-    frames[#frames + 1] = args[i]
-  end
-end
-
-local function readByte(file)
-  local s = file:read(1)
-  if not s then error("Unexpected end of file") end
-  return string.byte(s)
-end
-
-local function readU16BE(file)
-  return readByte(file) * 256 + readByte(file)
-end
-
-local function readUTF8Char(file)
-  local first = file:read(1)
-  if not first then error("Unexpected EOF while reading UTF-8 char") end
-  local b = string.byte(first)
-  local count
-  if b < 0x80 then count = 1
-  elseif b < 0xE0 then count = 2
-  elseif b < 0xF0 then count = 3
-  elseif b < 0xF8 then count = 4
-  else error("Unsupported UTF-8 byte: " .. tostring(b)) end
-  if count == 1 then return first end
-  local rest = file:read(count - 1)
-  if not rest or #rest ~= count - 1 then error("Unexpected EOF in UTF-8 char") end
-  return first .. rest
-end
+local path = args[1] or "/home/vip_pickaxe_final_fullscreen.pic"
 
 local palette = {
   0x000000,0x000040,0x000080,0x0000BF,0x0000FF,0x002400,0x002440,0x002480,0x0024BF,0x0024FF,
@@ -73,30 +45,107 @@ local palette = {
   0xFFDBFF,0xFFFF00,0xFFFF40,0xFFFF80,0xFFFFBF,0xFFFFFF
 }
 
-local function clear()
-  local w, h = gpu.getResolution()
-  gpu.setBackground(0x000000)
-  gpu.setForeground(0xFFFFFF)
-  gpu.fill(1, 1, w, h, " ")
+local function rgbSplit(color)
+  return math.floor(color / 0x10000) % 0x100, math.floor(color / 0x100) % 0x100, color % 0x100
 end
 
-local function drawOCIF6(path)
+local function rgbJoin(r, g, b)
+  return math.floor(r) * 0x10000 + math.floor(g) * 0x100 + math.floor(b)
+end
+
+local function rgbToHsv(r, g, b)
+  r = r / 255
+  g = g / 255
+  b = b / 255
+  local maxv = math.max(r, g, b)
+  local minv = math.min(r, g, b)
+  local d = maxv - minv
+  local h = 0
+  local s = maxv == 0 and 0 or d / maxv
+  local v = maxv
+  if d ~= 0 then
+    if maxv == r then
+      h = ((g - b) / d) % 6
+    elseif maxv == g then
+      h = ((b - r) / d) + 2
+    else
+      h = ((r - g) / d) + 4
+    end
+    h = h / 6
+  end
+  return h, s, v
+end
+
+local function hsvToRgb(h, s, v)
+  local i = math.floor(h * 6)
+  local f = h * 6 - i
+  local p = v * (1 - s)
+  local q = v * (1 - f * s)
+  local t = v * (1 - (1 - f) * s)
+  i = i % 6
+  local r, g, b
+  if i == 0 then r, g, b = v, t, p
+  elseif i == 1 then r, g, b = q, v, p
+  elseif i == 2 then r, g, b = p, v, t
+  elseif i == 3 then r, g, b = p, q, v
+  elseif i == 4 then r, g, b = t, p, v
+  else r, g, b = v, p, q end
+  return math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5)
+end
+
+local function readByte(file)
+  local s = file:read(1)
+  if not s then error("Unexpected end of file") end
+  return string.byte(s)
+end
+
+local function readU16BE(file)
+  return readByte(file) * 256 + readByte(file)
+end
+
+local function readUTF8Char(file)
+  local first = file:read(1)
+  if not first then error("Unexpected EOF while reading UTF-8 char") end
+  local b = string.byte(first)
+  local count
+  if b < 0x80 then count = 1
+  elseif b < 0xE0 then count = 2
+  elseif b < 0xF0 then count = 3
+  elseif b < 0xF8 then count = 4
+  else error("Unsupported UTF-8 byte: " .. tostring(b)) end
+  if count == 1 then return first end
+  local rest = file:read(count - 1)
+  if not rest or #rest ~= count - 1 then error("Unexpected EOF in UTF-8 char") end
+  return first .. rest
+end
+
+local function makeGrid(width, height)
+  local grid = {}
+  for y = 1, height do
+    grid[y] = {}
+    for x = 1, width do
+      grid[y][x] = {bg = 0x000000, fg = 0xFFFFFF, ch = " "}
+    end
+  end
+  return grid
+end
+
+local function loadOCIF6(path)
   local file, reason = io.open(path, "rb")
   if not file then error("Cannot open " .. path .. ": " .. tostring(reason)) end
   local sig = file:read(4)
-  if sig ~= "OCIF" then file:close() error("Bad OCIF signature") end
+  if sig ~= "OCIF" then
+    file:close()
+    error("Bad OCIF signature")
+  end
   local method = readByte(file)
-  if method ~= 6 then file:close() error("Need OCIF method 6, got " .. tostring(method)) end
+  if method ~= 6 then
+    file:close()
+    error("Need OCIF method 6, got " .. tostring(method))
+  end
   local width = readByte(file)
   local height = readByte(file)
-
-  local maxW, maxH = gpu.maxResolution()
-  gpu.setResolution(maxW, maxH)
-  local sw, sh = gpu.getResolution()
-  clear()
-
-  local ox = math.max(1, math.floor((sw - width) / 2) + 1)
-  local oy = math.max(1, math.floor((sh - height) / 2) + 1)
+  local grid = makeGrid(width, height)
 
   local alphaCount = readByte(file)
   for ai = 1, alphaCount do
@@ -111,15 +160,15 @@ local function drawOCIF6(path)
         for fi = 1, fgCount do
           local fgIndex = readByte(file)
           local yCount = readByte(file)
-          gpu.setBackground(palette[bgIndex + 1])
-          gpu.setForeground(palette[fgIndex + 1])
+          local bg = palette[bgIndex + 1]
+          local fg = palette[fgIndex + 1]
           for yi = 1, yCount do
             local py = readByte(file)
             local xCount = readByte(file)
             for xi = 1, xCount do
               local px = readByte(file)
               if alpha < 1 then
-                gpu.set(ox + px - 1, oy + py - 1, symbol)
+                grid[py][px] = {bg = bg, fg = fg, ch = symbol}
               end
             end
           end
@@ -127,16 +176,134 @@ local function drawOCIF6(path)
       end
     end
   end
-  file:close()
 
-  gpu.setBackground(0x000000)
-  gpu.setForeground(0xAAAAAA)
-  gpu.set(1, math.min(sh, oy + height + 1), "Ctrl+C to stop animation")
+  file:close()
+  return {width = width, height = height, grid = grid}
+end
+
+local function animateCellZone(px, py)
+  -- Only animate the main content area:
+  -- title + pickaxe central object. Avoid most of the background.
+  if py >= 4 and py <= 15 and px >= 34 and px <= 128 then
+    return true -- title zone
+  end
+  if py >= 11 and py <= 49 and px >= 36 and px <= 126 then
+    return true -- pickaxe zone
+  end
+  return false
+end
+
+local function shouldAnimate(color, px, py)
+  if not animateCellZone(px, py) then
+    return false
+  end
+  local r, g, b = rgbSplit(color)
+  local h, s, v = rgbToHsv(r, g, b)
+  if v < 0.09 then return false end
+  if s > 0.18 or v > 0.34 then return true end
+  return false
+end
+
+local picture = loadOCIF6(path)
+
+local maxW, maxH = gpu.maxResolution()
+gpu.setResolution(maxW, maxH)
+local sw, sh = gpu.getResolution()
+
+gpu.setBackground(0x000000)
+gpu.setForeground(0xFFFFFF)
+gpu.fill(1, 1, sw, sh, " ")
+
+local ox = math.max(1, math.floor((sw - picture.width) / 2) + 1)
+local oy = math.max(1, math.floor((sh - picture.height) / 2) + 1)
+
+local cells = {}
+
+for y = 1, picture.height do
+  for x = 1, picture.width do
+    local cell = picture.grid[y][x]
+    gpu.setBackground(cell.bg)
+    gpu.setForeground(cell.fg)
+    gpu.set(ox + x - 1, oy + y - 1, cell.ch)
+
+    local bgAnimate = shouldAnimate(cell.bg, x, y)
+    local fgAnimate = shouldAnimate(cell.fg, x, y)
+
+    local bgH, bgS, bgV = 0, 0, 0
+    local fgH, fgS, fgV = 0, 0, 0
+
+    if bgAnimate then
+      local r, g, b = rgbSplit(cell.bg)
+      bgH, bgS, bgV = rgbToHsv(r, g, b)
+    end
+    if fgAnimate then
+      local r, g, b = rgbSplit(cell.fg)
+      fgH, fgS, fgV = rgbToHsv(r, g, b)
+    end
+
+    cells[#cells + 1] = {
+      sx = ox + x - 1,
+      sy = oy + y - 1,
+      px = x,
+      py = y,
+      ch = cell.ch,
+
+      baseBG = cell.bg,
+      baseFG = cell.fg,
+
+      bgAnimate = bgAnimate,
+      fgAnimate = fgAnimate,
+
+      bgH = bgH, bgS = bgS, bgV = bgV,
+      fgH = fgH, fgS = fgS, fgV = fgV,
+
+      lastBG = cell.bg,
+      lastFG = cell.fg
+    }
+  end
+end
+
+local function waveColor(h, s, v, t, px, py, intensity)
+  local w1 = math.sin(t * 2.0 - px * 0.16 + py * 0.035)
+  local w2 = math.sin(t * 1.1 - px * 0.07)
+  local hueShift = 0.055 * w1 + 0.025 * w2 + 0.018 * t
+  local val = math.min(1.0, v * (1.0 + 0.07 * w1) * intensity)
+  local sat = math.min(1.0, s * 1.10 + 0.03)
+  local r, g, b = hsvToRgb((h + hueShift) % 1.0, sat, val)
+  return rgbJoin(r, g, b)
 end
 
 while true do
-  for i = 1, #frames do
-    drawOCIF6(frames[i])
-    os.sleep(0.14)
+  local t = os.clock()
+  local lastBG = nil
+  local lastFG = nil
+
+  for i = 1, #cells do
+    local c = cells[i]
+    local bg = c.baseBG
+    local fg = c.baseFG
+
+    if c.bgAnimate then
+      bg = waveColor(c.bgH, c.bgS, c.bgV, t, c.px, c.py, 1.02)
+    end
+    if c.fgAnimate then
+      fg = waveColor(c.fgH, c.fgS, c.fgV, t, c.px + 2, c.py, 1.07)
+    end
+
+    if bg ~= c.lastBG or fg ~= c.lastFG then
+      if lastBG ~= bg then
+        gpu.setBackground(bg)
+        lastBG = bg
+      end
+      if lastFG ~= fg then
+        gpu.setForeground(fg)
+        lastFG = fg
+      end
+      gpu.set(c.sx, c.sy, c.ch)
+      c.lastBG = bg
+      c.lastFG = fg
+    end
   end
+
+  os.sleep(0.04)
 end
