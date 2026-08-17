@@ -1,20 +1,12 @@
--- FINAL fullscreen wave animation for OpenComputers / OpenOS
--- Picture stays on screen; only colors flow in a wave.
--- No bottom service line.
---
--- Put in /home:
---   vip_pickaxe_final_fullscreen.pic
---   animate_vip_final.lua
---
--- Run:
---   animate_vip_final.lua
+-- FIXED VIP-SHOP fullscreen animation
+-- One static .pic, drawn once. Only colors are updated afterward.
+-- No full-screen clearing inside the animation loop.
 
 local component = require("component")
 local gpu = component.gpu
 local os = require("os")
 
-local args = {...}
-local path = args[1] or "/home/vip_pickaxe_final_fullscreen.pic"
+local path = (...) or "/home/vip_shop_fixed.pic"
 
 local palette = {
   0x000000,0x000040,0x000080,0x0000BF,0x0000FF,0x002400,0x002440,0x002480,0x0024BF,0x0024FF,
@@ -45,131 +37,63 @@ local palette = {
   0xFFDBFF,0xFFFF00,0xFFFF40,0xFFFF80,0xFFFFBF,0xFFFFFF
 }
 
-local function rgbSplit(color)
-  return math.floor(color / 0x10000) % 0x100, math.floor(color / 0x100) % 0x100, color % 0x100
-end
-
-local function rgbJoin(r, g, b)
-  return math.floor(r) * 0x10000 + math.floor(g) * 0x100 + math.floor(b)
-end
-
-local function rgbToHsv(r, g, b)
-  r = r / 255
-  g = g / 255
-  b = b / 255
-  local maxv = math.max(r, g, b)
-  local minv = math.min(r, g, b)
-  local d = maxv - minv
-  local h = 0
-  local s = maxv == 0 and 0 or d / maxv
-  local v = maxv
-  if d ~= 0 then
-    if maxv == r then
-      h = ((g - b) / d) % 6
-    elseif maxv == g then
-      h = ((b - r) / d) + 2
-    else
-      h = ((r - g) / d) + 4
-    end
-    h = h / 6
-  end
-  return h, s, v
-end
-
-local function hsvToRgb(h, s, v)
-  local i = math.floor(h * 6)
-  local f = h * 6 - i
-  local p = v * (1 - s)
-  local q = v * (1 - f * s)
-  local t = v * (1 - (1 - f) * s)
-  i = i % 6
-  local r, g, b
-  if i == 0 then r, g, b = v, t, p
-  elseif i == 1 then r, g, b = q, v, p
-  elseif i == 2 then r, g, b = p, v, t
-  elseif i == 3 then r, g, b = p, q, v
-  elseif i == 4 then r, g, b = t, p, v
-  else r, g, b = v, p, q end
-  return math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5)
-end
-
-local function readByte(file)
-  local s = file:read(1)
-  if not s then error("Unexpected end of file") end
+local function rb(f)
+  local s=f:read(1)
+  if not s then error("Unexpected EOF") end
   return string.byte(s)
 end
 
-local function readU16BE(file)
-  return readByte(file) * 256 + readByte(file)
+local function ru16(f) return rb(f)*256+rb(f) end
+
+local function rchar(f)
+  local a=f:read(1)
+  if not a then error("Unexpected EOF") end
+  local b=string.byte(a)
+  local n
+  if b<0x80 then n=1 elseif b<0xE0 then n=2 elseif b<0xF0 then n=3 else n=4 end
+  if n==1 then return a end
+  local r=f:read(n-1)
+  if not r or #r~=n-1 then error("Unexpected EOF in UTF-8") end
+  return a..r
 end
 
-local function readUTF8Char(file)
-  local first = file:read(1)
-  if not first then error("Unexpected EOF while reading UTF-8 char") end
-  local b = string.byte(first)
-  local count
-  if b < 0x80 then count = 1
-  elseif b < 0xE0 then count = 2
-  elseif b < 0xF0 then count = 3
-  elseif b < 0xF8 then count = 4
-  else error("Unsupported UTF-8 byte: " .. tostring(b)) end
-  if count == 1 then return first end
-  local rest = file:read(count - 1)
-  if not rest or #rest ~= count - 1 then error("Unexpected EOF in UTF-8 char") end
-  return first .. rest
+local function makeGrid(w,h)
+  local g={}
+  for y=1,h do
+    g[y]={}
+    for x=1,w do g[y][x]={bg=0,fg=0xFFFFFF,ch=" "} end
+  end
+  return g
 end
 
-local function makeGrid(width, height)
-  local grid = {}
-  for y = 1, height do
-    grid[y] = {}
-    for x = 1, width do
-      grid[y][x] = {bg = 0x000000, fg = 0xFFFFFF, ch = " "}
-    end
-  end
-  return grid
-end
+local function loadPic(p)
+  local f,reason=io.open(p,"rb")
+  if not f then error("Cannot open "..p..": "..tostring(reason)) end
+  if f:read(4)~="OCIF" then f:close(); error("Not OCIF") end
+  if rb(f)~=6 then f:close(); error("Need OCIF6") end
 
-local function loadOCIF6(path)
-  local file, reason = io.open(path, "rb")
-  if not file then error("Cannot open " .. path .. ": " .. tostring(reason)) end
-  local sig = file:read(4)
-  if sig ~= "OCIF" then
-    file:close()
-    error("Bad OCIF signature")
-  end
-  local method = readByte(file)
-  if method ~= 6 then
-    file:close()
-    error("Need OCIF method 6, got " .. tostring(method))
-  end
-  local width = readByte(file)
-  local height = readByte(file)
-  local grid = makeGrid(width, height)
+  local w,h=rb(f),rb(f)
+  local g=makeGrid(w,h)
+  local ac=rb(f)
 
-  local alphaCount = readByte(file)
-  for ai = 1, alphaCount do
-    local alpha = readByte(file) / 255
-    local symbolCount = readU16BE(file)
-    for si = 1, symbolCount do
-      local symbol = readUTF8Char(file)
-      local bgCount = readByte(file)
-      for bi = 1, bgCount do
-        local bgIndex = readByte(file)
-        local fgCount = readByte(file)
-        for fi = 1, fgCount do
-          local fgIndex = readByte(file)
-          local yCount = readByte(file)
-          local bg = palette[bgIndex + 1]
-          local fg = palette[fgIndex + 1]
-          for yi = 1, yCount do
-            local py = readByte(file)
-            local xCount = readByte(file)
-            for xi = 1, xCount do
-              local px = readByte(file)
-              if alpha < 1 then
-                grid[py][px] = {bg = bg, fg = fg, ch = symbol}
-              end
+  for ai=1,ac do
+    local alpha=rb(f)/255
+    local sc=ru16(f)
+    for si=1,sc do
+      local ch=rchar(f)
+      local bc=rb(f)
+      for bi=1,bc do
+        local bg=palette[rb(f)+1]
+        local fc=rb(f)
+        for fi=1,fc do
+          local fg=palette[rb(f)+1]
+          local yc=rb(f)
+          for yi=1,yc do
+            local py=rb(f)
+            local xc=rb(f)
+            for xi=1,xc do
+              local px=rb(f)
+              if alpha<1 then g[py][px]={bg=bg,fg=fg,ch=ch} end
             end
           end
         end
@@ -177,133 +101,127 @@ local function loadOCIF6(path)
     end
   end
 
-  file:close()
-  return {width = width, height = height, grid = grid}
+  f:close()
+  return {w=w,h=h,g=g}
 end
 
-local function animateCellZone(px, py)
-  -- Only animate the main content area:
-  -- title + pickaxe central object. Avoid most of the background.
-  if py >= 4 and py <= 15 and px >= 34 and px <= 128 then
-    return true -- title zone
-  end
-  if py >= 11 and py <= 49 and px >= 36 and px <= 126 then
-    return true -- pickaxe zone
-  end
-  return false
+local function split(c)
+  return math.floor(c/0x10000)%256, math.floor(c/0x100)%256, c%256
 end
 
-local function shouldAnimate(color, px, py)
-  if not animateCellZone(px, py) then
-    return false
-  end
-  local r, g, b = rgbSplit(color)
-  local h, s, v = rgbToHsv(r, g, b)
-  if v < 0.09 then return false end
-  if s > 0.18 or v > 0.34 then return true end
-  return false
+local function join(r,g,b)
+  return math.floor(r)*0x10000+math.floor(g)*0x100+math.floor(b)
 end
 
-local picture = loadOCIF6(path)
+local function rgb2hsv(r,g,b)
+  r,g,b=r/255,g/255,b/255
+  local mx=math.max(r,g,b)
+  local mn=math.min(r,g,b)
+  local d=mx-mn
+  local h=0
+  local s=mx==0 and 0 or d/mx
+  if d~=0 then
+    if mx==r then h=((g-b)/d)%6
+    elseif mx==g then h=((b-r)/d)+2
+    else h=((r-g)/d)+4 end
+    h=h/6
+  end
+  return h,s,mx
+end
 
-local maxW, maxH = gpu.maxResolution()
-gpu.setResolution(maxW, maxH)
-local sw, sh = gpu.getResolution()
+local function hsv2rgb(h,s,v)
+  local i=math.floor(h*6)
+  local f=h*6-i
+  local p=v*(1-s)
+  local q=v*(1-f*s)
+  local t=v*(1-(1-f)*s)
+  i=i%6
+  local r,g,b
+  if i==0 then r,g,b=v,t,p
+  elseif i==1 then r,g,b=q,v,p
+  elseif i==2 then r,g,b=p,v,t
+  elseif i==3 then r,g,b=p,q,v
+  elseif i==4 then r,g,b=t,p,v
+  else r,g,b=v,p,q end
+  return r*255,g*255,b*255
+end
+
+local pic=loadPic(path)
+
+local mw,mh=gpu.maxResolution()
+gpu.setResolution(mw,mh)
+local sw,sh=gpu.getResolution()
+
+local ox=math.max(1,math.floor((sw-pic.w)/2)+1)
+local oy=math.max(1,math.floor((sh-pic.h)/2)+1)
 
 gpu.setBackground(0x000000)
 gpu.setForeground(0xFFFFFF)
-gpu.fill(1, 1, sw, sh, " ")
+gpu.fill(1,1,sw,sh," ")
 
-local ox = math.max(1, math.floor((sw - picture.width) / 2) + 1)
-local oy = math.max(1, math.floor((sh - picture.height) / 2) + 1)
+local animated={}
 
-local cells = {}
+-- Draw the picture exactly once.
+for y=1,pic.h do
+  for x=1,pic.w do
+    local c=pic.g[y][x]
+    gpu.setBackground(c.bg)
+    gpu.setForeground(c.fg)
+    gpu.set(ox+x-1,oy+y-1,c.ch)
 
-for y = 1, picture.height do
-  for x = 1, picture.width do
-    local cell = picture.grid[y][x]
-    gpu.setBackground(cell.bg)
-    gpu.setForeground(cell.fg)
-    gpu.set(ox + x - 1, oy + y - 1, cell.ch)
-
-    local bgAnimate = shouldAnimate(cell.bg, x, y)
-    local fgAnimate = shouldAnimate(cell.fg, x, y)
-
-    local bgH, bgS, bgV = 0, 0, 0
-    local fgH, fgS, fgV = 0, 0, 0
-
-    if bgAnimate then
-      local r, g, b = rgbSplit(cell.bg)
-      bgH, bgS, bgV = rgbToHsv(r, g, b)
-    end
-    if fgAnimate then
-      local r, g, b = rgbSplit(cell.fg)
-      fgH, fgS, fgV = rgbToHsv(r, g, b)
+    local function prep(color)
+      local r,g,b=split(color)
+      local h,s,v=rgb2hsv(r,g,b)
+      -- Keep black/dark background fixed. Animate bright/colorful artwork only.
+      if v<0.10 then return false,0,0,0 end
+      if s<0.18 and v<0.45 then return false,0,0,0 end
+      return true,h,s,v
     end
 
-    cells[#cells + 1] = {
-      sx = ox + x - 1,
-      sy = oy + y - 1,
-      px = x,
-      py = y,
-      ch = cell.ch,
+    local ab,bh,bs,bv=prep(c.bg)
+    local af,fh,fs,fv=prep(c.fg)
 
-      baseBG = cell.bg,
-      baseFG = cell.fg,
-
-      bgAnimate = bgAnimate,
-      fgAnimate = fgAnimate,
-
-      bgH = bgH, bgS = bgS, bgV = bgV,
-      fgH = fgH, fgS = fgS, fgV = fgV,
-
-      lastBG = cell.bg,
-      lastFG = cell.fg
-    }
+    if ab or af then
+      animated[#animated+1]={
+        x=ox+x-1,y=oy+y-1,px=x,py=y,ch=c.ch,
+        bg=c.bg,fg=c.fg,
+        ab=ab,bh=bh,bs=bs,bv=bv,
+        af=af,fh=fh,fs=fs,fv=fv,
+        lbg=c.bg,lfg=c.fg
+      }
+    end
   end
 end
 
-local function waveColor(h, s, v, t, px, py, intensity)
-  local w1 = math.sin(t * 2.0 - px * 0.16 + py * 0.035)
-  local w2 = math.sin(t * 1.1 - px * 0.07)
-  local hueShift = 0.055 * w1 + 0.025 * w2 + 0.018 * t
-  local val = math.min(1.0, v * (1.0 + 0.07 * w1) * intensity)
-  local sat = math.min(1.0, s * 1.10 + 0.03)
-  local r, g, b = hsvToRgb((h + hueShift) % 1.0, sat, val)
-  return rgbJoin(r, g, b)
+local function wave(h,s,v,t,x,y)
+  -- Smooth left-to-right wave, deliberately subtle so the image keeps its detail.
+  local w=math.sin(t*1.45-x*0.105+y*0.018)
+  local hue=(h + 0.030*w + 0.010*t) % 1
+  local value=math.min(1,v*(1+0.035*w))
+  local sat=math.min(1,s*1.035+0.01)
+  local r,g,b=hsv2rgb(hue,sat,value)
+  return join(r,g,b)
 end
 
 while true do
-  local t = os.clock()
-  local lastBG = nil
-  local lastFG = nil
+  local t=os.clock()
+  local lastBG,lastFG=nil,nil
 
-  for i = 1, #cells do
-    local c = cells[i]
-    local bg = c.baseBG
-    local fg = c.baseFG
+  for i=1,#animated do
+    local c=animated[i]
+    local bg=c.bg
+    local fg=c.fg
 
-    if c.bgAnimate then
-      bg = waveColor(c.bgH, c.bgS, c.bgV, t, c.px, c.py, 1.02)
-    end
-    if c.fgAnimate then
-      fg = waveColor(c.fgH, c.fgS, c.fgV, t, c.px + 2, c.py, 1.07)
-    end
+    if c.ab then bg=wave(c.bh,c.bs,c.bv,t,c.px,c.py) end
+    if c.af then fg=wave(c.fh,c.fs,c.fv,t,c.px+2,c.py) end
 
-    if bg ~= c.lastBG or fg ~= c.lastFG then
-      if lastBG ~= bg then
-        gpu.setBackground(bg)
-        lastBG = bg
-      end
-      if lastFG ~= fg then
-        gpu.setForeground(fg)
-        lastFG = fg
-      end
-      gpu.set(c.sx, c.sy, c.ch)
-      c.lastBG = bg
-      c.lastFG = fg
+    if bg~=c.lbg or fg~=c.lfg then
+      if bg~=lastBG then gpu.setBackground(bg); lastBG=bg end
+      if fg~=lastFG then gpu.setForeground(fg); lastFG=fg end
+      gpu.set(c.x,c.y,c.ch)
+      c.lbg,c.lfg=bg,fg
     end
   end
 
-  os.sleep(0.04)
+  os.sleep(0.07)
 end
