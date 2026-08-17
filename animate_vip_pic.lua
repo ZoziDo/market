@@ -1,24 +1,9 @@
--- Smooth animated rainbow VIP-SHOP pickaxe for OpenComputers / OpenOS
--- Difference from the old version:
--- 1) screen is NOT cleared every frame
--- 2) all frames are loaded into memory once
--- 3) only changed cells are redrawn
---
--- Put these files in /home:
---   vip_pickaxe_1.pic
---   vip_pickaxe_2.pic
---   vip_pickaxe_3.pic
---   vip_pickaxe_4.pic
---   animate_vip_pic_smooth.lua
---
--- Run:
---   animate_vip_pic_smooth.lua
-
+-- Animated rainbow VIP-SHOP pickaxe for OpenComputers / OpenOS
 local component = require("component")
 local gpu = component.gpu
 local os = require("os")
 
-local framesPaths = {
+local frames = {
   "/home/vip_pickaxe_1.pic",
   "/home/vip_pickaxe_2.pic",
   "/home/vip_pickaxe_3.pic",
@@ -26,11 +11,37 @@ local framesPaths = {
 }
 
 local args = {...}
-if #args > 0 then
-  framesPaths = {}
+if args[1] then
+  frames = {}
   for i = 1, #args do
-    framesPaths[#framesPaths + 1] = args[i]
+    frames[#frames + 1] = args[i]
   end
+end
+
+local function readByte(file)
+  local s = file:read(1)
+  if not s then error("Unexpected end of file") end
+  return string.byte(s)
+end
+
+local function readU16BE(file)
+  return readByte(file) * 256 + readByte(file)
+end
+
+local function readUTF8Char(file)
+  local first = file:read(1)
+  if not first then error("Unexpected EOF while reading UTF-8 char") end
+  local b = string.byte(first)
+  local count
+  if b < 0x80 then count = 1
+  elseif b < 0xE0 then count = 2
+  elseif b < 0xF0 then count = 3
+  elseif b < 0xF8 then count = 4
+  else error("Unsupported UTF-8 byte: " .. tostring(b)) end
+  if count == 1 then return first end
+  local rest = file:read(count - 1)
+  if not rest or #rest ~= count - 1 then error("Unexpected EOF in UTF-8 char") end
+  return first .. rest
 end
 
 local palette = {
@@ -62,91 +73,53 @@ local palette = {
   0xFFDBFF,0xFFFF00,0xFFFF40,0xFFFF80,0xFFFFBF,0xFFFFFF
 }
 
-local function readByte(file)
-  local s = file:read(1)
-  if not s then error("Unexpected end of file") end
-  return string.byte(s)
+local function clear()
+  local w, h = gpu.getResolution()
+  gpu.setBackground(0x000000)
+  gpu.setForeground(0xFFFFFF)
+  gpu.fill(1, 1, w, h, " ")
 end
 
-local function readU16BE(file)
-  return readByte(file) * 256 + readByte(file)
-end
-
-local function readUTF8Char(file)
-  local first = file:read(1)
-  if not first then error("Unexpected EOF while reading UTF-8 char") end
-  local b = string.byte(first)
-  local count
-  if b < 0x80 then count = 1
-  elseif b < 0xE0 then count = 2
-  elseif b < 0xF0 then count = 3
-  elseif b < 0xF8 then count = 4
-  else error("Unsupported UTF-8 byte: " .. tostring(b)) end
-  if count == 1 then return first end
-  local rest = file:read(count - 1)
-  if not rest or #rest ~= count - 1 then error("Unexpected EOF in UTF-8 char") end
-  return first .. rest
-end
-
-local function makeGrid(width, height)
-  local grid = {}
-  for y = 1, height do
-    grid[y] = {}
-    for x = 1, width do
-      grid[y][x] = {bg = 0x000000, fg = 0xFFFFFF, ch = " "}
-    end
-  end
-  return grid
-end
-
-local function loadOCIF6(path)
+local function drawOCIF6(path)
   local file, reason = io.open(path, "rb")
   if not file then error("Cannot open " .. path .. ": " .. tostring(reason)) end
-
   local sig = file:read(4)
-  if sig ~= "OCIF" then
-    file:close()
-    error("Bad OCIF signature in " .. path)
-  end
-
+  if sig ~= "OCIF" then file:close() error("Bad OCIF signature") end
   local method = readByte(file)
-  if method ~= 6 then
-    file:close()
-    error("This script supports only OCIF method 6. Got " .. tostring(method))
-  end
-
+  if method ~= 6 then file:close() error("Need OCIF method 6, got " .. tostring(method)) end
   local width = readByte(file)
   local height = readByte(file)
-  local grid = makeGrid(width, height)
+
+  local maxW, maxH = gpu.maxResolution()
+  gpu.setResolution(maxW, maxH)
+  local sw, sh = gpu.getResolution()
+  clear()
+
+  local ox = math.max(1, math.floor((sw - width) / 2) + 1)
+  local oy = math.max(1, math.floor((sh - height) / 2) + 1)
 
   local alphaCount = readByte(file)
   for ai = 1, alphaCount do
     local alpha = readByte(file) / 255
     local symbolCount = readU16BE(file)
-
     for si = 1, symbolCount do
       local symbol = readUTF8Char(file)
       local bgCount = readByte(file)
-
       for bi = 1, bgCount do
         local bgIndex = readByte(file)
         local fgCount = readByte(file)
-
         for fi = 1, fgCount do
           local fgIndex = readByte(file)
           local yCount = readByte(file)
-
-          local bg = palette[bgIndex + 1]
-          local fg = palette[fgIndex + 1]
-
+          gpu.setBackground(palette[bgIndex + 1])
+          gpu.setForeground(palette[fgIndex + 1])
           for yi = 1, yCount do
             local py = readByte(file)
             local xCount = readByte(file)
-
             for xi = 1, xCount do
               local px = readByte(file)
               if alpha < 1 then
-                grid[py][px] = {bg = bg, fg = fg, ch = symbol}
+                gpu.set(ox + px - 1, oy + py - 1, symbol)
               end
             end
           end
@@ -154,87 +127,16 @@ local function loadOCIF6(path)
       end
     end
   end
-
   file:close()
-  return {width = width, height = height, grid = grid}
-end
 
-local function clearOnce()
-  local sw, sh = gpu.getResolution()
   gpu.setBackground(0x000000)
-  gpu.setForeground(0xFFFFFF)
-  gpu.fill(1, 1, sw, sh, " ")
+  gpu.setForeground(0xAAAAAA)
+  gpu.set(1, math.min(sh, oy + height + 1), "Ctrl+C to stop animation")
 end
-
-local function drawFrame(frame, previousFrame, ox, oy)
-  local lastBG = nil
-  local lastFG = nil
-
-  for y = 1, frame.height do
-    for x = 1, frame.width do
-      local cell = frame.grid[y][x]
-      local prev = previousFrame and previousFrame.grid[y][x] or nil
-
-      if (not prev) or prev.bg ~= cell.bg or prev.fg ~= cell.fg or prev.ch ~= cell.ch then
-        if lastBG ~= cell.bg then
-          gpu.setBackground(cell.bg)
-          lastBG = cell.bg
-        end
-        if lastFG ~= cell.fg then
-          gpu.setForeground(cell.fg)
-          lastFG = cell.fg
-        end
-        gpu.set(ox + x - 1, oy + y - 1, cell.ch)
-      end
-    end
-  end
-end
-
--- Load all frames once
-local frames = {}
-for i = 1, #framesPaths do
-  frames[i] = loadOCIF6(framesPaths[i])
-end
-
-if #frames == 0 then
-  error("No frames specified")
-end
-
-local width = frames[1].width
-local height = frames[1].height
-for i = 2, #frames do
-  if frames[i].width ~= width or frames[i].height ~= height then
-    error("All frames must have the same size")
-  end
-end
-
-local maxW, maxH = gpu.maxResolution()
-gpu.setResolution(maxW, maxH)
-local sw, sh = gpu.getResolution()
-
-local ox = math.max(1, math.floor((sw - width) / 2) + 1)
-local oy = math.max(1, math.floor((sh - height) / 2) + 1)
-
-clearOnce()
-
--- Draw first frame fully
-drawFrame(frames[1], nil, ox, oy)
-
-gpu.setBackground(0x000000)
-gpu.setForeground(0xAAAAAA)
-gpu.set(1, math.min(sh, oy + height + 1), "Smooth rainbow animation | Ctrl+C to stop")
-
-local previous = frames[1]
-local index = 2
 
 while true do
-  if index > #frames then
-    index = 1
+  for i = 1, #frames do
+    drawOCIF6(frames[i])
+    os.sleep(0.14)
   end
-
-  drawFrame(frames[index], previous, ox, oy)
-  previous = frames[index]
-  index = index + 1
-
-  os.sleep(0.10)
 end
